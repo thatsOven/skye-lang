@@ -510,6 +510,7 @@ Here is a list of operators that can be overloaded
 | `{} ^= {}` | `__setxor__` | 1 |
 | `{} &= {}` | `__setand__` | 1 |
 | `{}[{}]` | `__subscript__` | any |
+
 `{} || {}`: `__or__` : 1
 `{} | {}`: `__bitor__`: 1
 `{} |= {}`: `__setor__`: 1
