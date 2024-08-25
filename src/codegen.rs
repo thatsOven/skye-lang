@@ -2750,6 +2750,18 @@ impl CodeGen {
 
                 let cond = self.evaluate(cond_expr, index, false)?;
 
+                match cond.type_ {
+                    SkyeType::U8  | SkyeType::I8  | SkyeType::U16 | SkyeType::I16 |
+                    SkyeType::U32 | SkyeType::I32 | SkyeType::U64 | SkyeType::I64 |
+                    SkyeType::Usz | SkyeType::AnyInt => (),
+                    _ => {
+                        ast_error!(
+                            self, cond_expr, 
+                            "Expected expression of primitive arithmetic type for if condition"
+                        );
+                    }
+                }
+
                 let not_grouping = !matches!(cond_expr, Expression::Grouping(_));
                 let not_block    = !matches!(**then_branch, Statement::Block(_, _));
 
@@ -2827,6 +2839,18 @@ impl CodeGen {
 
                 let cond = self.evaluate(cond_expr, index, false)?;
 
+                match cond.type_ {
+                    SkyeType::U8  | SkyeType::I8  | SkyeType::U16 | SkyeType::I16 |
+                    SkyeType::U32 | SkyeType::I32 | SkyeType::U64 | SkyeType::I64 |
+                    SkyeType::Usz | SkyeType::AnyInt => (),
+                    _ => {
+                        ast_error!(
+                            self, cond_expr, 
+                            "Expected expression of primitive arithmetic type for while condition"
+                        );
+                    }
+                }
+
                 let not_grouping = !matches!(cond_expr, Expression::Grouping(_));
                 let not_block    = !matches!(**body, Statement::Block(_, _));
 
@@ -2886,6 +2910,18 @@ impl CodeGen {
 
                 let cond = self.evaluate(cond_expr, index, false)?;
 
+                match cond.type_ {
+                    SkyeType::U8  | SkyeType::I8  | SkyeType::U16 | SkyeType::I16 |
+                    SkyeType::U32 | SkyeType::I32 | SkyeType::U64 | SkyeType::I64 |
+                    SkyeType::Usz | SkyeType::AnyInt => (),
+                    _ => {
+                        ast_error!(
+                            self, cond_expr, 
+                            "Expected expression of primitive arithmetic type for for condition"
+                        );
+                    }
+                }
+
                 self.definitions[index].push_indent();
                 self.definitions[index].push("for (; ");
                 self.definitions[index].push(&cond.value);
@@ -2934,6 +2970,18 @@ impl CodeGen {
                 }
 
                 let cond = self.evaluate(cond_expr, index, false)?;
+
+                match cond.type_ {
+                    SkyeType::U8  | SkyeType::I8  | SkyeType::U16 | SkyeType::I16 |
+                    SkyeType::U32 | SkyeType::I32 | SkyeType::U64 | SkyeType::I64 |
+                    SkyeType::Usz | SkyeType::AnyInt => (),
+                    _ => {
+                        ast_error!(
+                            self, cond_expr, 
+                            "Expected expression of primitive arithmetic type for while condition"
+                        );
+                    }
+                }
 
                 let not_grouping = !matches!(cond_expr, Expression::Grouping(_));
                 let not_block    = !matches!(**body, Statement::Block(_, _));
