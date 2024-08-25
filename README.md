@@ -491,10 +491,8 @@ Here is a list of operators that can be overloaded
 | `{} % {}` | `__mod__` | 1 |
 | `{} << {}` | `__shl__` | 1 |
 | `{} >> {}` | `__shr__` | 1 |
-| `{} || {}` | `__or__` | 1 |
 | `{} && {}` | `__and__` | 1 |
 | `{} ^ {}` | `__xor__` | 1 |
-| `{} | {}` | `__bitor__` | 1 |
 | `{} & {}` | `__bitand__` | 1 |
 | `{} > {}` | `__gt__` | 1 |
 | `{} >= {}` | `__ge__` | 1 |
@@ -510,8 +508,11 @@ Here is a list of operators that can be overloaded
 | `{} <<= {}` | `__setshl__` | 1 |
 | `{} >>= {}` | `__setshr__` | 1 |
 | `{} ^= {}` | `__setxor__` | 1 |
-| `{} |= {}` | `__setor__` | 1 |
 | `{} &= {}` | `__setand__` | 1 |
 | `{}[{}]` | `__subscript__` | any |
+`{} || {}`: `__or__` : 1
+`{} | {}`: `__bitor__`: 1
+`{} |= {}`: `__setor__`: 1
+
 
 Additionally, Skye offers you copy constructors and destructors, mostly used for special types like smart pointers. They are respectively the `__copy__` method and the `__destruct__` method. The Skye compiler will warn you when it inserts calls to those methods inside the code, so that eventual debugging is easier.
