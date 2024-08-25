@@ -1,0 +1,628 @@
+import <"math.h">;
+
+impl String {
+    fn __subscript__(const self, idx: usz) *const char {
+        if idx < self.length {
+            return @cast(*char, self.raw) + idx;
+        } else {
+            panic("String: out of bounds access");
+        }
+    }
+}
+
+impl[T] core::Slice[T] {
+    fn __subscript__(const self, idx: usz) *const T {
+        if idx < self.length {
+            return self.ptr + idx;
+        } else {
+            panic("Slice: out of bounds access");
+        }
+    }
+}
+
+impl[T] core::Option[T] {
+    fn unwrap(const self) T {
+        if self.kind == core::Option::Kind::Some {
+            return self.some;
+        } else {
+            panic("Option: unwrap on a None value");
+        }
+    }
+
+    fn expect(const self, msg: String) T {
+        if self.kind == core::Option::Kind::Some {
+            return self.some;
+        } else {
+            panic(msg);
+        }
+    }
+}
+
+impl[T, U] core::Result[T, U] {
+    fn unwrap(const self) T {
+        if self.kind == core::Result::Kind::Ok {
+            return self.ok;
+        } else {
+            panic("Result: unwrap on an Error value");
+        }
+    }
+
+    fn expect(const self, msg: String) T {
+        if self.kind == core::Result::Kind::Ok {
+            return self.ok;
+        } else {
+            panic(msg);
+        }
+    }
+}
+
+namespace core {
+    namespace utils {
+        fn cStringToString(const raw: rawstring) core::String {
+            return core::String.{ raw, length: core::utils::cStringLength(raw) };
+        }
+    }
+
+    namespace io {
+        fn println(const msg: String) {
+            core::io::print(msg);
+            core::io::print("\n");
+        }
+    }
+
+    namespace mem {
+        impl core::mem::HeapAllocator {
+            fn alloc[T](self, amt: usz) core::Ptr[T, Self] {
+                const ptr = @cast(*T, self.allocRaw(amt * @sizeOf(T)));
+                return core::Ptr::new(ptr, ptr, ptr + amt, self);
+            }
+
+            fn realloc[T](self, ptr: *core::Ptr[T, Self], size: usz) {
+                const rawptr = @cast(*T, self.reallocRaw(@cast(voidptr, ptr.ptr), size * @sizeOf(T)));
+                ptr.ptr = rawptr;
+                ptr.min = rawptr;
+                ptr.max = rawptr + size;
+            }
+
+            fn put[T](self, object: T) core::Ptr[T, Self] {
+                const ptr = self.alloc[T](1);
+                *ptr = object;
+                return ptr;
+            }
+
+            fn free[T](self, ptr: *const core::Ptr[T, Self]) {
+                self.freeRaw(@cast(voidptr, ptr.ptr));
+            }
+        }
+
+        #defined
+        let heapAllocator: core::mem::HeapAllocator;
+    }
+
+    struct Ptr[T, U = core::mem::HeapAllocator] {
+        ptr: *T,
+        min: *T,
+        max: *T,
+        const alloc: *U
+    }
+
+    // TODO implement pointer arithmetics
+    impl[T, U = core::mem::HeapAllocator] core::Ptr[T, U] {
+        fn new(ptr: *T, min: *T, max: *T, alloc: *U) Self[T, U] {
+            return Self.{ ptr, min, max, alloc };
+        }
+
+        fn free(self) {
+            self.alloc.free(self);
+        }
+
+        fn __subscript__(self, offs: usz) *T {
+            const r = self.ptr + offs;
+            if self.min <= r && r <= self.max {
+                return r;
+            } else {
+                panic("Ptr: out of bounds access");
+            }
+        }
+
+        fn __asptr__(self) *T {
+            return self.ptr;
+        } 
+    }
+}
+
+use core::Ptr         as Ptr;
+use core::io::print   as print;
+use core::io::println as println;
+
+macro MIN_ARRAY_CAPACITY 8;
+
+namespace core {
+    struct Rc[T, U = core::mem::HeapAllocator] {
+        data: Ptr[T, U],
+        count: u64
+    }
+
+    impl[T, U = core::mem::HeapAllocator] core::Rc[T, U] {
+        fn new(data: T) Self[T, U] {
+            return Self.{
+                data: core::mem::heapAllocator.put(data),
+                count: 1
+            };
+        }
+
+        fn init(data: T, allocator: U) Self[T, U] {
+            return Self.{
+                data: allocator.put(data),
+                count: 2
+            };
+        }
+
+        fn empty() Self[T, U] {
+            return Self.{
+                data: core::mem::heapAllocator.alloc[T](1),
+                count: 1
+            };
+        }
+
+        fn from(data: Ptr[T, U]) Self[T, U] {
+            return Self.{
+                data, count: 1
+            };
+        }
+
+        fn __copy__(self) Self[T, U] {
+            return Self.{ data: self.data, count: self.count + 1 };
+        }
+
+        fn __destruct__(self) {        
+            if --self.count == 0 {
+                self.data.free();
+            }
+        }
+    }
+
+    struct ArrayIterator[T] {
+        const array: *const core::Array[T],
+        idx: usz
+    }
+
+    impl[T] core::ArrayIterator[T] {
+        fn new(const array: *const Array[T]) Self[T] {
+            return core::SliceIterator.{ array, idx: 0 };
+        } 
+
+        fn next(self) ?T {
+            return self.array.get(self.idx++);
+        }
+    }
+
+    struct Array[T, U = core::mem::HeapAllocator] {
+        array: Ptr[T, U],
+        length: usz,
+        capacity: usz,
+        const allocator: U
+    }
+
+    impl[T, U = core::mem::HeapAllocator] core::Array[T, U] {
+        fn new() Self[T, U] {
+            return Self.{
+                array: core::mem::heapAllocator.alloc[T](@MIN_ARRAY_CAPACITY),
+                length: 0,
+                capacity: @MIN_ARRAY_CAPACITY,
+                allocator: core::mem::heapAllocator
+            };
+        }
+
+        fn init(allocator: U) Self[T, U] {
+            return Self.{
+                array: allocator.alloc[T](@MIN_ARRAY_CAPACITY),
+                length: 0,
+                capacity: @MIN_ARRAY_CAPACITY,
+                allocator
+            };
+        }
+
+        fn from(slice: core::Slice[T]) Self[T, U] {
+            const mem = core::mem::heapAllocator.alloc[T](slice.length);
+            core::mem::typedBlockCopy(slice.ptr, mem.ptr, slice.length);
+
+            return Self.{ 
+                array: mem,
+                length: slice.length,
+                capacity: slice.length,
+                allocator: core::mem::heapAllocator
+            };
+        }
+
+        fn withLength(length: usz) Self[T, U] {
+            return Self.{
+                array: core::mem::heapAllocator.alloc[T](length),
+                length,
+                capacity: length,
+                allocator: core::mem::heapAllocator
+            };
+        }
+
+        fn initWithLength(length: usz, allocator: U) Self[T, U] {
+            return Self.{
+                array: allocator.alloc[T](length),
+                length,
+                capacity: length,
+                allocator
+            };
+        }
+
+        fn withCapacity(capacity: usz) Self[T, U] {
+            return Self.{
+                array: core::mem::heapAllocator.alloc[T](capacity),
+                length: 0,
+                capacity,
+                allocator: core::mem::heapAllocator
+            };
+        }
+
+        fn initWithCapacity(capacity: usz, allocator: U) Self[T, U] {
+            return Self.{
+                array: allocator.alloc[T](capacity),
+                length: 0,
+                capacity,
+                allocator
+            };
+        }
+
+        fn resize(self, size: usz) {
+            if self.capacity < size {
+                do self.capacity <<= 1;
+                while self.capacity < size;
+
+                self.allocator.realloc(&self.array, self.capacity);
+            }
+        }
+
+        fn resizeExact(self, size: usz) {
+            if self.capacity < size {
+                self.capacity = size;
+                self.allocator.realloc(&self.array, self.capacity);
+            }
+        }
+
+        fn grow(self, amt: usz) {
+            if self.capacity < self.length + size {
+                do self.capacity <<= 1;
+                while self.capacity < self.length + size;
+
+                self.allocator.realloc(&self.array, self.capacity);
+            }
+        }
+
+        fn growExact(self, amt: usz) {
+            if self.capacity < self.length + size {
+                self.capacity = self.length + size;
+                self.allocator.realloc(&self.array, self.capacity);
+            }
+        }
+
+        fn push(self, item: T) {
+            if self.capacity < self.length + 1 {
+                self.capacity <<= 1;
+                self.allocator.realloc(&self.array, self.capacity);
+            }
+
+            self.array[self.length++] = item;
+        }
+
+        fn pop(self) T {
+            return self.array[--self.length];
+        }
+
+        fn get(self, idx: usz) ?T {
+            if idx < self.length {
+                return (?T)::Some(self.array[idx]);
+            } else {
+                return (?T)::None;
+            }
+        }
+
+        fn __subscript__(self, idx: usz) *T {
+            if idx < self.length {
+                return self.array[idx];
+            } else {
+                panic("Array: out of bounds access");
+            }
+        }
+
+        fn slice(const self, a: usz, b: usz) core::Slice[T] {
+            if a < self.length && b < self.length {
+                return core::Slice::new(self.array.ptr + a, b - a);
+            } else {
+                panic("Array: out of bounds slicing");
+            }
+        }
+
+        fn reverse(self) {
+            let a = 0;
+            let b = self.length - 1;
+            
+            while a < b {
+                let tmp       = self.array[a];
+                self.array[a] = self.array[b];
+                self.array[b] = tmp;
+
+                a++;
+                b--;
+            }
+        }
+
+        fn iter(const self) core::ArrayIterator[T] {
+            return core::ArrayIterator::new(self);
+        }
+
+        fn clear(self) {
+            self.length = 0;
+        }
+
+        fn free(self) {
+            self.array.free();
+        }
+    }
+
+    struct MutableString[U = core::mem::HeapAllocator] {
+        array: Ptr[char, U],
+        length: usz,
+        capacity: usz,
+        const allocator: U
+    }
+
+    impl[U = core::mem::HeapAllocator] core::MutableString[U] {
+        fn new() Self[U] {
+            return Self.{
+                array: core::mem::heapAllocator.alloc[char](@MIN_ARRAY_CAPACITY),
+                length: 0,
+                capacity: @MIN_ARRAY_CAPACITY,
+                allocator: core::mem::heapAllocator
+            };
+        }
+
+        fn init(allocator: U) Self[U] {
+            return Self.{
+                array: allocator.alloc[char](@MIN_ARRAY_CAPACITY),
+                length: 0,
+                capacity: @MIN_ARRAY_CAPACITY,
+                allocator
+            };
+        }
+
+        fn from(const string: String) Self[U] {
+            const mem = core::mem::heapAllocator.alloc[char](string.length);
+            core::mem::typedBlockCopy(@cast(*char, string.raw), mem.ptr, string.length);
+
+            return Self.{ 
+                array: mem,
+                length: string.length,
+                capacity: string.length,
+                allocator: core::mem::heapAllocator
+            };
+        }
+
+        fn withLength(length: usz) Self[U] {
+            return Self.{
+                array: core::mem::heapAllocator.alloc[char](length),
+                length,
+                capacity: length,
+                allocator: core::mem::heapAllocator
+            };
+        }
+
+        fn initWithLength(length: usz, allocator: U) Self[U] {
+            return Self.{
+                array: allocator.alloc[char](length),
+                length,
+                capacity: length,
+                allocator
+            };
+        }
+
+        fn withCapacity(capacity: usz) Self[U] {
+            return Self.{
+                array: core::mem::heapAllocator.alloc[char](capacity),
+                length: 0,
+                capacity,
+                allocator: core::mem::heapAllocator
+            };
+        }
+
+        fn initWithCapacity(capacity: usz, allocator: U) Self[U] {
+            return Self.{
+                array: allocator.alloc[char](capacity),
+                length: 0,
+                capacity,
+                allocator
+            };
+        }
+
+        fn resize(self, size: usz) {
+            if self.capacity < size {
+                do self.capacity <<= 1;
+                while self.capacity < size;
+
+                self.allocator.realloc(&self.array, self.capacity);
+            }
+        }
+
+        fn resizeExact(self, size: usz) {
+            if self.capacity < size {
+                self.capacity = size;
+                self.allocator.realloc(&self.array, self.capacity);
+            }
+        }
+
+        fn grow(self, amt: usz) {
+            if self.capacity < self.length + size {
+                do self.capacity <<= 1;
+                while self.capacity < self.length + size;
+
+                self.allocator.realloc(&self.array, self.capacity);
+            }
+        }
+
+        fn growExact(self, amt: usz) {
+            if self.capacity < self.length + size {
+                self.capacity = self.length + size;
+                self.allocator.realloc(&self.array, self.capacity);
+            }
+        }
+
+        fn push(self, item: char) {
+            if self.capacity < self.length + 1 {
+                self.capacity <<= 1;
+                self.allocator.realloc(&self.array, self.capacity);
+            }
+
+            self.array[self.length++] = item;
+        }
+
+        fn pop(self) char {
+            return self.array[--self.length];
+        }
+
+        fn get(self, idx: usz) ?char {
+            if idx < self.length {
+                return (?char)::Some(self.array[idx]);
+            } else {
+                return (?char)::None;
+            }
+        }
+
+        fn __subscript__(self, idx: usz) *char {
+            if idx < self.length {
+                return self.array[idx];
+            } else {
+                panic("MutableString: out of bounds access");
+            }
+        }
+
+        fn slice(const self, a: usz, b: usz) core::Slice[char] {
+            if a < self.length && b < self.length {
+                return core::Slice::new(self.array.ptr + a, b - a);
+            } else {
+                panic("MutableString: out of bounds slicing");
+            }
+        }
+
+        fn reverse(self) {
+            let a = 0usz;
+            let b = self.length - 1;
+            
+            while a < b {
+                let tmp       = self.array[a];
+                self.array[a] = self.array[b];
+                self.array[b] = tmp;
+
+                a++;
+                b--;
+            }
+        }
+
+        fn clear(self) {
+            self.length = 0;
+        }
+
+        fn free(self) {
+            self.array.free();
+        }
+
+        fn toString(const self) String {
+            return core::String.{ raw: @cast(rawstring, self.array.ptr), length: self.length };
+        }
+
+        fn pushString(self, const string: String) {
+            for let i = 0usz; i < string.length; i++ {
+                self.push(string.raw[i]);
+            }
+        }
+    }
+}
+
+use core::Rc as Rc;
+use core::Array as Array;
+use core::MutableString[core::mem::HeapAllocator] as DefaultMutableString;
+
+#bind fn pow(base: f64, exp: f64) f64;
+
+namespace core {
+    namespace utils {
+        fn __reversedIntToString[T: AnyInt](value: T) DefaultMutableString {
+            let neg = value < 0;
+            if (neg) value = -value;
+
+            let buf = DefaultMutableString::new();
+
+            do {
+                buf.push(@cast(char, 48 + value % 10));
+                value /= 10;
+            } while value;
+
+            if (neg) buf.push('-');
+            return buf;
+        }
+
+        fn intToMutableString[T: AnyInt](value: T) DefaultMutableString {
+            let buf = core::utils::__reversedIntToString(value);
+            buf.reverse();
+            return buf;
+        }
+
+        fn intToString[T: AnyInt](value: T) core::String {
+            return core::utils::intToMutableString(value).toString();
+        }
+
+        fn floatToMutableString[T: AnyFloat](value: T, decPrecision: usz) DefaultMutableString {
+            if decPrecision < 0 {
+                panic("core::utils::floatToString: Negative precision");
+            }
+
+            let intPart = @cast(i64, value);
+            let decPart = value - @cast(T, intPart);
+
+            let buf = core::utils::intToString(intPart);
+
+            if decPrecision != 0 {
+                buf.push('.');
+
+                decPart *= @cast(T, pow(10f64, @cast(f64, decPrecision)));
+                let tmpBuf = core::utils::__reversedIntToString(decPart);
+                
+                while tmpBuf.length < decPrecision {
+                    tmpBuf.push('0');
+                }
+
+                tmpBuf.reverse();
+                buf.pushString(tmpBuf.toString());
+            }
+
+            return buf;
+        }
+
+        fn floatToString[T: AnyFloat](value: T, decPrecision: usz) core::String {
+            return core::utils::floatToMutableString(value, decPrecision).toString();
+        }
+    }
+}
+
+fn _SKYE_INIT() {
+    core::mem::heapAllocator = core::mem::HeapAllocator::new();
+}
+
+fn _SKYE_CONVERT_ARGS(const argc: usz, const argv: **char) core::Array[core::String] {
+    let output = core::Array::withCapacity[core::String](argc);
+
+    for let i = 0usz; i < argc; i++ {
+        output.push(core::String.{ 
+            raw: @cast(rawstring, argv[i]), 
+            length: core::utils::cStringLength(@cast(rawstring, argv[i])) 
+        });
+    }
+
+    return output;
+}

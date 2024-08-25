@@ -1,0 +1,67 @@
+import <"stdlib.h">;
+import <"stdio.h">;
+import <"string.h">;
+
+#bind fn malloc(size: usz) voidptr;
+#bind fn realloc(ptr: voidptr, size: usz) voidptr;
+#bind fn free(ptr: voidptr);
+#bind fn printf(const fmt: rawstring, len: usz, a: rawstring);
+#bind fn strlen(const str: rawstring) usz;
+#bind fn exit(code: i32);
+
+fn panic(const msg: String);
+
+namespace core {
+    namespace mem {
+        struct HeapAllocator {}
+
+        impl core::mem::HeapAllocator {
+            fn new() Self {
+                return Self.{};
+            }
+
+            fn allocRaw(self, amt: usz) voidptr {
+                const ptr = malloc(amt);
+
+                if ptr == @nullptr {
+                    panic("Could not allocate requested memory");
+                }
+
+                return ptr;
+            }
+
+            fn reallocRaw(self, ptr: voidptr, size: usz) voidptr {
+                const newptr = realloc(ptr, size);
+
+                if newptr == @nullptr {
+                    panic("Could not allocate requested memory");
+                }
+
+                return newptr;
+            }
+
+            fn freeRaw(self, ptr: voidptr) {
+                free(ptr);
+            }
+        }
+    }
+
+    namespace io {
+        fn print(const msg: String) {
+            printf(`%.*s\0`, msg.length, msg.raw);
+        }
+    }
+
+    namespace utils {
+        fn cStringLength(const str: rawstring) usz {
+            return strlen(str);
+        }
+    }
+}
+
+fn panic(const msg: String) {
+    core::io::print("Skye program panicked!\n");
+    core::io::print(msg);
+    core::io::print("\n");
+    exit(1);
+}

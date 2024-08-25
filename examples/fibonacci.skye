@@ -1,0 +1,18 @@
+macro N 10;
+
+fn main() !void {
+    let a = 0;
+    let b = 1;
+
+    for let i = 0; i < @N; i++ {
+        use core::utils::intToString as intToStr;
+        println(intToStr(a));
+
+        const c = a + b;
+        a = b;
+        b = c;
+    }
+
+    return (!void)::Ok;
+}
+

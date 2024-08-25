@@ -1,0 +1,116 @@
+import <<"core/internals.h">>;
+
+macro WINDOWS -> u8;
+macro LINUX -> u8;
+macro MAC_OS -> u8;
+macro UNIX_LIKE -> u8;
+
+macro empty(T) -> T;
+macro sizeOf(E) -> usz;
+macro cast(T, E) -> T;
+
+macro nullptr 0;
+
+macro returnNone {
+    try (?void)::None // trick that uses the way the try operator works to let the compiler infer the return type
+}
+
+use (
+    u8  | i8  | u16 | i16 | 
+    u32 | i32 | u64 | i64 | 
+    usz
+) as AnyInt;
+
+use f32 | f64 as AnyFloat;
+
+namespace core {
+    struct String {
+        const raw: rawstring,
+        const length: usz
+    }
+
+    enum Option[T] {
+        Some(T),
+        None
+    }
+
+    impl[T] core::Option[T] {
+        fn or(const self, value: T) T {
+            if self.kind == core::Option::Kind::Some {
+                return self.some;
+            } else {
+                return value;
+            }
+        }
+    }
+
+    enum Result[T, U] {
+        Ok(T),
+        Error(U)
+    }
+
+    impl[T, U] core::Result[T, U] {
+        fn or(const self, value: T) T {
+            if self.kind == core::Result::Kind::Ok {
+                return self.ok;
+            } else {
+                return value;
+            }
+        }
+    }
+
+    struct SliceIterator[T] {
+        const slice: *const core::Slice[T],
+        idx: usz
+    }
+
+    impl[T] core::SliceIterator[T] {
+        fn new(const slice: *const core::Slice[T]) Self[T] {
+            return core::SliceIterator.{ slice, idx: 0 };
+        } 
+
+        fn next(self) ?T {
+            return self.slice.get(self.idx++);
+        }
+    }
+
+    struct Slice[T] {
+        const ptr: *const T,
+        const length: usz
+    }
+
+    impl[T] core::Slice[T] {
+        fn new(ptr: *const T, length: usz) Self[T] {
+            return Self.{ ptr, length };
+        }
+
+        fn get(const self, idx: usz) ?T {
+            if idx < self.length {
+                return (?T)::Some(self.ptr[idx]);
+            } else {
+                return (?T)::None;
+            }
+        }
+
+        fn iter(const self) core::SliceIterator[T] {
+            return core::SliceIterator::new(self);
+        }
+    }
+
+    namespace mem {
+        fn blockCopy(from: voidptr, to: voidptr, amt: usz) {
+            while amt-- {
+                *@cast(*u8, to++) = *@cast(*u8, from++); 
+            }
+        }
+
+        fn typedBlockCopy[T](from: T, to: T, amt: usz) {
+            while amt-- {
+                *(to++) = *(from++); 
+            } 
+        }
+    }
+}
+
+use core::String as String;
+use core::Slice as Slice;
