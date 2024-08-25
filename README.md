@@ -65,6 +65,7 @@ f32 f64
 Other:
 char 
 voidptr (void*, mostly for C interop)
+rawstring
 ```
 No implicit casting is performed, every cast must be performed explictly using the `@cast` macro.
 ```
