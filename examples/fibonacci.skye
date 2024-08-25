@@ -6,7 +6,10 @@ fn main() !void {
 
     for let i = 0; i < @N; i++ {
         use core::utils::intToString as intToStr;
-        println(intToStr(a));
+        
+        const num = intToStr(a);
+        defer num.free();
+        println(num.toString());
 
         const c = a + b;
         a = b;

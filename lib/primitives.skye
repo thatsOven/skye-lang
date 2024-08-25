@@ -567,17 +567,13 @@ namespace core {
             return buf;
         }
 
-        fn intToMutableString[T: AnyInt](value: T) DefaultMutableString {
+        fn intToString[T: AnyInt](value: T) DefaultMutableString {
             let buf = core::utils::__reversedIntToString(value);
             buf.reverse();
             return buf;
         }
 
-        fn intToString[T: AnyInt](value: T) core::String {
-            return core::utils::intToMutableString(value).toString();
-        }
-
-        fn floatToMutableString[T: AnyFloat](value: T, decPrecision: usz) DefaultMutableString {
+        fn floatToString[T: AnyFloat](value: T, decPrecision: usz) DefaultMutableString {
             if decPrecision < 0 {
                 panic("core::utils::floatToString: Negative precision");
             }
@@ -602,10 +598,6 @@ namespace core {
             }
 
             return buf;
-        }
-
-        fn floatToString[T: AnyFloat](value: T, decPrecision: usz) core::String {
-            return core::utils::floatToMutableString(value, decPrecision).toString();
         }
     }
 }
