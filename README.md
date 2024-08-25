@@ -1,3 +1,5 @@
+![](logo.png)
+
 # Skye
 Skye's programming language (Skye, for short) is the retrofuturistic systems programming language.
 
