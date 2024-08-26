@@ -3055,15 +3055,27 @@ impl CodeGen {
                         unreachable!();
                     }
 
+                    let final_value = {
+                        let search_tok = Token::dummy(Rc::from("__copy__"));
+                        if let Some(method_value) = self.get_method(&value, &search_tok, true) {
+                            let copy_constructor = self.call(&method_value, expr, &expr, &Vec::new(), index, false)?;
+                            
+                            ast_info!(expr, "Skye inserted a copy constructor call for this expression"); // +I-copies
+                            copy_constructor
+                        } else {
+                            value
+                        }
+                    };
+
                     // return value is saved in a temporary variable so deferred statements get executed after evaluation
                     let tmp_var_name = self.get_temporary_var();
 
                     self.definitions[index].push_indent();
-                    self.definitions[index].push(&value.type_.stringify());
+                    self.definitions[index].push(&final_value.type_.stringify());
                     self.definitions[index].push(" ");
                     self.definitions[index].push(&tmp_var_name);
                     self.definitions[index].push(" = ");
-                    self.definitions[index].push(&value.value);
+                    self.definitions[index].push(&final_value.value);
                     self.definitions[index].push(";\n");
 
                     buf.push_str("return ");
