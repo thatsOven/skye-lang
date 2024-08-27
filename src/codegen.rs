@@ -288,7 +288,7 @@ impl CodeGen {
             SkyeType::Type(inner_type) => Ok(*inner_type),
             SkyeType::Void => Ok(val.type_),
             _ => {
-                ast_error!(self, return_type_expr, "Expecting type as return type");
+                ast_error!(self, return_type_expr, format!("Expecting type as return type (got {})", val.type_.stringify_native()).as_ref());
                 Err(ExecutionInterrupt::Error)
             }
         }
@@ -298,19 +298,33 @@ impl CodeGen {
         let mut params_string = String::new();
         let mut params_output = Vec::new();
         for i in 0 .. params.len() {
-            let param_type = {
-                if let SkyeType::Type(inner_type) = self.evaluate(&params[i].type_, index, allow_unknown)?.type_ {
+            let param_type: SkyeType = {
+                let inner_param_type = self.evaluate(&params[i].type_, index, allow_unknown)?.type_;
+                if let SkyeType::Type(inner_type) = inner_param_type {
                     if has_decl {
                         if let SkyeType::Function(existing_params, _, _) = &existing.as_ref().unwrap().type_ {
                             if !existing_params[i].type_.equals(&inner_type) {
-                                ast_error!(self, params[i].type_, "Function parameter type does not match declaration parameter type");
+                                ast_error!(
+                                    self, params[i].type_, 
+                                    format!(
+                                        "Function parameter type does not match declaration parameter type (expecting {} but got {})",
+                                        inner_type.stringify_native(), existing_params[i].type_.stringify_native()
+                                    ).as_ref()
+                                );
                             }
                         }
                     }
                             
                     *inner_type
                 } else {
-                    ast_error!(self, params[i].type_, "Expecting type as parameter type");
+                    ast_error!(
+                        self, params[i].type_, 
+                        format!(
+                            "Expecting type as parameter type (got {})", 
+                            inner_param_type.stringify_native()
+                        ).as_ref()
+                    );
+
                     SkyeType::Void
                 }
             };
@@ -438,7 +452,7 @@ impl CodeGen {
                     ast_error!(
                         self, expr, 
                         format!(
-                            "Expecting {} arguments but got {}", 
+                            "Expecting {} arguments for function call but got {}", 
                             params.len(), arguments_len
                         ).as_str()
                     );
@@ -463,7 +477,13 @@ impl CodeGen {
                     };
                     
                     if !arg.type_.equals(&params[i].type_) {
-                        ast_error!(self, arguments[i - arguments_mod], "Argument type does not match parameter type");
+                        ast_error!(
+                            self, arguments[i - arguments_mod], 
+                            format!(
+                                "Argument type does not match parameter type (expecting {} but got {})",
+                                params[i].type_.stringify_native(), arg.type_.stringify_native()
+                            ).as_ref()
+                        );
                     }
 
                     let search_tok = Token::dummy(Rc::from("__copy__"));
@@ -490,7 +510,7 @@ impl CodeGen {
                         ast_error!(
                             self, expr, 
                             format!(
-                                "Expecting {} arguments but got {}", 
+                                "Expecting {} arguments for function call but got {}", 
                                 params.len(), arguments_len
                             ).as_str()
                         );
@@ -567,7 +587,14 @@ impl CodeGen {
                                         if let Some(bounds) = &mapped_generic.bounds {
                                             if !bounds.is_respected_by(&wrapped) {
                                                 if i != 0 || arguments_mod != 1 {
-                                                    ast_error!(self, arguments[i - arguments_mod], "Generic bound is not respected by this type");
+                                                    ast_error!(
+                                                        self, arguments[i - arguments_mod], 
+                                                        format!(
+                                                            "Generic bound is not respected by this type (expecting {} but got {})",
+                                                            bounds.stringify_native(), wrapped.stringify_native()
+                                                        ).as_ref()
+                                                    );
+
                                                     token_note!(mapped_generic.name, "Generic defined here");
                                                 }   
                                             }
@@ -578,14 +605,28 @@ impl CodeGen {
                                 }
                             } else {                                        
                                 if i != 0 || arguments_mod != 1 {
-                                    ast_error!(self, arguments[i - arguments_mod], "Argument type does not match parameter type");
+                                    ast_error!(
+                                        self, arguments[i - arguments_mod], 
+                                        format!(
+                                            "Argument type does not match parameter type (expecting {} but got {})",
+                                            inner_type.stringify_native(), call_evaluated.type_.stringify_native()
+                                        ).as_ref()
+                                    );
+
                                     ast_note!(params[i].type_, "Parameter type defined here");
                                 } else {
                                     unreachable!(); // self info should always be correct
                                 }
                             }
                         } else {
-                            ast_error!(self, params[i].type_, "Expecting type as parameter type");
+                            ast_error!(
+                                self, params[i].type_, 
+                                format!(
+                                    "Expecting type as parameter type (got {})",
+                                    def_type.stringify_native()
+                                ).as_ref()
+                            );
+
                             ast_note!(expr, "This error is a result of template generation originating from this call");
                         }
 
@@ -653,7 +694,14 @@ impl CodeGen {
                             SkyeType::Type(inner_type) => *inner_type.clone(),
                             SkyeType::Void => ret_type,
                             _ => {
-                                ast_error!(self, return_type_expr, "Expecting type as return type");
+                                ast_error!(
+                                    self, return_type_expr, 
+                                    format!(
+                                        "Expecting type as return type (got {})",
+                                        ret_type.stringify_native()
+                                    ).as_ref()
+                                );
+
                                 ast_note!(expr, "This error is a result of template generation originating from this call");
                                 return Err(ExecutionInterrupt::Error);
                             }
@@ -707,6 +755,14 @@ impl CodeGen {
                     Ok(SkyeValue::new(Rc::from(call_output.as_ref()), return_evaluated, true))
                 } else {
                     ast_error!(self, callee_expr, "Cannot call this expression");
+                    ast_note!(
+                        callee_expr, 
+                        format!(
+                            "This expression has type {}",
+                            callee.type_.stringify_native()
+                        ).as_ref()
+                    );
+
                     return Err(ExecutionInterrupt::Error);
                 }
             }
@@ -716,7 +772,7 @@ impl CodeGen {
                         ast_error!(
                             self, expr, 
                             format!(
-                                "Expecting {} arguments but got {}", 
+                                "Expecting {} arguments for macro call but got {}", 
                                 params.len(), arguments_len
                             ).as_str()
                         );
@@ -772,7 +828,13 @@ impl CodeGen {
                         if let SkyeType::Type(inner_type) = call_return_type.type_ {
                             Ok(SkyeValue::new(Rc::from(format!("{}({})", callee.value, args)), *inner_type, true))
                         } else {
-                            ast_error!(self, return_type.as_ref().unwrap(), "Expecting type as return type");
+                            ast_error!(
+                                self, return_type.as_ref().unwrap(), 
+                                format!(
+                                    "Expecting type as return type (got {})",
+                                    call_return_type.type_.stringify_native()
+                                ).as_ref()
+                            );
                             ast_note!(expr, "This error is a result of this macro expansion");
                             Err(ExecutionInterrupt::Error)
                         }
@@ -783,6 +845,14 @@ impl CodeGen {
             }
             _ => {
                 ast_error!(self, callee_expr, "Cannot call this expression");
+                ast_note!(
+                    callee_expr, 
+                    format!(
+                        "This expression has type {}",
+                        callee.type_.stringify_native()
+                    ).as_ref()
+                );
+
                 return Err(ExecutionInterrupt::Error);
             }
         }
@@ -800,12 +870,26 @@ impl CodeGen {
                 if let Some(value) = self.get_method(&inner, &search_tok, true) {
                     self.call(&value, expr, inner_expr, &Vec::new(), index, allow_unknown)
                 } else {
-                    token_error!(self, op, "This operator is not implemented for this type");
+                    token_error!(
+                        self, op, 
+                        format!(
+                            "This operator is not implemented for type {}",
+                            inner.type_.stringify_native()
+                        ).as_ref()
+                    );
+
                     Err(ExecutionInterrupt::Error)
                 }
             }
             ImplementsHow::No => {
-                token_error!(self, op, "This type cannot use this operator");
+                token_error!(
+                    self, op, 
+                    format!(
+                        "Type {} cannot use this operator",
+                        inner.type_.stringify_native()
+                    ).as_ref()
+                );
+                
                 Err(ExecutionInterrupt::Error)
             }
         }
@@ -824,7 +908,14 @@ impl CodeGen {
                 if left.type_.equals(&right.type_) {
                     Ok(SkyeValue::new(Rc::from(format!("{} {} {}", left.value, op_stringified, right.value)), return_type, false))
                 } else {
-                    ast_error!(self, right_expr, "Right operand type does not match left operand type");
+                    ast_error!(
+                        self, right_expr, 
+                        format!(
+                            "Right operand type ({}) does not match left operand type ({})",
+                            right.type_.stringify_native(), left.type_.stringify_native()
+                        ).as_ref()
+                    );
+
                     Err(ExecutionInterrupt::Error)
                 }
             }
@@ -833,12 +924,26 @@ impl CodeGen {
                 if let Some(value) = self.get_method(&left, &search_tok, true) {
                     self.call(&value, expr, left_expr, &vec![right_expr.clone()], index, allow_unknown)
                 } else {
-                    ast_error!(self, left_expr, "This operator is not implemented for this type");
+                    ast_error!(
+                        self, left_expr, 
+                        format!(
+                            "This operator is not implemented for type {}",
+                            left.type_.stringify_native()
+                        ).as_ref()
+                    );
+
                     Err(ExecutionInterrupt::Error)
                 }
             }
             ImplementsHow::No => {
-                ast_error!(self, left_expr, "This type cannot use this operator");
+                ast_error!(
+                    self, left_expr, 
+                    format!(
+                        "Type {} cannot use this operator",
+                        left.type_.stringify_native()
+                    ).as_ref()
+                );
+
                 Err(ExecutionInterrupt::Error)
             }
         }
@@ -860,12 +965,26 @@ impl CodeGen {
                 if let Some(value) = self.get_method(&left, &search_tok, true) {
                     self.call(&value, expr, left_expr, &vec![right_expr.clone()], index, allow_unknown)
                 } else {
-                    ast_error!(self, left_expr, "This operator is not implemented for this type");
+                    ast_error!(
+                        self, left_expr, 
+                        format!(
+                            "This operator is not implemented for type {}",
+                            left.type_.stringify_native()
+                        ).as_ref()
+                    );
+
                     Err(ExecutionInterrupt::Error)
                 }
             }
             ImplementsHow::No => {
-                ast_error!(self, left_expr, "This type cannot use this operator");
+                ast_error!(
+                    self, left_expr, 
+                    format!(
+                        "Type {} cannot use this operator",
+                        left.type_.stringify_native()
+                    ).as_ref()
+                );
+                
                 Err(ExecutionInterrupt::Error)
             }
         }
@@ -875,7 +994,14 @@ impl CodeGen {
         match inner.type_.implements_op(op_type) {
             ImplementsHow::Native => Ok(SkyeValue::new(Rc::from(format!("{}{}", inner.value, op_stringified)), inner.type_, false)),
             ImplementsHow::No | ImplementsHow::ThirdParty => {
-                token_error!(self, op, "This type cannot use this operator");
+                token_error!(
+                    self, op, 
+                    format!(
+                        "Type {} cannot use this operator",
+                        inner.type_.stringify_native()
+                    ).as_ref()
+                );
+
                 Err(ExecutionInterrupt::Error)
             }
         }
@@ -900,7 +1026,13 @@ impl CodeGen {
                     let evaluated = self.evaluate(&items[i], index, allow_unknown)?;
 
                     if !evaluated.type_.equals(&first_item.type_) {
-                        ast_error!(self, items[i], "Items inside array do not have matching types");
+                        ast_error!(
+                            self, items[i], 
+                            format!(
+                                "Items inside array do not have matching types (expecting {} but got {})",
+                                first_item.type_.stringify_native(), evaluated.type_.stringify_native()
+                            ).as_ref()
+                        );
                         ast_note!(items[0], "First item defined here");
                     }
 
@@ -1104,7 +1236,14 @@ impl CodeGen {
                                     index, allow_unknown
                                 )
                             } else {
-                                ast_error!(self, inner_expr, "Invalid operand for option operator (expected type type)");
+                                ast_error!(
+                                    self, inner_expr, 
+                                    format!(
+                                        "Invalid operand for option operator (expecting type but got {})",
+                                        inner.type_.stringify_native()
+                                    ).as_ref()
+                                );
+
                                 Err(ExecutionInterrupt::Error)
                             }
                         }
@@ -1117,7 +1256,14 @@ impl CodeGen {
                                     Ok(SkyeValue::new(Rc::from(format!("&{}", inner.value)), SkyeType::Pointer(Box::new(inner.type_), inner.is_const), true))
                                 }
                                 ImplementsHow::No => {
-                                    token_error!(self, op, "This type cannot use this operator");
+                                    token_error!(
+                                        self, op, 
+                                        format!(
+                                            "Type {} cannot use this operator",
+                                            inner.type_.stringify_native()
+                                        ).as_ref()
+                                    );
+
                                     Err(ExecutionInterrupt::Error)
                                 }
                             }
@@ -1167,19 +1313,40 @@ impl CodeGen {
                                                     if let SkyeType::Pointer(inner, ptr_is_const) = &value.type_ {
                                                         (*inner.clone(), *ptr_is_const)
                                                     } else {
-                                                        token_error!(self, op, "Expecting pointer as return type of __asptr__");
+                                                        token_error!(
+                                                            self, op, 
+                                                            format!(
+                                                                "Expecting pointer as return type of __asptr__ (got {})",
+                                                                value.type_.stringify_native()
+                                                            ).as_ref()
+                                                        );
+
                                                         return Err(ExecutionInterrupt::Error);
                                                     }
                                                 };
             
                                                 Ok(SkyeValue::new(Rc::from(format!("*{}", value.value)), inner_type, is_const))
                                             } else {
-                                                token_error!(self, op, "This operator is not implemented for this type");
+                                                token_error!(
+                                                    self, op, 
+                                                    format!(
+                                                        "This operator is not implemented for type {}",
+                                                        inner.type_.stringify_native()
+                                                    ).as_ref()
+                                                );
+                                                
                                                 Err(ExecutionInterrupt::Error)
                                             }
                                         }
                                         ImplementsHow::No => {
-                                            token_error!(self, op, "This type cannot use this operator");
+                                            token_error!(
+                                                self, op, 
+                                                format!(
+                                                    "Type {} cannot use this operator",
+                                                    inner.type_.stringify_native()
+                                                ).as_ref()
+                                            );
+                                            
                                             Err(ExecutionInterrupt::Error)
                                         }
                                     }
@@ -1213,7 +1380,7 @@ impl CodeGen {
                         }
                         TokenType::Try => {
                             if matches!(self.curr_function, CurrentFn::None) {
-                                token_error!(self, op, "Can only use \"try\" operator inside functions returning core::Result or core::Option");
+                                token_error!(self, op, "Can only use \"try\" operator inside functions");
                                 return Err(ExecutionInterrupt::Error);
                             }
 
@@ -1224,12 +1391,26 @@ impl CodeGen {
                                             if return_variants.is_some() && name.as_ref() == return_type_name.as_ref() {
                                                 (return_type.clone(), return_type_expr.clone())
                                             } else {
-                                                token_error!(self, op, "Can only use \"try\" operator inside functions returning core::Result or core::Option");
+                                                token_error!(
+                                                    self, op, 
+                                                    format!(
+                                                        "Can only use \"try\" operator inside functions returning core::Result or core::Option (got {})",
+                                                        return_type.stringify_native()
+                                                    ).as_ref()
+                                                );
+
                                                 ast_note!(return_type_expr, "Return type defined here");
                                                 return Err(ExecutionInterrupt::Error);
                                             }
                                         } else {
-                                            token_error!(self, op, "Can only use \"try\" operator inside functions returning core::Result or core::Option");
+                                            token_error!(
+                                                self, op, 
+                                                format!(
+                                                    "Can only use \"try\" operator inside functions returning core::Result or core::Option (got {})",
+                                                    return_type.stringify_native()
+                                                ).as_ref()
+                                            );
+
                                             ast_note!(return_type_expr, "Return type defined here");
                                             return Err(ExecutionInterrupt::Error);
                                         }
@@ -1303,19 +1484,40 @@ impl CodeGen {
                                                         self.definitions[index].push(&tmp_var_name);
                                                         self.definitions[index].push(".error);\n");
                                                     } else {
-                                                        ast_error!(self, expr, "core::Result \"Error\" variant type does not match with return type's \"Error\" variant type");
+                                                        ast_error!(
+                                                            self, expr, 
+                                                            format!(
+                                                                "core::Result \"Error\" variant type ({}) does not match with return type's \"Error\" variant type ({})",
+                                                                variant.stringify_native(), return_variant.stringify_native(), 
+                                                            ).as_ref()
+                                                        );
+
                                                         ast_note!(return_expr, "Return type defined here");
                                                     }
                                                 } else {
-                                                    ast_error!(self, expr, "core::Result \"Error\" variant type does not match with return type's \"Error\" variant type");
+                                                    ast_error!(
+                                                        self, expr, 
+                                                        format!(
+                                                            "core::Result \"Error\" variant type (void) does not match with return type's \"Error\" variant type ({})",
+                                                            return_variant.stringify_native(), 
+                                                        ).as_ref()
+                                                    );
+
                                                     ast_note!(return_expr, "Return type defined here");
                                                 }
-                                            } else if variants.as_ref().unwrap().get("error").is_none() {
+                                            } else if let Some(variant) = variants.as_ref().unwrap().get("error") {
+                                                ast_error!(
+                                                    self, expr, 
+                                                    format!(
+                                                        "core::Result \"Error\" variant type ({}) does not match with return type's \"Error\" variant type (void)",
+                                                        variant.stringify_native(), 
+                                                    ).as_ref()
+                                                );
+
+                                                ast_note!(return_expr, "Return type defined here");
+                                            } else {
                                                 self.definitions[index].push(&full_name);
                                                 self.definitions[index].push("_DOT_Error;\n");
-                                            } else {
-                                                ast_error!(self, expr, "core::Result \"Error\" variant type does not match with return type's \"Error\" variant type");
-                                                ast_note!(return_expr, "Return type defined here");
                                             }
                                         } else {
                                             unreachable!();
@@ -1335,12 +1537,25 @@ impl CodeGen {
                                         }
                                     }
                                     _ => {
-                                        ast_error!(self, inner_expr, "Can only use \"try\" operator on expressions returning core::Result or core::Option");
+                                        ast_error!(
+                                            self, inner_expr, 
+                                            format!(
+                                                "Can only use \"try\" operator on expressions returning core::Result or core::Option (got {})",
+                                                inner.type_.stringify_native()
+                                            ).as_ref()
+                                        );
                                         Err(ExecutionInterrupt::Error)
                                     }
                                 }
                             } else {
-                                ast_error!(self, inner_expr, "Can only use \"try\" operator on expressions returning core::Result or core::Option");
+                                ast_error!(
+                                    self, inner_expr, 
+                                    format!(
+                                        "Can only use \"try\" operator on expressions returning core::Result or core::Option (got {})",
+                                        inner.type_.stringify_native()
+                                    ).as_ref()
+                                );
+
                                 Err(ExecutionInterrupt::Error)
                             }
                         }
@@ -1358,11 +1573,25 @@ impl CodeGen {
                                         Ok(SkyeValue::new(Rc::clone(name), *inner_type, true))
                                     }
                                 } else {
-                                    token_error!(self, op, "'@' can only be used on macros");
+                                    token_error!(
+                                        self, op, 
+                                        format!(
+                                            "'@' can only be used on macros (got {})",
+                                            inner_type.stringify_native()
+                                        ).as_ref()
+                                    );
+
                                     Err(ExecutionInterrupt::Error)
                                 }
                             } else {
-                                token_error!(self, op, "'@' can only be used on macros");
+                                token_error!(
+                                    self, op, 
+                                    format!(
+                                        "'@' can only be used on macros (got {})",
+                                        inner.type_.stringify_native()
+                                    ).as_ref()
+                                );
+
                                 Err(ExecutionInterrupt::Error)
                             }
                         }
@@ -1472,7 +1701,14 @@ impl CodeGen {
                             if right.type_.is_type() || matches!(right.type_, SkyeType::Void) {
                                 Ok(SkyeValue::special(SkyeType::Group(Box::new(left.type_), Box::new(right.type_))))
                             } else {
-                                ast_error!(self, right_expr, "Right operand type does not match left operand type");
+                                ast_error!(
+                                    self, right_expr, 
+                                    format!(
+                                        "Right operand type ({}) does not match left operand type ({})",
+                                        right.type_.stringify_native(), left.type_.stringify_native()
+                                    ).as_ref()
+                                );
+                                
                                 Err(ExecutionInterrupt::Error)
                             }
                         } else {
@@ -1555,11 +1791,25 @@ impl CodeGen {
                                     index, allow_unknown
                                 )
                             } else {
-                                ast_error!(self, right_expr, "Invalid operand for result operator (expected type type)");
+                                ast_error!(
+                                    self, right_expr, 
+                                    format!(
+                                        "Invalid operand for result operator (expected type but got {})",
+                                        right.type_.stringify_native()
+                                    ).as_ref()
+                                );
+
                                 Err(ExecutionInterrupt::Error)
                             }
                         } else {
-                            ast_error!(self, left_expr, "Invalid operand for result operator (expected type type)");
+                            ast_error!(
+                                self, left_expr, 
+                                format!(
+                                    "Invalid operand for result operator (expected type but got {})",
+                                    left.type_.stringify_native()
+                                ).as_ref()
+                            );
+
                             Err(ExecutionInterrupt::Error)
                         }
                     }
@@ -1604,7 +1854,14 @@ impl CodeGen {
                         if target_type.equals(&value.type_) {
                             Ok(SkyeValue::new(Rc::from(format!("{} = {}", target.value, value.value)), value.type_, true))
                         } else {
-                            ast_error!(self, value_expr, "Value type does not match target type");
+                            ast_error!(
+                                self, value_expr, 
+                                format!(
+                                    "Value type ({}) does not match target type ({})",
+                                    value.type_.stringify_native(), target_type.stringify_native()
+                                ).as_ref()
+                            );
+
                             Err(ExecutionInterrupt::Error)
                         }
                     }
@@ -1702,7 +1959,13 @@ impl CodeGen {
                 let else_branch = self.evaluate(&else_branch_expr, index, allow_unknown)?;
 
                 if !then_branch.type_.equals(&else_branch.type_) {
-                    ast_error!(self, else_branch_expr, "Ternary operator else branch does not match then branch type");
+                    ast_error!(
+                        self, else_branch_expr, 
+                        format!(
+                            "Ternary operator else branch type ({}) does not match then branch type ({})",
+                            else_branch.type_.stringify_native(), then_branch.type_.stringify_native()
+                        ).as_ref()
+                    );
                 }
 
                 Ok(SkyeValue::new(Rc::from(format!("{} ? {} : {}", cond.value, then_branch.value, else_branch.value)), then_branch.type_, true))
@@ -1710,9 +1973,9 @@ impl CodeGen {
             Expression::CompoundLiteral(identifier_expr, _, fields) => {
                 let identifier_type = self.evaluate(&identifier_expr, index, allow_unknown)?;
 
-                match identifier_type.type_ {
+                match &identifier_type.type_ {
                     SkyeType::Type(inner_type) => {
-                        match &*inner_type {
+                        match &**inner_type {
                             SkyeType::Struct(name, def_fields, _) => {
                                 if let Some(defined_fields) = def_fields {
                                     if fields.len() != defined_fields.len() {
@@ -1729,7 +1992,13 @@ impl CodeGen {
                                             let field_evaluated = self.evaluate(&field.expr, index, allow_unknown)?;
                                             
                                             if !field_evaluated.type_.equals(field_type) {
-                                                ast_error!(self, field.expr, "Invalid type for this field");
+                                                ast_error!(
+                                                    self, field.expr, 
+                                                    format!(
+                                                        "Invalid type for this field (expecting {} but got {})",
+                                                        field_type.stringify_native(), field_evaluated.type_.stringify_native()
+                                                    ).as_ref()
+                                                );
                                             }
 
                                             fields_output.push('.');
@@ -1754,7 +2023,7 @@ impl CodeGen {
                                         }
                                     }
     
-                                    Ok(SkyeValue::new(Rc::from(format!("({}) {{ {} }}", name, fields_output)), *inner_type, true))
+                                    Ok(SkyeValue::new(Rc::from(format!("({}) {{ {} }}", name, fields_output)), *inner_type.clone(), true))
                                 } else {
                                     ast_error!(self, identifier_expr, "Cannot initialize struct that is declared but has no definition");
                                     Err(ExecutionInterrupt::Error)
@@ -1776,7 +2045,13 @@ impl CodeGen {
                                             let field_evaluated = self.evaluate(&field.expr, index, allow_unknown)?;
                                             
                                             if !field_evaluated.type_.equals(field_type) {
-                                                ast_error!(self, field.expr, "Invalid type for this field");
+                                                ast_error!(
+                                                    self, field.expr, 
+                                                    format!(
+                                                        "Invalid type for this field (expecting {} but got {})",
+                                                        field_type.stringify_native(), field_evaluated.type_.stringify_native()
+                                                    ).as_ref()
+                                                );
                                             }
 
                                             // copy costructor here is not needed because bitfields always have numeric types
@@ -1794,7 +2069,7 @@ impl CodeGen {
                                         }
                                     }
     
-                                    Ok(SkyeValue::new(Rc::from(format!("({}) {{ {} }}", name, fields_output)), *inner_type, true))
+                                    Ok(SkyeValue::new(Rc::from(format!("({}) {{ {} }}", name, fields_output)), *inner_type.clone(), true))
                                 } else {
                                     ast_error!(self, identifier_expr, "Cannot initialize bitfield that is declared but has no definition");
                                     Err(ExecutionInterrupt::Error)
@@ -1812,7 +2087,13 @@ impl CodeGen {
                                         let field_evaluated = self.evaluate(&fields[0].expr, index, allow_unknown)?;
                                         
                                         if !field_evaluated.type_.equals(field_type) {
-                                            ast_error!(self, fields[0].expr, "Invalid type for this field");
+                                            ast_error!(
+                                                self, fields[0].expr, 
+                                                format!(
+                                                    "Invalid type for this field (expecting {} but got {})",
+                                                    field_type.stringify_native(), field_evaluated.type_.stringify_native()
+                                                ).as_ref()
+                                            );
                                         }
 
                                         buf.push('.');
@@ -1832,14 +2113,21 @@ impl CodeGen {
                                         token_error!(self, fields[0].name, "Unknown union field");
                                     }
     
-                                    Ok(SkyeValue::new(Rc::from(format!("({}) {{ {} }}", name, buf)), *inner_type, true))
+                                    Ok(SkyeValue::new(Rc::from(format!("({}) {{ {} }}", name, buf)), *inner_type.clone(), true))
                                 } else {
                                     ast_error!(self, identifier_expr, "Cannot initialize union that is declared but has no definition");
                                     Err(ExecutionInterrupt::Error)
                                 }
                             }
                             _ => {
-                                ast_error!(self, identifier_expr, "Expecting struct, struct template, union, or bitfield type as compound literal identifier");
+                                ast_error!(
+                                    self, identifier_expr, 
+                                    format!(
+                                        "Expecting struct, struct template, union, or bitfield type as compound literal identifier (got {})",
+                                        inner_type.stringify_native()
+                                    ).as_ref()
+                                );
+
                                 Err(ExecutionInterrupt::Error)
                             }
                         }
@@ -1856,7 +2144,7 @@ impl CodeGen {
                             
                             let mut generics_to_find = HashMap::new();
                             let mut generics_map = HashMap::new();
-                            for generic in &generics {
+                            for generic in generics {
                                 generics_to_find.insert(Rc::clone(&generic.name.lexeme), None);
                                 generics_map.insert(Rc::clone(&generic.name.lexeme), generic.clone());
                             }
@@ -1915,7 +2203,14 @@ impl CodeGen {
     
                                                     if let Some(bounds) = &mapped_generic.bounds {
                                                         if !bounds.is_respected_by(&wrapped) {
-                                                            ast_error!(self, field.expr, "Generic bound is not respected by this type");
+                                                            ast_error!(
+                                                                self, field.expr, 
+                                                                format!(
+                                                                    "Generic bound is not respected by this type (expecting {} but got {})",
+                                                                    bounds.stringify_native(), wrapped.stringify_native()
+                                                                ).as_ref()
+                                                            );
+
                                                             token_note!(mapped_generic.name, "Generic defined here");
                                                         }
                                                     }
@@ -1924,10 +2219,22 @@ impl CodeGen {
                                                 }
                                             }
                                         } else {
-                                            ast_error!(self, field.expr, "Field type does not match definition field type");
+                                            ast_error!(
+                                                self, field.expr, 
+                                                format!(
+                                                    "Field type does not match definition field type (expecting {} but got {})",
+                                                    inner_type.stringify_native(), literal_evaluated.type_.stringify_native()
+                                                ).as_ref()
+                                            );
                                         }
                                     } else {
-                                        ast_error!(self, field.expr, "Expecting type as field type");
+                                        ast_error!(
+                                            self, field.expr, 
+                                            format!(
+                                                "Expecting type as field type (got {})",
+                                                def_type.stringify_native()
+                                            ).as_ref()
+                                        );
                                     }
     
                                     fields_output.push('.');
@@ -1979,7 +2286,7 @@ impl CodeGen {
                             if let Some(var) = env.get(&search_tok) {
                                 env = tmp_env.borrow_mut();
     
-                                for generic in &generics {
+                                for generic in generics {
                                     env.undef(Rc::clone(&generic.name.lexeme));
                                 }
                                 
@@ -2025,12 +2332,26 @@ impl CodeGen {
                                 panic!("struct template generation resulted in not a type");
                             }
                         } else {
-                            ast_error!(self, identifier_expr, "Expecting struct, struct template, union, or bitfield type as compound literal identifier");
+                            ast_error!(
+                                self, identifier_expr, 
+                                format!(
+                                    "Expecting struct, struct template, union, or bitfield type as compound literal identifier (got {})",
+                                    identifier_type.type_.stringify_native()
+                                ).as_ref()
+                            );
+
                             Err(ExecutionInterrupt::Error)
                         }
                     }
                     _ => {
-                        ast_error!(self, identifier_expr, "Expecting struct, struct template, union, or bitfield type as compound literal identifier");
+                        ast_error!(
+                            self, identifier_expr, 
+                            format!(
+                                "Expecting struct, struct template, union, or bitfield type as compound literal identifier (got {})",
+                                identifier_type.type_.stringify_native()
+                            ).as_ref()
+                        );
+
                         Err(ExecutionInterrupt::Error)
                     }
                     
@@ -2055,7 +2376,14 @@ impl CodeGen {
                                 Ok(SkyeValue::new(Rc::from(format!("{}[{}]", subscripted.value, arg.value)), *inner_type, is_const))
                             }
                             _ => {
-                                ast_error!(self, &arguments[0], "Expecting number for subscripting operation");
+                                ast_error!(
+                                    self, &arguments[0], 
+                                    format!(
+                                        "Expecting integer for subscripting operation (got {})",
+                                        arg.type_.stringify_native()
+                                    ).as_ref()
+                                );
+
                                 Err(ExecutionInterrupt::Error)
                            }
                         }
@@ -2075,7 +2403,14 @@ impl CodeGen {
                                 Ok(SkyeValue::new(Rc::from(format!("{}[{}]", subscripted.value, arg.value)), SkyeType::Char, true))
                             }
                             _ => {
-                                ast_error!(self, &arguments[0], "Expecting number for subscripting operation");
+                                 ast_error!(
+                                    self, &arguments[0], 
+                                    format!(
+                                        "Expecting integer for subscripting operation (got {})",
+                                        arg.type_.stringify_native()
+                                    ).as_ref()
+                                );
+
                                 Err(ExecutionInterrupt::Error)
                            }
                         }
@@ -2093,7 +2428,7 @@ impl CodeGen {
                                 ast_error!(
                                     self, expr, 
                                     format!(
-                                        "Expecting at least {} arguments and {} at most but got {}", 
+                                        "Expecting at least {} arguments and {} at most for template generation but got {}", 
                                         needed_cnt, generics.len(), arguments.len()
                                     ).as_str()
                                 );
@@ -2118,14 +2453,28 @@ impl CodeGen {
                             match &evaluated {
                                 SkyeType::Type(_) | SkyeType::Void | SkyeType::Unknown(_) => (),
                                 _ => {
-                                    ast_error!(self, arguments[i], "Expecting type as generic type");
+                                    ast_error!(
+                                        self, arguments[i], 
+                                        format!(
+                                            "Expecting type as generic type (got {})",
+                                            evaluated.stringify_native()
+                                        ).as_ref()
+                                    );
+
                                     continue;
                                 }
                             }
 
                             if let Some(bounds) = &generic.bounds {
                                 if !bounds.is_respected_by(&evaluated) {
-                                    ast_error!(self, arguments[i], "Generic bound is not respected by this type");
+                                    ast_error!(
+                                        self, arguments[i], 
+                                        format!(
+                                            "Generic bound is not respected by this type (expecting {} but got {})",
+                                            bounds.stringify_native(), evaluated.stringify_native()
+                                        ).as_ref()
+                                    );
+
                                     token_note!(generic.name, "Generic defined here");
                                 }
                             }
@@ -2202,16 +2551,37 @@ impl CodeGen {
                                     if let SkyeType::Pointer(inner_type, is_const) = call_value.type_ {
                                         Ok(SkyeValue::new(Rc::from(format!("*{}", call_value.value).as_ref()), *inner_type, is_const))
                                     } else {
-                                        ast_error!(self, subscripted_expr, "Expecting pointer as return type of __subscript__");
+                                        ast_error!(
+                                            self, subscripted_expr, 
+                                            format!(
+                                                "Expecting pointer as return type of __subscript__ (got {})",
+                                                call_value.type_.stringify_native()
+                                            ).as_ref()
+                                        );
+
                                         Err(ExecutionInterrupt::Error)
                                     }
                                 } else {
-                                    ast_error!(self, subscripted_expr, "Subscripting operation is not implemented for this type");
+                                    ast_error!(
+                                        self, subscripted_expr, 
+                                        format!(
+                                            "Subscripting operation is not implemented for type {}",
+                                            subscripted.type_.stringify_native()
+                                        ).as_ref()
+                                    );
+
                                     Err(ExecutionInterrupt::Error)
                                 }
                             }
                             ImplementsHow::No => {
-                                ast_error!(self, subscripted_expr, "This type cannot be subscripted");
+                                ast_error!(
+                                    self, subscripted_expr, 
+                                    format!(
+                                        "Type {} cannot be subscripted",
+                                        subscripted.type_.stringify_native()
+                                    ).as_ref()
+                                );
+
                                 Err(ExecutionInterrupt::Error)
                                 
                             }
@@ -2226,7 +2596,15 @@ impl CodeGen {
                     GetResult::Ok(value, type_, is_const) => {
                         return Ok(SkyeValue::new(value, type_, is_const))
                     }
-                    GetResult::InvalidType => ast_error!(self, object_expr, "Can only get properties from structs and sum type enums"),
+                    GetResult::InvalidType => {
+                        ast_error!(
+                            self, object_expr, 
+                            format!(
+                                "Can only get properties from structs and sum type enums (got {})",
+                                object.type_.stringify_native()
+                            ).as_ref()
+                        );
+                    }
                     GetResult::Undefined => ast_error!(self, object_expr, "Cannot get properties from undefined struct or enum"),
                     GetResult::FieldNotFound => {
                         if let Some(value) = self.get_method(&object, name, false) {
@@ -2265,7 +2643,15 @@ impl CodeGen {
                             token_error!(self, name, "Undefined property");
                         }
                     }
-                    GetResult::InvalidType => ast_error!(self, object_expr, "Can only statically access namespaces, structs, enums and instances"),
+                    GetResult::InvalidType => {
+                        ast_error!(
+                            self, object_expr, 
+                            format!(
+                                "Can only statically access namespaces, structs, enums and instances (got {})",
+                                object.type_.stringify_native()
+                            ).as_ref()
+                        );
+                    }
                     _ => unreachable!()
                 }
 
@@ -2406,7 +2792,14 @@ impl CodeGen {
                                 Some(SkyeType::Void)
                             }
                             _ => {
-                                ast_error!(self, type_, "Invalid expression as type specifier. Expecting type");
+                                ast_error!(
+                                    self, type_, 
+                                    format!(
+                                        "Invalid expression as type specifier (expecting type but got {})",
+                                        type_spec_evaluated.type_.stringify_native()
+                                    ).as_ref()
+                                );
+
                                 Some(SkyeType::Void)
                             }
                         }
@@ -2422,7 +2815,15 @@ impl CodeGen {
                 }
 
                 if value.is_some() && type_spec.is_some() && !type_spec.as_ref().unwrap().equals(&value.as_ref().unwrap().type_) {
-                    ast_error!(self, initializer.as_ref().unwrap(), "Initializer type does not match declared type");
+                    ast_error!(
+                        self, initializer.as_ref().unwrap(), 
+                        format!(
+                            "Initializer type ({}) does not match declared type ({})",
+                            value.as_ref().unwrap().type_.stringify_native(),
+                            type_spec.as_ref().unwrap().stringify_native()
+                        ).as_ref()
+                    );
+
                     ast_note!(initializer.as_ref().unwrap(), "Is this expression correct?");
                     ast_note!(type_spec_expr.as_ref().unwrap(), "If the initializer is correct, consider changing or removing the type specifier");
                 }
@@ -2438,9 +2839,21 @@ impl CodeGen {
                 let type_stringified = type_.stringify();
                 if type_stringified.len() == 0 {
                     if type_spec_expr.is_some() {
-                        ast_error!(self, type_spec_expr.as_ref().unwrap(), "Invalid expression as type specifier. Expecting type");
+                        ast_error!(
+                            self, type_spec_expr.as_ref().unwrap(), 
+                            format!(
+                                "Invalid expression as type specifier (expecting type but got {})",
+                                type_.stringify_native()
+                            ).as_ref()
+                        );
                     } else {
-                        ast_error!(self, initializer.as_ref().unwrap(), "The type of this expression cannot be assigned to a variable");
+                        ast_error!(
+                            self, initializer.as_ref().unwrap(), 
+                            format!(
+                                "The type of this expression ({}) cannot be assigned to a variable",
+                                type_.stringify_native()
+                            ).as_ref()
+                        );
                     }
                 }
 
@@ -2581,7 +2994,13 @@ impl CodeGen {
                 if has_decl {
                     if let SkyeType::Function(_, existing_return_type, _) = &existing.as_ref().unwrap().type_ {
                         if !existing_return_type.equals(&return_type) {
-                            ast_error!(self, return_type_expr, "Function return type does not match declaration return type");
+                            ast_error!(
+                                self, return_type_expr, 
+                                format!(
+                                    "Function return type ({}) does not match declaration return type ({})",
+                                    return_type.stringify_native(), existing_return_type.stringify_native()
+                                ).as_ref()
+                            );
                         }
                     }
                 }
@@ -2757,7 +3176,10 @@ impl CodeGen {
                     _ => {
                         ast_error!(
                             self, cond_expr, 
-                            "Expected expression of primitive arithmetic type for if condition"
+                            format!(
+                                "Expected expression of primitive arithmetic type for if condition (got {})",
+                                cond.type_.stringify_native()
+                            ).as_ref()
                         );
                     }
                 }
@@ -2846,7 +3268,10 @@ impl CodeGen {
                     _ => {
                         ast_error!(
                             self, cond_expr, 
-                            "Expected expression of primitive arithmetic type for while condition"
+                            format!(
+                                "Expected expression of primitive arithmetic type for while condition (got {})",
+                                cond.type_.stringify_native()
+                            ).as_ref()
                         );
                     }
                 }
@@ -2917,7 +3342,10 @@ impl CodeGen {
                     _ => {
                         ast_error!(
                             self, cond_expr, 
-                            "Expected expression of primitive arithmetic type for for condition"
+                            format!(
+                                "Expected expression of primitive arithmetic type for for condition (got {})",
+                                cond.type_.stringify_native()
+                            ).as_ref()
                         );
                     }
                 }
@@ -2978,7 +3406,10 @@ impl CodeGen {
                     _ => {
                         ast_error!(
                             self, cond_expr, 
-                            "Expected expression of primitive arithmetic type for while condition"
+                            format!(
+                                "Expected expression of primitive arithmetic type for while condition (got {})",
+                                cond.type_.stringify_native()
+                            ).as_ref()
                         );
                     }
                 }
@@ -3048,7 +3479,14 @@ impl CodeGen {
                             ast_note!(expr, "Remove this expression");
                             ast_note!(orig_ret_type, "Return type defined here");
                         } else if !type_.equals(&value.type_) {
-                            ast_error!(self, expr, "Returned value does not match function return type");    
+                            ast_error!(
+                                self, expr, 
+                                format!(
+                                    "Returned value type ({}) does not match function return type ({})",
+                                    value.type_.stringify_native(), type_.stringify_native()
+                                ).as_ref()
+                            );    
+
                             ast_note!(orig_ret_type, "Return type defined here");
                         }
                     } else {
@@ -3189,7 +3627,14 @@ impl CodeGen {
                                     SkyeType::Type(inner_type) => *inner_type,
                                     SkyeType::Unknown(_) => tmp,
                                     _ => {
-                                        ast_error!(self, field.expr, "Expecting type as field type");
+                                        ast_error!(
+                                            self, field.expr, 
+                                            format!(
+                                                "Expecting type as field type (got {})",
+                                                tmp.stringify_native()
+                                            ).as_ref()
+                                        );
+
                                         SkyeType::Void
                                     }
                                 }
@@ -3266,7 +3711,14 @@ impl CodeGen {
                                 env.undef(Rc::from("Self"));
                             }
                             _ => {
-                                ast_error!(self, struct_expr, "Can only implement structs and enums or their templates");
+                                ast_error!(
+                                    self, struct_expr, 
+                                    format!(
+                                        "Can only implement structs and enums or their templates (got {})",
+                                        struct_name.type_.stringify_native()
+                                    ).as_ref()
+                                );
+
                                 return Err(ExecutionInterrupt::Error);
                             }
                         }
@@ -3294,13 +3746,27 @@ impl CodeGen {
                                 env.undef(Rc::from("Self"));
                             }
                             _ => {
-                                ast_error!(self, struct_expr, "Can only implement structs and enums or their templates");
+                                ast_error!(
+                                    self, struct_expr, 
+                                    format!(
+                                        "Can only implement structs and enums or their templates (got {})",
+                                        struct_name.type_.stringify_native()
+                                    ).as_ref()
+                                );
+
                                 return Err(ExecutionInterrupt::Error);
                             }
                         }
                     }
                     _ => {
-                        ast_error!(self, struct_expr, "Can only implement structs and enums or their templates");
+                        ast_error!(
+                            self, struct_expr, 
+                            format!(
+                                "Can only implement structs and enums or their templates (got {})",
+                                struct_name.type_.stringify_native()
+                            ).as_ref()
+                        );
+
                         return Err(ExecutionInterrupt::Error);
                     }
                 }
@@ -3390,18 +3856,34 @@ impl CodeGen {
                 let full_name = self.get_generics(&base_name, generics, &self.environment)?;
 
                 let type_ = {
-                    if let SkyeType::Type(inner_type) = self.evaluate(type_expr, index, false)?.type_ {
-                        match *inner_type {
+                    let enum_type = self.evaluate(type_expr, index, false)?.type_;
+
+                    if let SkyeType::Type(inner_type) = &enum_type {
+                        match **inner_type {
                             SkyeType::U8  | SkyeType::I8  | SkyeType::U16 | SkyeType::I16 |
                             SkyeType::U32 | SkyeType::I32 | SkyeType::U64 | SkyeType::I64 |
-                            SkyeType::Usz => *inner_type,
+                            SkyeType::Usz => *inner_type.clone(),
                             _ => {
-                                ast_error!(self, type_expr, "Expected primitive arithmetic type as enum type");
+                                ast_error!(
+                                    self, type_expr, 
+                                    format!(
+                                        "Expected primitive arithmetic type as enum type (got {})",
+                                        enum_type.stringify_native()
+                                    ).as_ref()
+                                );
+
                                 SkyeType::I32
                             }
                         }
                     } else {
-                        ast_error!(self, type_expr, "Expected type as enum type");
+                        ast_error!(
+                            self, type_expr, 
+                            format!(
+                                "Expected type as enum type (got {})",
+                                enum_type.stringify_native()
+                            ).as_ref()
+                        );
+
                         SkyeType::I32
                     }
                 };
@@ -3518,7 +4000,14 @@ impl CodeGen {
                                     SkyeType::Void | SkyeType::Unknown(_) => type_,
                                     SkyeType::Type(inner_type) => *inner_type,
                                     _ => {
-                                        ast_error!(self, variant.expr, "Expected type as enum variant type");
+                                        ast_error!(
+                                            self, variant.expr, 
+                                            format!(
+                                                "Expected type as enum variant type (got {})",
+                                                type_.stringify_native()
+                                            ).as_ref()
+                                        );
+
                                         SkyeType::Void
                                     }
                                 }
@@ -3802,7 +4291,7 @@ impl CodeGen {
 
                 let is_not_grouping = !matches!(switch_expr, Expression::Grouping(_));
                 let switch = self.evaluate(switch_expr, index, false)?;
-                match switch.type_ {
+                match &switch.type_ {
                     SkyeType::U8  | SkyeType::I8  | SkyeType::U16 | SkyeType::I16 |
                     SkyeType::U32 | SkyeType::I32 | SkyeType::U64 | SkyeType::I64 |
                     SkyeType::Usz | SkyeType::F32 | SkyeType::F64 | SkyeType::AnyInt |
@@ -3811,14 +4300,20 @@ impl CodeGen {
                         if variants.is_some() {
                             ast_error!(
                                 self, switch_expr, 
-                                "Expected expression of primitive arithmetic type or simple enum for switch condition"
+                                format!(
+                                    "Expected expression of primitive arithmetic type or simple enum for switch condition (got {})",
+                                    switch.type_.stringify_native()
+                                ).as_ref()
                             );
                         }
                     }
                     _ => {
                         ast_error!(
                             self, switch_expr, 
-                            "Expected expression of primitive arithmetic type or simple enum for switch condition"
+                            format!(
+                                "Expected expression of primitive arithmetic type or simple enum for switch condition (got {})",
+                                switch.type_.stringify_native()
+                            ).as_ref()
                         );
                     }
                 }
@@ -3854,7 +4349,10 @@ impl CodeGen {
                                 _ => {
                                     ast_error!(
                                         self, real_case, 
-                                        "Expected expression of primitive arithmetic type for case expression"
+                                        format!(
+                                            "Expected expression of primitive arithmetic type for case expression (got {})",
+                                            real_case_evaluated.type_.stringify_native()
+                                        ).as_ref()
                                     );
                                 }
                             }
@@ -3907,7 +4405,14 @@ impl CodeGen {
                             if evaluated.type_.is_type() || matches!(evaluated.type_, SkyeType::Void) {
                                 Some(evaluated.type_)
                             } else {
-                                ast_error!(self, bounds, "Expecting type or group as generic bound");
+                                ast_error!(
+                                    self, bounds, 
+                                    format!(
+                                        "Expecting type or group as generic bound (got {})",
+                                        evaluated.type_.stringify_native()
+                                    ).as_ref()
+                                );
+
                                 None
                             }
                         } else {
@@ -3922,7 +4427,14 @@ impl CodeGen {
                             if matches!(evaluated.type_, SkyeType::Type(_)) || matches!(evaluated.type_, SkyeType::Void) {
                                 Some(evaluated.type_)
                             } else {
-                                ast_error!(self, default, "Expecting type as default generic");
+                                ast_error!(
+                                    self, default, 
+                                    format!(
+                                        "Expecting type as default generic (got {})",
+                                        evaluated.type_.stringify_native()
+                                    ).as_ref()
+                                );
+
                                 None
                             }
                         } else {
@@ -4133,10 +4645,19 @@ impl CodeGen {
                         let mut output_fields = HashMap::new();
                         for field in fields {
                             let field_type = {
-                                if let SkyeType::Type(inner_type) = self.evaluate(&field.expr, index, false)?.type_ {                    
+                                let inner_field_type = self.evaluate(&field.expr, index, false)?.type_;
+                                
+                                if let SkyeType::Type(inner_type) = inner_field_type {                    
                                     *inner_type
                                 } else {
-                                    ast_error!(self, field.expr, "Expecting type as field type");
+                                    ast_error!(
+                                        self, field.expr, 
+                                        format!(
+                                            "Expecting type as field type (got {})",
+                                            inner_field_type.stringify_native()
+                                        ).as_ref()
+                                    );
+
                                     SkyeType::Void
                                 }
                             };
@@ -4350,7 +4871,14 @@ impl CodeGen {
                 let tmp_iter_var_name = self.get_temporary_var();
 
                 if !matches!(iterator_raw.type_, SkyeType::Struct(_, _, _) | SkyeType::Enum(_, _, _)) {
-                    ast_error!(self, iterator_expr, "This expression is not iterable");
+                    ast_error!(
+                        self, iterator_expr, 
+                        format!(
+                            "This type ({}) is not iterable",
+                            iterator_raw.type_.stringify_native()
+                        ).as_ref()
+                    );
+
                     return Err(ExecutionInterrupt::Error);
                 }
 
@@ -4366,7 +4894,7 @@ impl CodeGen {
                 self.definitions[index].push(&iterator_raw.value);
                 self.definitions[index].push(";\n");
 
-                let iterator = SkyeValue::new(Rc::from(tmp_iter_var_name.as_ref()), iterator_raw.type_, iterator_raw.is_const);
+                let iterator = SkyeValue::new(Rc::from(tmp_iter_var_name.as_ref()), iterator_raw.type_.clone(), iterator_raw.is_const);
 
                 let mut search_tok = Token::dummy(Rc::from("next"));
                 let method = {
@@ -4383,7 +4911,14 @@ impl CodeGen {
 
                             let iterator_type_stringified = iterator_call.type_.stringify();
                             if iterator_type_stringified.len() == 0 || !matches!(iterator.type_, SkyeType::Struct(_, _, _) | SkyeType::Enum(_, _, _)) {
-                                ast_error!(self, iterator_expr, "The implementation of iter for this type returns an invalid type");
+                                ast_error!(
+                                    self, iterator_expr, 
+                                    format!(
+                                        "The implementation of iter for this type ({}) returns an invalid type (expecting struct or enum type but got {})",
+                                        iterator.type_.stringify_native(), iterator_call.type_.stringify_native()
+                                    ).as_ref()
+                                );
+
                                 return Err(ExecutionInterrupt::Error);
                             }
 
@@ -4402,11 +4937,25 @@ impl CodeGen {
 
                                 final_method
                             } else {
-                                ast_error!(self, iterator_expr, "The iterator object returned by iter has no next method");
+                                ast_error!(
+                                    self, iterator_expr, 
+                                    format!(
+                                        "The iterator object (of type {}) returned by iter has no next method",
+                                        iterator_val.type_.stringify_native()
+                                    ).as_ref()
+                                );
+
                                 return Err(ExecutionInterrupt::Error);
                             }
                         } else {
-                            ast_error!(self, iterator_expr, "This expression is not iterable");
+                            ast_error!(
+                                self, iterator_expr, 
+                                format!(
+                                    "This type ({}) is not iterable",
+                                    iterator_raw.type_.stringify_native()
+                                ).as_ref()
+                            );
+
                             return Err(ExecutionInterrupt::Error);
                         }
                     }
@@ -4420,20 +4969,41 @@ impl CodeGen {
                 let item_type = {
                     if let SkyeType::Enum(_, variants, name) = &next_call.type_ {
                         if name.as_ref() != "core_DOT_Option" {
-                            ast_error!(self, iterator_expr, "The implementation of next for this iterator returns an invalid type");
+                            ast_error!(
+                                self, iterator_expr, 
+                                format!(
+                                    "The implementation of next for this iterator returns an invalid type (expecting core::Option but got {})",
+                                    next_call.type_.stringify_native()
+                                ).as_ref()
+                            );
+
                             return Err(ExecutionInterrupt::Error);
                         }
 
                         variants.as_ref().unwrap().get("some").unwrap().clone()
                     } else {
-                        ast_error!(self, iterator_expr, "The implementation of next for this iterator returns an invalid type");
+                        ast_error!(
+                            self, iterator_expr, 
+                            format!(
+                                "The implementation of next for this iterator returns an invalid type (expecting core::Option but got {})",
+                                next_call.type_.stringify_native()
+                            ).as_ref()
+                        );
+
                         return Err(ExecutionInterrupt::Error);
                     }
                 };
 
                 let item_type_stringified = item_type.stringify();
                 if item_type_stringified.len() == 0 {
-                    ast_error!(self, iterator_expr, "The implementation of next for this iterator returns an invalid type");
+                    ast_error!(
+                        self, iterator_expr, 
+                        format!(
+                            "The implementation of next for this iterator returns an invalid type (expecting core::Option but got {})",
+                            next_call.type_.stringify_native()
+                        ).as_ref()
+                    );
+
                     return Err(ExecutionInterrupt::Error);
                 }
 

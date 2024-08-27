@@ -193,6 +193,74 @@ impl SkyeType {
         }
     }
 
+    pub fn stringify_native(&self) -> String {
+        match self {
+            SkyeType::U8  => String::from("u8"),
+            SkyeType::I8  => String::from("i8"),
+            SkyeType::U16 => String::from("u16"),
+            SkyeType::I16 => String::from("i16"),
+            SkyeType::U32 => String::from("u32"),
+            SkyeType::U64 => String::from("u64"),
+            SkyeType::I64 => String::from("i64"),
+            SkyeType::F64 => String::from("f64"),
+            SkyeType::Usz => String::from("usz"),
+            SkyeType::I32 | SkyeType::AnyInt   => String::from("i32"),
+            SkyeType::F32 | SkyeType::AnyFloat => String::from("f32"),
+            
+            SkyeType::Char      => String::from("char"),
+            SkyeType::RawString => String::from("rawstring"),
+            SkyeType::Void      => String::from("void"),
+
+            SkyeType::Unknown(name) => format!("unknown \"{}\"", name),
+            SkyeType::Group(left, right) => format!("{} | {}", left.stringify_native(), right.stringify_native()),
+            SkyeType::Template(name, _, _, _, _, _) => format!("template \"{}\"", name.replace("_DOT_", "::")),
+            SkyeType::Namespace(name) => format!("namespace \"{}\"", name.replace("_DOT_", "::")),
+            SkyeType::Macro(name, _, _, _) => format!("macro {}", name),
+            
+            SkyeType::Type(inner) => format!("type \"{}\"", inner.stringify_native()),
+            SkyeType::Function(args, return_type, _) => {
+                let mut buf = String::from("fn (");
+                for (i, arg) in args.iter().enumerate() {
+                    if arg.is_const {
+                        buf.push_str("const ");
+                    }
+
+                    buf.push_str(&arg.type_.stringify_native());
+
+                    if i != args.len() - 1 {
+                        buf.push_str(", ");
+                    }
+                }
+
+                buf.push_str(") ");
+                buf.push_str(&return_type.stringify_native());
+                buf
+            }
+
+            SkyeType::Pointer(inner, _) => {
+                String::from(format!("*{}", inner.stringify()))
+            }
+
+            SkyeType::Struct(name, _, _) | 
+            SkyeType::Enum(name, _, _) => {
+                // not ideal, but it's just error reporting ¯\_(ツ)_/¯
+                name.to_string()
+                    .replace("_DOT_", "::")
+                    .replace("_FNPTR_", "fn (")
+                    .replace("_PARAM_AND_", ",")
+                    .replace("_PARAM_END_", ") ")
+                    .replace("_FNPTR_END_", "")
+                    .replace("_GENOF_", "[")
+                    .replace("_GENAND_", ",")
+                    .replace("_GENEND_", "]")
+                    .replace("_UNKNOWN_", "{unknown}")
+            }
+            
+            SkyeType::Union(name, _) | 
+            SkyeType::Bitfield(name, _) => name.to_string(),
+        }
+    }
+
     pub fn mangle(&self) -> String {
         match self {
             SkyeType::U8  => String::from("u8"),

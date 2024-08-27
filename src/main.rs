@@ -9,7 +9,6 @@ use skye::{compile_file_to_c, compile_file_to_exec, get_package_data, run_skye};
 // - the compiler generates some artifacts while doing type inference, 
 //       creating types that contain unknown types (transpiled to void*): get rid of those
 // - windows support!
-// - improve error messages (especially mention types in errors)
 // - optional warnings and notes
 // - extend standard library (still needs A LOT of work)
 // - unicode support!
