@@ -247,11 +247,11 @@ impl SkyeType {
                 name.to_string()
                     .replace("_DOT_", "::")
                     .replace("_FNPTR_", "fn (")
-                    .replace("_PARAM_AND_", ",")
+                    .replace("_PARAM_AND_", ", ")
                     .replace("_PARAM_END_", ") ")
                     .replace("_FNPTR_END_", "")
                     .replace("_GENOF_", "[")
-                    .replace("_GENAND_", ",")
+                    .replace("_GENAND_", ", ")
                     .replace("_GENEND_", "]")
                     .replace("_UNKNOWN_", "{unknown}")
             }
