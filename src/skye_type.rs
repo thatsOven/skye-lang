@@ -237,8 +237,12 @@ impl SkyeType {
                 buf
             }
 
-            SkyeType::Pointer(inner, _) => {
-                String::from(format!("*{}", inner.stringify()))
+            SkyeType::Pointer(inner, is_const) => {
+                if *is_const {
+                    String::from(format!("*const {}", inner.stringify()))
+                } else {
+                    String::from(format!("*{}", inner.stringify()))
+                }
             }
 
             SkyeType::Struct(name, _, _) | 
