@@ -4275,7 +4275,8 @@ impl CodeGen {
                 }
 
                 match &**statement {
-                    Statement::Return(kw, _) | Statement::Break(kw) | Statement::Continue(kw) => {
+                    Statement::Return(kw, _) | Statement::Break(kw) | 
+                    Statement::Continue(kw) | Statement::Defer(kw, _) => {
                         token_error!(self, kw, "Cannot use this statement inside a defer statement");
                     }
                     _ => ()
