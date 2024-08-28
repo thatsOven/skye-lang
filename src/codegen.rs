@@ -1794,7 +1794,7 @@ impl CodeGen {
                                 ast_error!(
                                     self, right_expr, 
                                     format!(
-                                        "Invalid operand for result operator (expected type but got {})",
+                                        "Invalid operand for result operator (expecting type but got {})",
                                         right.type_.stringify_native()
                                     ).as_ref()
                                 );
@@ -1805,7 +1805,7 @@ impl CodeGen {
                             ast_error!(
                                 self, left_expr, 
                                 format!(
-                                    "Invalid operand for result operator (expected type but got {})",
+                                    "Invalid operand for result operator (expecting type but got {})",
                                     left.type_.stringify_native()
                                 ).as_ref()
                             );
@@ -3177,7 +3177,7 @@ impl CodeGen {
                         ast_error!(
                             self, cond_expr, 
                             format!(
-                                "Expected expression of primitive arithmetic type for if condition (got {})",
+                                "Expecting expression of primitive arithmetic type for if condition (got {})",
                                 cond.type_.stringify_native()
                             ).as_ref()
                         );
@@ -3269,7 +3269,7 @@ impl CodeGen {
                         ast_error!(
                             self, cond_expr, 
                             format!(
-                                "Expected expression of primitive arithmetic type for while condition (got {})",
+                                "Expecting expression of primitive arithmetic type for while condition (got {})",
                                 cond.type_.stringify_native()
                             ).as_ref()
                         );
@@ -3343,7 +3343,7 @@ impl CodeGen {
                         ast_error!(
                             self, cond_expr, 
                             format!(
-                                "Expected expression of primitive arithmetic type for for condition (got {})",
+                                "Expecting expression of primitive arithmetic type for for condition (got {})",
                                 cond.type_.stringify_native()
                             ).as_ref()
                         );
@@ -3407,7 +3407,7 @@ impl CodeGen {
                         ast_error!(
                             self, cond_expr, 
                             format!(
-                                "Expected expression of primitive arithmetic type for while condition (got {})",
+                                "Expecting expression of primitive arithmetic type for while condition (got {})",
                                 cond.type_.stringify_native()
                             ).as_ref()
                         );
@@ -3867,7 +3867,7 @@ impl CodeGen {
                                 ast_error!(
                                     self, type_expr, 
                                     format!(
-                                        "Expected primitive arithmetic type as enum type (got {})",
+                                        "Expecting primitive arithmetic type as enum type (got {})",
                                         enum_type.stringify_native()
                                     ).as_ref()
                                 );
@@ -3879,7 +3879,7 @@ impl CodeGen {
                         ast_error!(
                             self, type_expr, 
                             format!(
-                                "Expected type as enum type (got {})",
+                                "Expecting type as enum type (got {})",
                                 enum_type.stringify_native()
                             ).as_ref()
                         );
@@ -4003,7 +4003,7 @@ impl CodeGen {
                                         ast_error!(
                                             self, variant.expr, 
                                             format!(
-                                                "Expected type as enum variant type (got {})",
+                                                "Expecting type as enum variant type (got {})",
                                                 type_.stringify_native()
                                             ).as_ref()
                                         );
@@ -4302,7 +4302,7 @@ impl CodeGen {
                             ast_error!(
                                 self, switch_expr, 
                                 format!(
-                                    "Expected expression of primitive arithmetic type or simple enum for switch condition (got {})",
+                                    "Expecting expression of primitive arithmetic type or simple enum for switch condition (got {})",
                                     switch.type_.stringify_native()
                                 ).as_ref()
                             );
@@ -4312,7 +4312,7 @@ impl CodeGen {
                         ast_error!(
                             self, switch_expr, 
                             format!(
-                                "Expected expression of primitive arithmetic type or simple enum for switch condition (got {})",
+                                "Expecting expression of primitive arithmetic type or simple enum for switch condition (got {})",
                                 switch.type_.stringify_native()
                             ).as_ref()
                         );
@@ -4351,7 +4351,7 @@ impl CodeGen {
                                     ast_error!(
                                         self, real_case, 
                                         format!(
-                                            "Expected expression of primitive arithmetic type for case expression (got {})",
+                                            "Expecting expression of primitive arithmetic type for case expression (got {})",
                                             real_case_evaluated.type_.stringify_native()
                                         ).as_ref()
                                     );
