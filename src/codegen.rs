@@ -4951,7 +4951,7 @@ impl CodeGen {
                             ast_error!(
                                 self, iterator_expr, 
                                 format!(
-                                    "This type ({}) is not iterable",
+                                    "Type {} is not iterable",
                                     iterator_raw.type_.stringify_native()
                                 ).as_ref()
                             );
