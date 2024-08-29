@@ -546,17 +546,16 @@ namespace core {
 
 use core::Rc as Rc;
 use core::Array as Array;
-use core::MutableString[core::mem::HeapAllocator] as DefaultMutableString;
 
 #bind fn pow(base: f64, exp: f64) f64;
 
 namespace core {
     namespace utils {
-        fn __reversedIntToString[T: AnyInt](value: T) DefaultMutableString {
+        fn __reversedIntToString[T: AnyInt](value: T) core::MutableString[] {
             let neg = value < 0;
             if (neg) value = -value;
 
-            let buf = DefaultMutableString::new();
+            let buf = core::MutableString::new();
 
             do {
                 buf.push(@cast(char, 48 + value % 10));
@@ -567,13 +566,13 @@ namespace core {
             return buf;
         }
 
-        fn intToString[T: AnyInt](value: T) DefaultMutableString {
+        fn intToString[T: AnyInt](value: T) core::MutableString[] {
             let buf = core::utils::__reversedIntToString(value);
             buf.reverse();
             return buf;
         }
 
-        fn floatToString[T: AnyFloat](value: T, decPrecision: usz) DefaultMutableString {
+        fn floatToString[T: AnyFloat](value: T, decPrecision: usz) core::MutableString[] {
             if decPrecision < 0 {
                 panic("core::utils::floatToString: Negative precision");
             }
