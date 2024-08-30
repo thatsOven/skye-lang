@@ -156,7 +156,7 @@ fn main() -> Result<(), Error> {
                     f.write_all(MAIN_FILE_INIT)?;
                 }
                 ProjectType::Package { name } => {
-                    if name == "core" || name == "primitives" || name == "build" || name == "os" {
+                    if name == "core" || name == "primitives" || name == "build" || name == "std" {
                         return Err(Error::other("Cannot use this name for package"));
                     }
 

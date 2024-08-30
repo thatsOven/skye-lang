@@ -1,4 +1,4 @@
-import "os";
+import "std/os";
 
 namespace build {
     fn compileSkye(const input: String, const output: String) !void {
@@ -9,7 +9,7 @@ namespace build {
         buf.pushString(" --emit-c -o ");
         buf.pushString(output);
 
-        const result = os::system(buf.toString());
+        const result = std::os::system(buf.toString());
         
         if result.kind == core::Result::Kind::Error {
             return (!void)::Error;
@@ -33,7 +33,7 @@ namespace build {
         buf.pushString(" -o ");
         buf.pushString(output);
 
-        const result = os::system(buf.toString());
+        const result = std::os::system(buf.toString());
 
         if result.kind == core::Result::Kind::Error {
             return (!void)::Error;
