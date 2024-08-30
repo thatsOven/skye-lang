@@ -43,7 +43,7 @@ pub fn compile(source: &String, path: Option<&Path>, primitives: &String) -> Opt
             Token::new(
                 Rc::from(source.as_ref()),
                 TokenType::Identifier,
-                Rc::from("core"),
+                Rc::from("core/core"),
                 0, 0
             ),
             ImportType::Default
@@ -69,7 +69,7 @@ pub fn compile(source: &String, path: Option<&Path>, primitives: &String) -> Opt
             Token::new(
                 Rc::from(source.as_ref()),
                 TokenType::Identifier,
-                Rc::from("primitives"),
+                Rc::from("core/builtins"),
                 0, 0
             ),
             ImportType::Default
