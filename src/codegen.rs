@@ -1059,22 +1059,13 @@ impl CodeGen {
                     ), index, allow_unknown
                 )?;
 
-                let tmp_var_name = self.get_temporary_var();
-
-                self.definitions[index].push_indent();
-                self.definitions[index].push(&first_item.type_.stringify());
-                self.definitions[index].push(" ");
-                self.definitions[index].push(&tmp_var_name);
-                self.definitions[index].push("[] = ");
-                self.definitions[index].push(&items_stringified);
-                self.definitions[index].push(";\n");
-
                 if let SkyeType::Type(inner_type) = return_type.type_ {
                     Ok(SkyeValue::new(
                         Rc::from(format!(
-                            "({}) {{ .ptr = {}, .length = {} }}", 
+                            "({}) {{ .ptr = ({}[]) {}, .length = {} }}", 
                             return_type.value, 
-                            tmp_var_name, 
+                            first_item.type_.stringify(),
+                            items_stringified, 
                             items.len()
                         )), 
                         *inner_type, 
