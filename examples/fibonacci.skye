@@ -1,3 +1,5 @@
+import "std/fmt";
+
 macro N 10;
 
 fn main() !void {
@@ -8,9 +10,7 @@ fn main() !void {
     defer stringBuffer.free();
 
     for let i = 0; i < @N; i++ {
-        use core::utils::intToString as intToStr;
-        
-        intToStr(&stringBuffer, a);
+        std::fmt::intToString(&stringBuffer, a);
         defer stringBuffer.clear();
 
         println(stringBuffer.toString());

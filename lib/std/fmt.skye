@@ -1,0 +1,64 @@
+import <"math.h">;
+
+#bind fn pow(base: f64, exp: f64) f64;
+
+namespace std {
+    namespace fmt {
+        fn __reversedIntToString[T: AnyInt, U](buf: *core::MutableString[U], value: T) {
+            let neg = value < 0;
+            if (neg) value = -value;
+
+            do {
+                buf.push(@cast(char, 48 + value % 10));
+                value /= 10;
+            } while value;
+
+            if (neg) buf.push('-');
+        }
+
+        fn intToString[T: AnyInt, U](buf: *core::MutableString[U], value: T) {
+            std::fmt::__reversedIntToString(buf, value);
+            buf.reverse();
+        }
+
+        fn allocIntToString[T: AnyInt, U](allocator: U, value: T) core::MutableString[U] {
+            let buf = core::MutableString::init(allocator);
+            std::fmt::intToString(&buf, value);
+            return buf;
+        }
+
+        fn floatToString[T: AnyFloat, U](buf: *core::MutableString[U], value: T, decPrecision: usz) {
+            if decPrecision < 0 {
+                panic("std::fmt::floatToString: Negative precision");
+            }
+
+            let intPart = @cast(i64, value);
+            let decPart = value - @cast(T, intPart);
+
+            std::fmt::intToString(buf, intPart);
+
+            if decPrecision != 0 {
+                buf.push('.');
+
+                decPart *= @cast(T, pow(10f64, @cast(f64, decPrecision)));
+
+                let tmpBuf = core::MutableString::new();
+                defer tmpBuf.free();
+                std::fmt::__reversedIntToString(&tmpBuf, decPart);
+                
+                while tmpBuf.length < decPrecision {
+                    tmpBuf.push('0');
+                }
+
+                tmpBuf.reverse();
+                buf.pushString(tmpBuf.toString());
+            }
+        }
+
+        fn allocFloatToString[T: AnyFloat, U](allocator: U, value: T, decPrecision: usz) core::MutableString[U] {
+            let buf = core::MutableString::init(allocator);
+            std::fmt::floatToString(&buf, value, decPrecision);
+            return buf;
+        }
+    }
+}
