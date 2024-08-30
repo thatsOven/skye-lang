@@ -551,11 +551,9 @@ use core::Array as Array;
 
 namespace core {
     namespace utils {
-        fn __reversedIntToString[T: AnyInt](value: T) core::MutableString[] {
+        fn __reversedIntToString[T: AnyInt, U](buf: *core::MutableString[U], value: T) {
             let neg = value < 0;
             if (neg) value = -value;
-
-            let buf = core::MutableString::new();
 
             do {
                 buf.push(@cast(char, 48 + value % 10));
@@ -563,16 +561,20 @@ namespace core {
             } while value;
 
             if (neg) buf.push('-');
-            return buf;
         }
 
-        fn intToString[T: AnyInt](value: T) core::MutableString[] {
-            let buf = core::utils::__reversedIntToString(value);
+        fn intToString[T: AnyInt, U](buf: *core::MutableString[U], value: T) {
+            core::utils::__reversedIntToString(buf, value);
             buf.reverse();
+        }
+
+        fn allocIntToString[T: AnyInt, U](allocator: U, value: T) core::MutableString[U] {
+            let buf = core::MutableString::init(allocator);
+            core::utils::intToString(&buf, value);
             return buf;
         }
 
-        fn floatToString[T: AnyFloat](value: T, decPrecision: usz) core::MutableString[] {
+        fn floatToString[T: AnyFloat, U](buf: *core::MutableString[U], value: T, decPrecision: usz) {
             if decPrecision < 0 {
                 panic("core::utils::floatToString: Negative precision");
             }
@@ -580,14 +582,16 @@ namespace core {
             let intPart = @cast(i64, value);
             let decPart = value - @cast(T, intPart);
 
-            let buf = core::utils::intToString(intPart);
+            core::utils::intToString(buf, intPart);
 
             if decPrecision != 0 {
                 buf.push('.');
 
                 decPart *= @cast(T, pow(10f64, @cast(f64, decPrecision)));
-                let tmpBuf = core::utils::__reversedIntToString(decPart);
+
+                let tmpBuf = core::MutableString::new();
                 defer tmpBuf.free();
+                core::utils::__reversedIntToString(&tmpBuf, decPart);
                 
                 while tmpBuf.length < decPrecision {
                     tmpBuf.push('0');
@@ -596,7 +600,11 @@ namespace core {
                 tmpBuf.reverse();
                 buf.pushString(tmpBuf.toString());
             }
+        }
 
+        fn allocFloatToString[T: AnyFloat, U](allocator: U, value: T, decPrecision: usz) core::MutableString[U] {
+            let buf = core::MutableString::init(allocator);
+            core::utils::floatToString(&buf, value, decPrecision);
             return buf;
         }
     }

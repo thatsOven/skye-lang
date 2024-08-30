@@ -4,13 +4,17 @@ fn main() !void {
     let a = 0;
     let b = 1;
 
+    let stringBuffer = core::MutableString::new();
+    defer stringBuffer.free();
+
     for let i = 0; i < @N; i++ {
         use core::utils::intToString as intToStr;
         
-        const num = intToStr(a);
-        defer num.free();
-        println(num.toString());
+        intToStr(&stringBuffer, a);
+        defer stringBuffer.clear();
 
+        println(stringBuffer.toString());
+        
         const c = a + b;
         a = b;
         b = c;
