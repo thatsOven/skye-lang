@@ -239,9 +239,9 @@ impl SkyeType {
 
             SkyeType::Pointer(inner, is_const) => {
                 if *is_const {
-                    String::from(format!("*const {}", inner.stringify()))
+                    String::from(format!("*const {}", inner.stringify_native()))
                 } else {
-                    String::from(format!("*{}", inner.stringify()))
+                    String::from(format!("*{}", inner.stringify_native()))
                 }
             }
 
@@ -295,13 +295,17 @@ impl SkyeType {
             SkyeType::Union(name, _) | 
             SkyeType::Bitfield(name, _) => name.to_string(),
 
-            SkyeType::Pointer(inner, _) => {
+            SkyeType::Pointer(inner, is_const) => {
                 let inner_mangled = inner.mangle();
                 if inner_mangled.len() == 0 {
                     return inner_mangled;
                 }
 
-                String::from(format!("_PTROF_{}_PTREND_", inner_mangled))
+                if *is_const {
+                    String::from(format!("_CPTROF_{}_PTREND_", inner_mangled))
+                } else {
+                    String::from(format!("_PTROF_{}_PTREND_", inner_mangled))
+                }
             },
 
             SkyeType::Function(params, return_type, _) => {
@@ -364,9 +368,13 @@ impl SkyeType {
                     false
                 }
             }
-            SkyeType::Pointer(self_inner, _) => {
-                if let SkyeType::Pointer(other_inner, _) = other {
-                    self_inner.equals(other_inner)
+            SkyeType::Pointer(self_inner, self_is_const) => {
+                if let SkyeType::Pointer(other_inner, other_is_const) = other {
+                    if *self_is_const {
+                        self_inner.equals(other_inner)
+                    } else {
+                        (!*other_is_const) && self_inner.equals(other_inner)
+                    }
                 } else {
                     false
                 }
@@ -454,9 +462,13 @@ impl SkyeType {
                     false
                 }
             }
-            SkyeType::Pointer(self_inner, _) => {
-                if let SkyeType::Pointer(other_inner, _) = other {
-                    self_inner.equals_permissive(other_inner)
+            SkyeType::Pointer(self_inner, self_is_const) => {
+                if let SkyeType::Pointer(other_inner, other_is_const) = other {
+                    if *self_is_const {
+                        self_inner.equals_permissive(other_inner)
+                    } else {
+                        (!*other_is_const) && self_inner.equals_permissive(other_inner)
+                    }
                 } else {
                     false
                 }
@@ -646,11 +658,11 @@ impl SkyeType {
 
     fn get_self_internal(&self, from: &Rc<str>, is_source_const: bool, d: usize) -> Option<(Rc<str>, SkyeType)> {
         match self {
-            SkyeType::Pointer(inner_type, _) => {
+            SkyeType::Pointer(inner_type, is_const) => {
                 if d == 0 {
-                    inner_type.get_self_internal(from, is_source_const, d + 1)
+                    inner_type.get_self_internal(from, is_source_const || *is_const, d + 1)
                 } else {
-                    let (inner_val, inner_type) = inner_type.get_self_internal(from, is_source_const, d + 1)?;
+                    let (inner_val, inner_type) = inner_type.get_self_internal(from, is_source_const || *is_const, d + 1)?;
                     Some((Rc::from(format!("*{}", inner_val)), inner_type))
                 }
             }
@@ -665,8 +677,8 @@ impl SkyeType {
         }
     }
 
-    pub fn get_self(&self, from: &Rc<str>, is_source_const: bool) -> Option<(Rc<str>, SkyeType)> {
-        self.get_self_internal(from, is_source_const, 0)
+    pub fn get_self(&self, from: &Rc<str>) -> Option<(Rc<str>, SkyeType)> {
+        self.get_self_internal(from, false, 0)
     }
 
     fn infer_type_from_similar_internal(&self, other: &SkyeType, data: Rc<RefCell<HashMap<Rc<str>, SkyeType>>>) {

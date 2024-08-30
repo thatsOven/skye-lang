@@ -401,7 +401,7 @@ impl CodeGen {
                 if let Some(var) = result {
                     return Some(SkyeValue::with_self_info(
                         value, var.type_, true, 
-                        object.type_.get_self(&object.value, object.is_const).expect("get_self failed")
+                        object.type_.get_self(&object.value).expect("get_self failed")
                     ))
                 } else {
                     None
@@ -465,25 +465,34 @@ impl CodeGen {
                     let arg = 'argblock: {
                         if i == 0 {
                             if let Some((info_val, info_type)) = &callee.self_info {
-                                break 'argblock SkyeValue::new(
-                                    Rc::clone(info_val), 
-                                    info_type.clone(), 
-                                    params[0].is_const
-                                );
+                                if let SkyeType::Pointer(_, is_const) = info_type {
+                                    break 'argblock SkyeValue::new(
+                                        Rc::clone(info_val), 
+                                        info_type.clone(), 
+                                        *is_const
+                                    );
+                                } else {
+                                    unreachable!()
+                                }
                             }
                         }
 
                         self.evaluate(&arguments[i - arguments_mod], index, allow_unknown)?
                     };
                     
-                    if !arg.type_.equals(&params[i].type_) {
-                        ast_error!(
-                            self, arguments[i - arguments_mod], 
-                            format!(
-                                "Argument type does not match parameter type (expecting {} but got {})",
-                                params[i].type_.stringify_native(), arg.type_.stringify_native()
-                            ).as_ref()
-                        );
+                    if !params[i].type_.equals(&arg.type_) {
+                        if i == 0 && arguments_mod == 1 {
+                            // the only way self info is wrong is if constness is not respected
+                            ast_error!(self, callee_expr, "This method cannot be called from a const source");
+                        } else {
+                            ast_error!(
+                                self, arguments[i - arguments_mod], 
+                                format!(
+                                    "Argument type does not match parameter type (expecting {} but got {})",
+                                    params[i].type_.stringify_native(), arg.type_.stringify_native()
+                                ).as_ref()
+                            );
+                        }
                     }
 
                     let search_tok = Token::dummy(Rc::from("__copy__"));
@@ -534,11 +543,15 @@ impl CodeGen {
                         let call_evaluated = 'argblock: {
                             if i == 0 {
                                 if let Some((info_val, info_type)) = &callee.self_info {
-                                    break 'argblock SkyeValue::new(
-                                        Rc::clone(info_val), 
-                                        info_type.clone(), 
-                                        params[0].is_const
-                                    );
+                                    if let SkyeType::Pointer(_, is_const) = info_type {
+                                        break 'argblock SkyeValue::new(
+                                            Rc::clone(info_val), 
+                                            info_type.clone(), 
+                                            *is_const
+                                        );
+                                    } else {
+                                        unreachable!()
+                                    }
                                 }
                             }
 
@@ -603,8 +616,11 @@ impl CodeGen {
                                         generics_to_find.insert(generic_name, Some(wrapped));
                                     }
                                 }
-                            } else {                                        
-                                if i != 0 || arguments_mod != 1 {
+                            } else {    
+                                if i == 0 && arguments_mod == 1 {
+                                    // the only way self info is wrong is if constness is not respected
+                                    ast_error!(self, callee_expr, "This method cannot be called from a const source");
+                                } else {
                                     ast_error!(
                                         self, arguments[i - arguments_mod], 
                                         format!(
@@ -614,8 +630,6 @@ impl CodeGen {
                                     );
 
                                     ast_note!(params[i].type_, "Parameter type defined here");
-                                } else {
-                                    unreachable!(); // self info should always be correct
                                 }
                             }
                         } else {
@@ -1244,7 +1258,7 @@ impl CodeGen {
                         TokenType::BitwiseAnd => {
                             match inner.type_.implements_op(Operator::Ref) {
                                 ImplementsHow::Native | ImplementsHow::ThirdParty => {
-                                    Ok(SkyeValue::new(Rc::from(format!("&{}", inner.value)), SkyeType::Pointer(Box::new(inner.type_), inner.is_const), true))
+                                    Ok(SkyeValue::new(Rc::from(format!("&{}", inner.value)), SkyeType::Pointer(Box::new(inner.type_), false), true))
                                 }
                                 ImplementsHow::No => {
                                     token_error!(
@@ -1982,7 +1996,7 @@ impl CodeGen {
                                         if let Some((field_type, _)) = defined_fields.get(&field.name.lexeme) {
                                             let field_evaluated = self.evaluate(&field.expr, index, allow_unknown)?;
                                             
-                                            if !field_evaluated.type_.equals(field_type) {
+                                            if !field_type.equals(&field_evaluated.type_) {
                                                 ast_error!(
                                                     self, field.expr, 
                                                     format!(
@@ -2035,7 +2049,7 @@ impl CodeGen {
                                         if let Some(field_type) = defined_fields.get(&field.name.lexeme) {
                                             let field_evaluated = self.evaluate(&field.expr, index, allow_unknown)?;
                                             
-                                            if !field_evaluated.type_.equals(field_type) {
+                                            if !field_type.equals(&field_evaluated.type_) {
                                                 ast_error!(
                                                     self, field.expr, 
                                                     format!(
@@ -2077,7 +2091,7 @@ impl CodeGen {
                                     if let Some(field_type) = defined_fields.get(&fields[0].name.lexeme) {
                                         let field_evaluated = self.evaluate(&fields[0].expr, index, allow_unknown)?;
                                         
-                                        if !field_evaluated.type_.equals(field_type) {
+                                        if !field_type.equals(&field_evaluated.type_) {
                                             ast_error!(
                                                 self, fields[0].expr, 
                                                 format!(

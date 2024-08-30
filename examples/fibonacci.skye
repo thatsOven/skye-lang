@@ -6,7 +6,7 @@ fn main() !void {
     let a = 0;
     let b = 1;
 
-    let stringBuffer = core::MutableString::new();
+    const stringBuffer = core::MutableString::new();
     defer stringBuffer.free();
 
     for let i = 0; i < @N; i++ {
