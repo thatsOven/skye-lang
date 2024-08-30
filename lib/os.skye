@@ -3,7 +3,7 @@
 
 namespace os {
     fn system(const command: String) !i32 {
-        let buf = DefaultMutableString::new();
+        let buf = core::MutableString::new();
         defer buf.free();
 
         buf.pushString(command);
@@ -16,7 +16,7 @@ namespace os {
     }
 
     fn removeFile(const file: String) !void {
-        let buf = DefaultMutableString::new();
+        let buf = core::MutableString::new();
         defer buf.free();
 
         buf.pushString(file);
