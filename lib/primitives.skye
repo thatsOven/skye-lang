@@ -587,6 +587,7 @@ namespace core {
 
                 decPart *= @cast(T, pow(10f64, @cast(f64, decPrecision)));
                 let tmpBuf = core::utils::__reversedIntToString(decPart);
+                defer tmpBuf.free();
                 
                 while tmpBuf.length < decPrecision {
                     tmpBuf.push('0');
