@@ -46,7 +46,7 @@ If you're working with a bigger project (this is the most common case, since you
 ```
 let a = 0; // Skye will infer the type for this variable
 let b: u64 = 0; // You can manually specify types
-const c = 3; // This variable is immutable, it cannot be reassigned
+const c = 3; // This variable is immutable, it cannot be modified
 let d: f32; // Variables can be left undefined, but the type needs to be specified
 ```
 
