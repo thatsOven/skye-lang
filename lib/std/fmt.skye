@@ -4,7 +4,7 @@ import <"math.h">;
 
 namespace std {
     namespace fmt {
-        fn __reversedIntToString[T: AnyInt, U](const buf: *core::MutableString[U], value: T) {
+        fn __reversedIntToString[T: AnyInt, U](buf: *core::MutableString[U], value: T) {
             const neg = value < 0;
             if (neg) value = -value;
 
@@ -16,18 +16,18 @@ namespace std {
             if (neg) buf.push('-');
         }
 
-        fn intToString[T: AnyInt, U](const buf: *core::MutableString[U], const value: T) {
+        fn intToString[T: AnyInt, U](buf: *core::MutableString[U], const value: T) {
             std::fmt::__reversedIntToString(buf, value);
             buf.reverse();
         }
 
-        fn allocIntToString[T: AnyInt, U](const allocator: U, const value: T) core::MutableString[U] {
+        fn allocIntToString[T: AnyInt, U](allocator: U, const value: T) core::MutableString[U] {
             const buf = core::MutableString::init(allocator);
             std::fmt::intToString(&buf, value);
             return buf;
         }
 
-        fn floatToString[T: AnyFloat, U](const buf: *core::MutableString[U], const value: T, const decPrecision: usz) {
+        fn floatToString[T: AnyFloat, U](buf: *core::MutableString[U], const value: T, const decPrecision: usz) {
             if decPrecision < 0 {
                 panic("std::fmt::floatToString: Negative precision");
             }
@@ -55,7 +55,7 @@ namespace std {
             }
         }
 
-        fn allocFloatToString[T: AnyFloat, U](const allocator: U, const value: T, const decPrecision: usz) core::MutableString[U] {
+        fn allocFloatToString[T: AnyFloat, U](allocator: U, const value: T, const decPrecision: usz) core::MutableString[U] {
             let buf = core::MutableString::init(allocator);
             std::fmt::floatToString(&buf, value, decPrecision);
             return buf;

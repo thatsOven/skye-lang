@@ -401,7 +401,7 @@ impl CodeGen {
                 if let Some(var) = result {
                     return Some(SkyeValue::with_self_info(
                         value, var.type_, true, 
-                        object.type_.get_self(&object.value).expect("get_self failed")
+                        object.type_.get_self(&object.value, object.is_const).expect("get_self failed")
                     ))
                 } else {
                     None
@@ -1258,7 +1258,7 @@ impl CodeGen {
                         TokenType::BitwiseAnd => {
                             match inner.type_.implements_op(Operator::Ref) {
                                 ImplementsHow::Native | ImplementsHow::ThirdParty => {
-                                    Ok(SkyeValue::new(Rc::from(format!("&{}", inner.value)), SkyeType::Pointer(Box::new(inner.type_), false), true))
+                                    Ok(SkyeValue::new(Rc::from(format!("&{}", inner.value)), SkyeType::Pointer(Box::new(inner.type_), inner.is_const), true))
                                 }
                                 ImplementsHow::No => {
                                     token_error!(

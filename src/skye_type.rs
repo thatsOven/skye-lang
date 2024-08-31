@@ -593,9 +593,9 @@ impl SkyeType {
         match self {
             SkyeType::Pointer(inner_type, is_const) => {
                 if d == 0 {
-                    inner_type.get_self_internal(from, is_source_const || *is_const, d + 1)
+                    inner_type.get_self_internal(from, *is_const, d + 1)
                 } else {
-                    let (inner_val, inner_type) = inner_type.get_self_internal(from, is_source_const || *is_const, d + 1)?;
+                    let (inner_val, inner_type) = inner_type.get_self_internal(from, *is_const, d + 1)?;
                     Some((Rc::from(format!("*{}", inner_val)), inner_type))
                 }
             }
@@ -610,8 +610,8 @@ impl SkyeType {
         }
     }
 
-    pub fn get_self(&self, from: &Rc<str>) -> Option<(Rc<str>, SkyeType)> {
-        self.get_self_internal(from, false, 0)
+    pub fn get_self(&self, from: &Rc<str>, is_source_const: bool) -> Option<(Rc<str>, SkyeType)> {
+        self.get_self_internal(from, is_source_const, 0)
     }
 
     fn infer_type_from_similar_internal(&self, other: &SkyeType, data: Rc<RefCell<HashMap<Rc<str>, SkyeType>>>) {

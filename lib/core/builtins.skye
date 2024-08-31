@@ -101,7 +101,7 @@ namespace core {
         ptr: *T,
         min: *T,
         max: *T,
-        const alloc: *U
+        alloc: *U
     }
 
     // TODO implement pointer arithmetics
@@ -199,7 +199,7 @@ namespace core {
         array: Ptr[T, U],
         length: usz,
         capacity: usz,
-        const allocator: U
+        allocator: U
     }
 
     impl[T, U = core::mem::HeapAllocator] core::Array[T, U] {
@@ -369,7 +369,7 @@ namespace core {
         array: Ptr[char, U],
         length: usz,
         capacity: usz,
-        const allocator: U
+        allocator: U
     }
 
     impl[U = core::mem::HeapAllocator] core::MutableString[U] {
