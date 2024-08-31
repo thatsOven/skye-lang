@@ -98,7 +98,7 @@ pub enum ImplementsHow {
 #[derive(Clone, Copy)]
 pub enum EqualsLevel {
     Strict,
-    Classic,
+    Typewise,
     Permissive
 }
 
@@ -372,7 +372,7 @@ impl SkyeType {
                 }
             }
             SkyeType::Pointer(self_inner, self_is_const) => {
-                if matches!(level, EqualsLevel::Classic) {
+                if matches!(level, EqualsLevel::Typewise) {
                     if let SkyeType::Pointer(other_inner, _) = other {
                         self_inner.equals(other_inner, level)
                     } else {
@@ -460,7 +460,7 @@ impl SkyeType {
             SkyeType::Group(left, right) => {
                 left.is_respected_by(other) || right.is_respected_by(other)
             }
-            _ => self.equals(other, EqualsLevel::Classic)
+            _ => self.equals(other, EqualsLevel::Typewise)
         }
     }
 

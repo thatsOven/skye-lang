@@ -303,7 +303,7 @@ impl CodeGen {
                 if let SkyeType::Type(inner_type) = inner_param_type {
                     if has_decl {
                         if let SkyeType::Function(existing_params, _, _) = &existing.as_ref().unwrap().type_ {
-                            if !existing_params[i].type_.equals(&inner_type, EqualsLevel::Classic) {
+                            if !existing_params[i].type_.equals(&inner_type, EqualsLevel::Typewise) {
                                 ast_error!(
                                     self, params[i].type_, 
                                     format!(
@@ -353,7 +353,7 @@ impl CodeGen {
         
         let existing = env.get(&Token::dummy(mangled.clone().into()));
         if let Some(fnptr) = existing {
-            if !fnptr.type_.equals(&type_, EqualsLevel::Classic) {
+            if !fnptr.type_.equals(&type_, EqualsLevel::Typewise) {
                 if let Some(orig_tok) = fnptr.tok {
                     token_error!(self, tok, "This function pointer's mangled type resolves to a different type");
                     token_note!(orig_tok, "This definition is invalid. Change the name of this symbol");
@@ -919,7 +919,7 @@ impl CodeGen {
             ImplementsHow::Native => {
                 let right = self.evaluate(right_expr, index, allow_unknown)?;
 
-                if left.type_.equals(&right.type_, EqualsLevel::Classic) {
+                if left.type_.equals(&right.type_, EqualsLevel::Typewise) {
                     Ok(SkyeValue::new(Rc::from(format!("{} {} {}", left.value, op_stringified, right.value)), return_type, false))
                 } else {
                     ast_error!(
@@ -1039,7 +1039,7 @@ impl CodeGen {
                 for i in 1 .. items.len() {
                     let evaluated = self.evaluate(&items[i], index, allow_unknown)?;
 
-                    if !evaluated.type_.equals(&first_item.type_, EqualsLevel::Classic) {
+                    if !evaluated.type_.equals(&first_item.type_, EqualsLevel::Typewise) {
                         ast_error!(
                             self, items[i], 
                             format!(
@@ -1447,7 +1447,7 @@ impl CodeGen {
                                         self.definitions[index].push_indent();
                                         self.definitions[index].push("return ");
 
-                                        if return_type.equals(&inner.type_, EqualsLevel::Classic) {
+                                        if return_type.equals(&inner.type_, EqualsLevel::Typewise) {
                                             self.definitions[index].push(&tmp_var_name);
                                             self.definitions[index].push(";\n");
                                         } else if let SkyeType::Enum(full_name, _, _) = &return_type {
@@ -1477,13 +1477,13 @@ impl CodeGen {
                                         self.definitions[index].push_indent();
                                         self.definitions[index].push("return ");
                                         
-                                        if return_type.equals(&inner.type_, EqualsLevel::Classic) {
+                                        if return_type.equals(&inner.type_, EqualsLevel::Typewise) {
                                             self.definitions[index].push(&tmp_var_name);
                                             self.definitions[index].push(";\n");
                                         } else if let SkyeType::Enum(full_name, return_variants, _) = &return_type {
                                             if let Some(return_variant) = return_variants.as_ref().unwrap().get("error") {
                                                 if let Some(variant) = variants.as_ref().unwrap().get("error") {
-                                                    if variant.equals(return_variant, EqualsLevel::Classic) {
+                                                    if variant.equals(return_variant, EqualsLevel::Typewise) {
                                                         self.definitions[index].push(&full_name);
                                                         self.definitions[index].push("_DOT_Error(");
                                                         self.definitions[index].push(&tmp_var_name);
@@ -1963,7 +1963,7 @@ impl CodeGen {
                 let then_branch = self.evaluate(&then_branch_expr, index, allow_unknown)?;
                 let else_branch = self.evaluate(&else_branch_expr, index, allow_unknown)?;
 
-                if !then_branch.type_.equals(&else_branch.type_, EqualsLevel::Classic) {
+                if !then_branch.type_.equals(&else_branch.type_, EqualsLevel::Typewise) {
                     ast_error!(
                         self, else_branch_expr, 
                         format!(
@@ -2998,7 +2998,7 @@ impl CodeGen {
 
                 if has_decl {
                     if let SkyeType::Function(_, existing_return_type, _) = &existing.as_ref().unwrap().type_ {
-                        if !existing_return_type.equals(&return_type, EqualsLevel::Classic) {
+                        if !existing_return_type.equals(&return_type, EqualsLevel::Typewise) {
                             ast_error!(
                                 self, return_type_expr, 
                                 format!(
@@ -3030,8 +3030,8 @@ impl CodeGen {
                     
                     let has_stdargs = {
                         params_output.len() == 2 && 
-                        params_output[0].type_.equals(&SkyeType::AnyInt, EqualsLevel::Classic) && 
-                        params_output[1].type_.equals(&SkyeType::Pointer(Box::new(SkyeType::Pointer(Box::new(SkyeType::Char), false)), false), EqualsLevel::Classic)
+                        params_output[0].type_.equals(&SkyeType::AnyInt, EqualsLevel::Typewise) && 
+                        params_output[1].type_.equals(&SkyeType::Pointer(Box::new(SkyeType::Pointer(Box::new(SkyeType::Char), false)), false), EqualsLevel::Typewise)
                     };
                     
                     let has_args = {
@@ -3483,7 +3483,7 @@ impl CodeGen {
                             ast_error!(self, expr, "Cannot return value in a function that returns void");
                             ast_note!(expr, "Remove this expression");
                             ast_note!(orig_ret_type, "Return type defined here");
-                        } else if !type_.equals(&value.type_, EqualsLevel::Classic) {
+                        } else if !type_.equals(&value.type_, EqualsLevel::Typewise) {
                             ast_error!(
                                 self, expr, 
                                 format!(
