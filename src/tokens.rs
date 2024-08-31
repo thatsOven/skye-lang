@@ -37,7 +37,7 @@ pub enum TokenType {
     Break, Do, Macro, Const, Use, Try, As, 
     Default, Union, Bitfield,
 
-    StarConst, Reserved,
+    StarConst, RefConst, Reserved,
 
     EOF
 }

@@ -1273,6 +1273,24 @@ impl CodeGen {
                                 }
                             }
                         }
+                        TokenType::RefConst => {
+                            match inner.type_.implements_op(Operator::ConstRef) {
+                                ImplementsHow::Native | ImplementsHow::ThirdParty => {
+                                    Ok(SkyeValue::new(Rc::from(format!("&{}", inner.value)), SkyeType::Pointer(Box::new(inner.type_), true), true))
+                                }
+                                ImplementsHow::No => {
+                                    token_error!(
+                                        self, op, 
+                                        format!(
+                                            "Type {} cannot use this operator",
+                                            inner.type_.stringify_native()
+                                        ).as_ref()
+                                    );
+
+                                    Err(ExecutionInterrupt::Error)
+                                }
+                            }
+                        }
                         TokenType::Star => {
                             match inner.type_ {
                                 SkyeType::Pointer(ptr_type, is_const) => {
@@ -1728,7 +1746,7 @@ impl CodeGen {
                         self.binary_operator(
                             left, left_type, &left_expr, &right_expr, 
                             expr, "&", "__bitand__", Operator::BitAnd, 
-                             index, allow_unknown
+                            index, allow_unknown
                         )
                     }
                     TokenType::Greater => {

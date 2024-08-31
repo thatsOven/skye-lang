@@ -363,8 +363,16 @@ impl Parser {
             TokenType::Bang, TokenType::BitwiseAnd
         ]) {
             let mut op = self.previous().clone();
-            if op.type_ == TokenType::Star && self.match_(&[TokenType::Const]) {
-                op.set_type(TokenType::StarConst);
+
+            let star = op.type_ == TokenType::Star;
+            let and = op.type_ == TokenType::BitwiseAnd;
+
+            if (star || and) && self.match_(&[TokenType::Const]) {
+                if star {
+                    op.set_type(TokenType::StarConst);
+                } else if and {
+                    op.set_type(TokenType::RefConst);
+                }
             }
 
             let right = self.prefix_unary()?;

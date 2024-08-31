@@ -55,6 +55,7 @@ pub enum Operator {
     Not,
     Inv,
     Ref,
+    ConstRef,
     Deref,
     ConstDeref,
     Add,
@@ -754,7 +755,7 @@ impl SkyeType {
             }
 
             SkyeType::Union(_, _) | SkyeType::Function(_, _, _) | SkyeType::Bitfield(_, _) => {
-                if matches!(op, Operator::Ref) {
+                if matches!(op, Operator::Ref | Operator::ConstRef) {
                     ImplementsHow::Native
                 } else {
                     ImplementsHow::No
@@ -773,7 +774,7 @@ impl SkyeType {
 
             SkyeType::RawString => {
                 match op {
-                    Operator::Ref | Operator::Subscript => ImplementsHow::Native,
+                    Operator::Ref | Operator::Subscript | Operator::ConstRef => ImplementsHow::Native,
                     _ => ImplementsHow::No
                 }
             }

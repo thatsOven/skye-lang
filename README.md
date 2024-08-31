@@ -37,8 +37,8 @@ If you're working with a bigger project (this is the most common case, since you
 // This is a comment
 
 /* 
-   This is a multiline comment
-   It can't be nested
+    This is a multiline comment
+    It can't be nested
 */
 ```
 
@@ -240,26 +240,26 @@ fn test() f32 {
 # Structs
 ```
 struct MyStruct {
-   myField: i32,
-   const anotherField: u64
+    myField: i32,
+    const anotherField: u64
 }
 ```
 
 # Bitfields
 ```
 bitfield MyBitfield {
-   a: 10, // bitfields fields can be 0-64 bits
-   b: 48,
-   d: 0,
-   c: 1,
+    a: 10, // bitfields fields can be 0-64 bits
+    b: 48,
+    d: 0,
+    c: 1,
 }
 ```
 # Unions
 Unions are mostly meant for C interop.
 ```
 union MyUnion {
-   a: i32,
-   b: f32
+    a: i32,
+    b: f32
 }
 ```
 # Enums
@@ -298,23 +298,23 @@ fn test() {
 It's possible to bind all user defined types to C defined types with the following syntax:
 ```
 struct MyStructBinding: CStructName {
-   x: f32,
-   y: f32
+    x: f32,
+    y: f32
 }
 
 enum MyEnumBinding: CEnumName {
-   FIRST_FIELD,
-   SECOND_FIELD
+    FIRST_FIELD,
+    SECOND_FIELD
 }
 
 bitfield MyBitfieldBinding: CBitfieldName {
-   a: 23,
-   b: 1
+    a: 23,
+    b: 1
 }
 
 union MyUnionBinding: CUnionName {
-   a: i32,
-   b: f32
+    a: i32,
+    b: f32
 }
 ```
 Structs, Bitfields, and unions can be initialized through a compound literal:
@@ -329,27 +329,27 @@ let myUnionInstance = MyUnionBinding.{ a }; // only one field of a union can be 
 Structs and Enums can have methods, and they can be implemented using the `impl` keyword.
 ```
 struct MyStruct {
-   myField: i32,
-   const anotherField: u64
+    myField: i32,
+    const anotherField: u64
 }
 
 impl MyStruct {
-   fn new(myField: i32, anotherField: u64) Self {
-       return MyStruct.{ myField, anotherField };
-   }
+    fn new(myField: i32, anotherField: u64) Self {
+        return MyStruct.{ myField, anotherField };
+    } 
    
-   // self doesn't need type specifiers!
-   fn add(const self) i32 {
-       return myField + @cast(i32, anotherField);
-   }
+    // self doesn't need type specifiers!
+    fn add(const self) i32 {
+        return myField + @cast(i32, anotherField);
+    }
 
-   fn setMyField(self, field: i32) {
-       self.myField = field;
-   }
+    fn setMyField(self, field: i32) {
+        self.myField = field;
+    }
 
-   fn staticMethod() {
-       println("This method does not depend on the instance");
-   }
+    fn staticMethod() {
+        println("This method does not depend on the instance");
+    }
 }
 ```
 Methods can be called either through the type with a `::` operator, or through its instances, through the `.` operator.
