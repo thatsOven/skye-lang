@@ -1,7 +1,8 @@
 use std::{ffi:: OsString, fs::{create_dir, File}, io::{Error, Write}, path::PathBuf};
 
 use clap::{Parser, Subcommand};
-use skye::{compile_file_to_c, compile_file_to_exec, get_package_data, run_skye};
+use skye::{compile_file_to_c, compile_file_to_exec, get_package_data, run_skye, write_package};
+use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
 
 // TODO
 // - add package manager
@@ -156,7 +157,7 @@ fn main() -> Result<(), Error> {
                     f.write_all(MAIN_FILE_INIT)?;
                 }
                 ProjectType::Package { name } => {
-                    if name == "core" || name == "build" || name == "std" {
+                    if name == "core" || name == "build" || name == "std" || name == "setup" {
                         return Err(Error::other("Cannot use this name for package"));
                     }
 
@@ -181,7 +182,14 @@ fn main() -> Result<(), Error> {
 
             let buf = PathBuf::from(path);
 
-            todo!("{:?} {:?}", buf, project_name); // write everything to zip file
+            let zip_file = File::create(buf.join(&project_name).with_extension("zip"))?;
+            let mut writer = ZipWriter::new(zip_file);
+
+            let options = SimpleFileOptions::default()
+                .compression_method(CompressionMethod::DEFLATE);
+
+            write_package(&data, options, &mut writer)?;
+            writer.finish()?;
         }
         _ => todo!("package manager is not implemented yet!")
     }

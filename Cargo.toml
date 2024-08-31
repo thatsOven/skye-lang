@@ -8,3 +8,4 @@ description = "Skye ~ The retrofuturistic programming language"
 colored = "2.1.0"
 clap = { version = "4.5.13", features = ["derive"] }
 convert_case = "0.6.0"
+zip = "2.2.0"

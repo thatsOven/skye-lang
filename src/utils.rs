@@ -23,9 +23,6 @@ pub fn info_color(msg: &str) -> ColoredString {
 }
 
 pub fn report(source: &Rc<str>, msg: &str, type_: &str, pos: usize, len: usize, line: usize, color: fn(&str) -> ColoredString) {
-    assert!(pos < source.len());
-    assert!(pos + len < source.len());
-
     let lines = source.lines().collect::<Vec<&str>>();
     let iter_range = {
         if line <= 2 {

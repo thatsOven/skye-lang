@@ -5,6 +5,7 @@ use codegen::CodeGen;
 use parser::Parser;
 use scanner::Scanner;
 use tokens::{Token, TokenType};
+use zip::{write::SimpleFileOptions, ZipWriter};
 
 mod utils;
 mod tokens;
@@ -157,28 +158,35 @@ pub fn run_skye(file: OsString, primitives: &String) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn get_package_data(path: &str) -> Result<(Vec<PathBuf>, PathBuf), Error> {
+pub fn get_package_data(orig_path: &str) -> Result<(Vec<PathBuf>, PathBuf), Error> {
     let mut file_count: usize = 0;
     let mut fold_count: usize = 0;
     let mut project_name = PathBuf::new();
     let mut files = Vec::new();
+    
+    let orig_path_buf = PathBuf::from(orig_path);
 
-    for dir_entry in read_dir(path)? {
+    for dir_entry in read_dir(orig_path)? {
         if file_count + fold_count > 2 {
             break;
-        }   
+        }
 
         let path = PathBuf::from(&dir_entry?.file_name());
 
         if let Some(extension) = path.extension() {
             if extension == "skye" {
-                if project_name.as_os_str() == "" {
-                    project_name = PathBuf::from(path.file_stem().unwrap());
-                } else if project_name != path.file_stem().unwrap() {
+                let name = path.file_stem().unwrap();
+
+                if name == "setup" {
+                    files.push(orig_path_buf.join(path));
+                    continue;
+                } else if project_name.as_os_str() == "" {
+                    project_name = PathBuf::from(name);
+                } else if project_name != name {
                     return Ok((Vec::new(), PathBuf::new()));
                 }
                 
-                files.push(path);
+                files.push(orig_path_buf.join(path));
                 file_count += 1;
                 continue;
             }
@@ -189,7 +197,7 @@ pub fn get_package_data(path: &str) -> Result<(Vec<PathBuf>, PathBuf), Error> {
                 return Ok((Vec::new(), PathBuf::new()));
             }
 
-            files.push(path);
+            files.push(orig_path_buf.join(path));
             fold_count += 1;
         } else {
             return Ok((Vec::new(), PathBuf::new()));
@@ -201,4 +209,31 @@ pub fn get_package_data(path: &str) -> Result<(Vec<PathBuf>, PathBuf), Error> {
     }
 
     Ok((files, project_name))
+}
+
+pub fn write_package(data: &Vec<PathBuf>, options: SimpleFileOptions, writer: &mut ZipWriter<File>) -> Result<(), Error> {
+    for item in data {
+        if item.is_file() {
+            let mut file = File::open(&item)?;
+            let name = item.to_str().unwrap();
+
+            println!("exporting {}", name);
+
+            writer.start_file(name, options)?;
+            let mut buffer = Vec::new();
+            file.read_to_end(&mut buffer)?;
+            writer.write_all(&buffer)?;
+        } else {
+            writer.add_directory_from_path(item, options)?;
+
+            let inner_data = read_dir(item)?
+                .filter(|x| x.is_ok())
+                .map(|x| item.join(x.unwrap().file_name()))
+                .collect();
+
+            write_package(&inner_data, options, writer)?;
+        }
+    }
+
+    Ok(())
 }
