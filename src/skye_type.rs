@@ -264,7 +264,7 @@ impl SkyeType {
                     .replace("_GENOF_", "[")
                     .replace("_GENAND_", ", ")
                     .replace("_GENEND_", "]")
-                    .replace("_UNKNOWN_", "{unknown}")
+                    .replace("_UNKNOWN_", "{any}")
             }
             
             SkyeType::Union(name, _) | 
