@@ -20,7 +20,7 @@ namespace core {
                 return Self.{};
             }
 
-            fn allocRaw(self, amt: usz) voidptr {
+            fn allocRaw(self, const amt: usz) voidptr {
                 const ptr = malloc(amt);
 
                 if ptr == @nullptr {
@@ -30,7 +30,7 @@ namespace core {
                 return ptr;
             }
 
-            fn reallocRaw(self, ptr: voidptr, size: usz) voidptr {
+            fn reallocRaw(self, const ptr: voidptr, const size: usz) voidptr {
                 const newptr = realloc(ptr, size);
 
                 if newptr == @nullptr {
@@ -40,7 +40,7 @@ namespace core {
                 return newptr;
             }
 
-            fn freeRaw(self, ptr: voidptr) {
+            fn freeRaw(self, const ptr: voidptr) {
                 free(ptr);
             }
         }

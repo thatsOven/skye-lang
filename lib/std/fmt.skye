@@ -4,7 +4,7 @@ import <"math.h">;
 
 namespace std {
     namespace fmt {
-        fn __reversedIntToString[T: AnyInt, U](buf: *core::MutableString[U], value: T) {
+        fn __reversedIntToString[T: AnyInt, U](const buf: *core::MutableString[U], value: T) {
             const neg = value < 0;
             if (neg) value = -value;
 
@@ -16,7 +16,7 @@ namespace std {
             if (neg) buf.push('-');
         }
 
-        fn intToString[T: AnyInt, U](buf: *core::MutableString[U], const value: T) {
+        fn intToString[T: AnyInt, U](const buf: *core::MutableString[U], const value: T) {
             std::fmt::__reversedIntToString(buf, value);
             buf.reverse();
         }
@@ -27,7 +27,7 @@ namespace std {
             return buf;
         }
 
-        fn floatToString[T: AnyFloat, U](buf: *core::MutableString[U], const value: T, const decPrecision: usz) {
+        fn floatToString[T: AnyFloat, U](const buf: *core::MutableString[U], const value: T, const decPrecision: usz) {
             if decPrecision < 0 {
                 panic("std::fmt::floatToString: Negative precision");
             }

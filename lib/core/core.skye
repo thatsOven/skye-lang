@@ -35,7 +35,7 @@ namespace core {
     }
 
     impl[T] core::Option[T] {
-        fn or(const self, value: T) T {
+        fn or(const self, const value: T) T {
             if self.kind == core::Option::Kind::Some {
                 return self.some;
             } else {
@@ -50,7 +50,7 @@ namespace core {
     }
 
     impl[T, U] core::Result[T, U] {
-        fn or(const self, value: T) T {
+        fn or(const self, const value: T) T {
             if self.kind == core::Result::Kind::Ok {
                 return self.ok;
             } else {
@@ -80,11 +80,11 @@ namespace core {
     }
 
     impl[T] core::Slice[T] {
-        fn new(ptr: *const T, length: usz) Self[T] {
+        fn new(const ptr: *const T, const length: usz) Self[T] {
             return Self.{ ptr, length };
         }
 
-        fn get(const self, idx: usz) ?T {
+        fn get(const self, const idx: usz) ?T {
             if idx < self.length {
                 return (?T)::Some(self.ptr[idx]);
             } else {
