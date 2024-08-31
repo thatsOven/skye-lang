@@ -22,7 +22,7 @@ namespace std {
         }
 
         fn allocIntToString[T: AnyInt, U](allocator: U, const value: T) core::MutableString[U] {
-            const buf = core::MutableString::init(allocator);
+            let buf = core::MutableString::init(allocator);
             std::fmt::intToString(&buf, value);
             return buf;
         }
