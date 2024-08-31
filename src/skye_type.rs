@@ -95,6 +95,13 @@ pub enum ImplementsHow {
     No
 }
 
+#[derive(Clone, Copy)]
+pub enum EqualsLevel {
+    Strict,
+    Classic,
+    Permissive
+}
+
 #[derive(Clone)]
 pub enum SkyeType {
     U8, U16, U32, U64, Usz,
@@ -295,17 +302,13 @@ impl SkyeType {
             SkyeType::Union(name, _) | 
             SkyeType::Bitfield(name, _) => name.to_string(),
 
-            SkyeType::Pointer(inner, is_const) => {
+            SkyeType::Pointer(inner, _) => {
                 let inner_mangled = inner.mangle();
                 if inner_mangled.len() == 0 {
                     return inner_mangled;
                 }
 
-                if *is_const {
-                    String::from(format!("_CPTROF_{}_PTREND_", inner_mangled))
-                } else {
-                    String::from(format!("_PTROF_{}_PTREND_", inner_mangled))
-                }
+                String::from(format!("_PTROF_{}_PTREND_", inner_mangled))
             },
 
             SkyeType::Function(params, return_type, _) => {
@@ -333,7 +336,7 @@ impl SkyeType {
         }
     }
 
-    pub fn equals(&self, other: &SkyeType) -> bool {
+    pub fn equals(&self, other: &SkyeType, level: EqualsLevel) -> bool {
         match self {
             SkyeType::U8  => matches!(other, SkyeType::U8)  || matches!(other, SkyeType::AnyInt),
             SkyeType::I8  => matches!(other, SkyeType::I8)  || matches!(other, SkyeType::AnyInt),
@@ -346,8 +349,8 @@ impl SkyeType {
             SkyeType::Usz => matches!(other, SkyeType::Usz) || matches!(other, SkyeType::AnyInt),
             SkyeType::F32 => matches!(other, SkyeType::F32) || matches!(other, SkyeType::AnyFloat),
             SkyeType::F64 => matches!(other, SkyeType::F64) || matches!(other, SkyeType::AnyFloat),
-            SkyeType::AnyInt   => matches!(other, SkyeType::AnyInt)   || other.equals(self),
-            SkyeType::AnyFloat => matches!(other, SkyeType::AnyFloat) || other.equals(self),
+            SkyeType::AnyInt   => matches!(other, SkyeType::AnyInt)   || other.equals(self, level),
+            SkyeType::AnyFloat => matches!(other, SkyeType::AnyFloat) || other.equals(self, level),
 
             SkyeType::Char      => matches!(other, SkyeType::Char),
             SkyeType::RawString => matches!(other, SkyeType::RawString),
@@ -363,29 +366,37 @@ impl SkyeType {
 
             SkyeType::Type(self_inner) => {
                 if let SkyeType::Type(other_inner) = other {
-                    self_inner.equals(other_inner)
+                    self_inner.equals(other_inner, level)
                 } else {
                     false
                 }
             }
             SkyeType::Pointer(self_inner, self_is_const) => {
-                if let SkyeType::Pointer(other_inner, other_is_const) = other {
-                    if *self_is_const {
-                        self_inner.equals(other_inner)
+                if matches!(level, EqualsLevel::Classic) {
+                    if let SkyeType::Pointer(other_inner, _) = other {
+                        self_inner.equals(other_inner, level)
                     } else {
-                        (!*other_is_const) && self_inner.equals(other_inner)
+                        false
                     }
                 } else {
-                    false
+                    if let SkyeType::Pointer(other_inner, other_is_const) = other {
+                        if *self_is_const {
+                            self_inner.equals(other_inner, level)
+                        } else {
+                            (!*other_is_const) && self_inner.equals(other_inner, level)
+                        }
+                    } else {
+                        false
+                    }
                 }
             }
             SkyeType::Function(self_params, self_return_type, _) => {
                 if let SkyeType::Function(other_params, other_return_type, _) = other {
-                    if self_params.len() != other_params.len() || !self_return_type.equals(other_return_type) {
+                    if self_params.len() != other_params.len() || !self_return_type.equals(other_return_type, level) {
                         false
                     } else {
                         for i in 0..self_params.len() {
-                            if !self_params[i].type_.equals(&other_params[i].type_) {
+                            if !self_params[i].type_.equals(&other_params[i].type_, level) {
                                 return false;
                             }
                         }
@@ -396,112 +407,34 @@ impl SkyeType {
                     false
                 }
             }
-            SkyeType::Struct(self_name, _, _) => {
-                if let SkyeType::Struct(other_name, _, _) = other {
-                    self_name == other_name
-                } else {
-                    false
-                }
-            }
-            SkyeType::Enum(self_name, _, _) => {
-                if let SkyeType::Enum(other_name, _, _) = other {
-                    self_name == other_name
-                } else {
-                    false
-                }
-            }
-            SkyeType::Union(self_name, _) => {
-                if let SkyeType::Union(other_name, _) = other {
-                    self_name == other_name
-                } else {
-                    false
-                }
-            }
-            SkyeType::Bitfield(self_name, _) => {
-                if let SkyeType::Bitfield(other_name, _) = other {
-                    self_name == other_name
-                } else {
-                    false
-                }
-            }
-        }
-    }
-
-    pub fn equals_permissive(&self, other: &SkyeType) -> bool {
-        match self {
-            SkyeType::U8  => matches!(other, SkyeType::U8)  || matches!(other, SkyeType::AnyInt),
-            SkyeType::I8  => matches!(other, SkyeType::I8)  || matches!(other, SkyeType::AnyInt),
-            SkyeType::U16 => matches!(other, SkyeType::U16) || matches!(other, SkyeType::AnyInt),
-            SkyeType::I16 => matches!(other, SkyeType::I16) || matches!(other, SkyeType::AnyInt),
-            SkyeType::U32 => matches!(other, SkyeType::U32) || matches!(other, SkyeType::AnyInt),
-            SkyeType::I32 => matches!(other, SkyeType::I32) || matches!(other, SkyeType::AnyInt),
-            SkyeType::U64 => matches!(other, SkyeType::U64) || matches!(other, SkyeType::AnyInt),
-            SkyeType::I64 => matches!(other, SkyeType::I64) || matches!(other, SkyeType::AnyInt),
-            SkyeType::Usz => matches!(other, SkyeType::Usz) || matches!(other, SkyeType::AnyInt),
-            SkyeType::F32 => matches!(other, SkyeType::F32) || matches!(other, SkyeType::AnyFloat),
-            SkyeType::F64 => matches!(other, SkyeType::F64) || matches!(other, SkyeType::AnyFloat),
-            SkyeType::AnyInt   => matches!(other, SkyeType::AnyInt)   || other.equals_permissive(self),
-            SkyeType::AnyFloat => matches!(other, SkyeType::AnyFloat) || other.equals_permissive(self),
-
-            SkyeType::Char      => matches!(other, SkyeType::Char),
-            SkyeType::RawString => matches!(other, SkyeType::RawString),
-
-            SkyeType::Void => matches!(other, SkyeType::Void),
-
-            SkyeType::Group(_, _) | 
-            SkyeType::Namespace(_) | 
-            SkyeType::Template(_, _, _, _, _, _) | 
-            SkyeType::Macro(_, _, _, _) => false,
-
-            SkyeType::Unknown(_) => true,
-
-            SkyeType::Type(self_inner) => {
-                if let SkyeType::Type(other_inner) = other {
-                    self_inner.equals_permissive(other_inner)
-                } else {
-                    false
-                }
-            }
-            SkyeType::Pointer(self_inner, self_is_const) => {
-                if let SkyeType::Pointer(other_inner, other_is_const) = other {
-                    if *self_is_const {
-                        self_inner.equals_permissive(other_inner)
+            SkyeType::Struct(self_name, _, self_base_name) => {
+                if matches!(level, EqualsLevel::Permissive) {
+                    if let SkyeType::Struct(_, _, other_base_name) = other {
+                        self_base_name == other_base_name
                     } else {
-                        (!*other_is_const) && self_inner.equals_permissive(other_inner)
-                    }
-                } else {
-                    false
-                }
-            }
-            SkyeType::Function(self_params, self_return_type, _) => {
-                if let SkyeType::Function(other_params, other_return_type, _) = other {
-                    if self_params.len() != other_params.len() || !self_return_type.equals_permissive(other_return_type) {
                         false
-                    } else {
-                        for i in 0..self_params.len() {
-                            if !self_params[i].type_.equals_permissive(&other_params[i].type_) {
-                                return false;
-                            }
-                        }
-
-                        true
                     }
                 } else {
-                    false
+                    if let SkyeType::Struct(other_name, _, _) = other {
+                        self_name == other_name
+                    } else {
+                        false
+                    }
                 }
             }
-            SkyeType::Struct(_, _, self_name) => {
-                if let SkyeType::Struct(_, _, other_name) = other {
-                    self_name == other_name
+            SkyeType::Enum(self_name, _, self_base_name) => {
+                if matches!(level, EqualsLevel::Permissive) {
+                    if let SkyeType::Enum(_, _, other_base_name) = other {
+                        self_base_name == other_base_name
+                    } else {
+                        false
+                    }
                 } else {
-                    false
-                }
-            }
-            SkyeType::Enum(_, _, self_name) => {
-                if let SkyeType::Enum(_, _, other_name) = other {
-                    self_name == other_name
-                } else {
-                    false
+                    if let SkyeType::Enum(other_name, _, _) = other {
+                        self_name == other_name
+                    } else {
+                        false
+                    }
                 }
             }
             SkyeType::Union(self_name, _) => {
@@ -527,7 +460,7 @@ impl SkyeType {
             SkyeType::Group(left, right) => {
                 left.is_respected_by(other) || right.is_respected_by(other)
             }
-            _ => self.equals(other)
+            _ => self.equals(other, EqualsLevel::Classic)
         }
     }
 
@@ -682,7 +615,7 @@ impl SkyeType {
     }
 
     fn infer_type_from_similar_internal(&self, other: &SkyeType, data: Rc<RefCell<HashMap<Rc<str>, SkyeType>>>) {
-        assert!(self.equals_permissive(other));
+        assert!(self.equals(other, EqualsLevel::Permissive));
 
         match self {
             SkyeType::U8  | SkyeType::I8  | SkyeType::U16 | SkyeType::I16 |

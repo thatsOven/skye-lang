@@ -55,7 +55,6 @@ impl<'a> Scanner<'a> {
         keywords.insert(        "_FNPTR_", TokenType::Reserved);
         keywords.insert(        "_GENOF_", TokenType::Reserved);
         keywords.insert(        "_PTROF_", TokenType::Reserved);
-        keywords.insert(       "_CPTROF_", TokenType::Reserved);
         keywords.insert(       "_GENAND_", TokenType::Reserved);
         keywords.insert(       "_GENEND_", TokenType::Reserved);
         keywords.insert(       "_PTREND_", TokenType::Reserved);

@@ -4,7 +4,7 @@ import <"math.h">;
 
 namespace std {
     namespace fmt {
-        fn __reversedIntToString[T: AnyInt, U](const buf: *core::MutableString[U], const value: T) {
+        fn __reversedIntToString[T: AnyInt, U](const buf: *core::MutableString[U], value: T) {
             const neg = value < 0;
             if (neg) value = -value;
 
