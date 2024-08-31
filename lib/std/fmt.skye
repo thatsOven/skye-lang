@@ -21,7 +21,7 @@ namespace std {
             buf.reverse();
         }
 
-        fn allocIntToString[T: AnyInt, U](allocator: U, const value: T) core::MutableString[U] {
+        fn allocIntToString[T: AnyInt, U](const allocator: *U, const value: T) core::MutableString[U] {
             let buf = core::MutableString::init(allocator);
             std::fmt::intToString(&buf, value);
             return buf;
@@ -55,7 +55,7 @@ namespace std {
             }
         }
 
-        fn allocFloatToString[T: AnyFloat, U](allocator: U, const value: T, const decPrecision: usz) core::MutableString[U] {
+        fn allocFloatToString[T: AnyFloat, U](const allocator: *U, const value: T, const decPrecision: usz) core::MutableString[U] {
             let buf = core::MutableString::init(allocator);
             std::fmt::floatToString(&buf, value, decPrecision);
             return buf;
