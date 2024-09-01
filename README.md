@@ -25,12 +25,16 @@ fn main() {
 }
 ```
 
-# Creating a new project
+# Projects
 Creating a new project in Skye is simple! 
 
 If your project is a simple one that doesn't need any specific compiler flag, you can just create a new file containing your Skye code, and then compile it or run it directly by using `skye compile <file>` or `skye run <file>` respectively.
 
 If you're working with a bigger project (this is the most common case, since you'll be working with C compilers) you can create a Skye project by using the `skye new` command. At this stage, you should choose if you want to create a standalone program (`skye new standalone <project_name>`), or a Skye package (`skye new package <project_name>`). 
+
+Standalone projects can be built by using the `skye build` command, and Skye packages can be exported using `skye export`. The result of `skye export` is a `zip` file that can be installed using `skye install <package_file>`. To remove an installed package, use `skye remove <package_name>`.
+
+The Skye package manager has no notion of versions, so feature-wise versioning should be performed by the developer through different package names (for example "myPackage-v1.0", "myPackage-v1.1"...). This way, projects that require a specific version of a package as a dependency don't collide with a different version of the same package while the required one is being installed.
 
 # Comments
 ```
@@ -458,7 +462,45 @@ let number = @costantNumber;
 let result = @A_C_MACRO(1, 1);
 ```
 
-# Operator overloading
+# Main operators
+| name | syntax | additional notes |
+| ---- | ------ | ----------- |
+| Prefix increment | `++x` | Increments `x` before it's used |
+| Suffix increment | `x++` | Increments `x` after it's used |
+| Prefix decrement | `--x` | Decrements `x` before it's used |
+| Suffix decrement | `x--` | Decrements `x` after it's used |
+| Unary plus | `+x` | Same behavior as C |
+| Negation | `-x` | ... |
+| Boolean not | `!x` | Can also define a `Result` type with `Ok = void` |
+| Bitwise not | `~x` | ... |
+| Reference | `&x` | Returns a pointer to `x` |
+| Const reference | `&const x` | Returns a const pointer to `x` (`x` cannot be modified through that pointer) |
+| Dereference | `*x` | Dereferences a pointer. Can also define a pointer type if applied to a type |
+| Const dereference | `*const x` | Dereferences a pointer and returns a `const` value. Can also define a const pointer type if applied to a type |
+| Option | `?x` | Defines an `Option[x]` type where `x` is a type |
+| Try | `try x` | Returns the `Ok` or `Some` value of `x` where `x` is a `Result` or `Option`. Propagates the `Error` or `None` if the set variant is not `Ok` or `Some` |
+| Addition | `x + y` `x += y` | ... |
+| Subtraction | `x - y` `x -= y` | ... |
+| Multiplication | `x * y` `x *= y` | ... |
+| Division | `x / y` `x /= y` | ... |
+| Modulo | `x % y` `x %= y` | ... |
+| Shift left | `x << y` `x <<= y` | Shifts `x` left `y` times |
+| Shift right | `x >> y` `x >>= y` | Shifts `x` right `y` times |
+| Boolean or | <code>x &#124;&#124; y</code> | ... |
+| Boolean and | `x && y` | ... |
+| Bitwise xor | `x ^ y` `x ^= y` | ... |
+| Bitwise and | `x & y` `x &= y` | ... |
+| Bitwise or | <code>x &#124; y</code> <code>x &#124;= y</code> | Can define a type group if the operands are types |
+| Greater | `x > y` | ... |
+| Greater or equal | `x >= y` | ... |
+| Less | `x < y` | ... |
+| Less or equal | `x <= y` | ... |
+| Equality | `x == y` | ... |
+| Inequality | `x != y` | ... |
+| Result | `x ! y` | Defines a `Result[x, y]` type where `x` and `y` are types |
+| Ternary | `x ? y : z` | Returns `y` if `x` is truthy, otherwise returns `z` |
+
+## Operator overloading
 It's possible to perform operator overloading by creating some special functions in your types.
 ```
 struct Vector {
@@ -492,8 +534,10 @@ Here is a list of operators that can be overloaded
 | `{} % {}` | `__mod__` | 1 |
 | `{} << {}` | `__shl__` | 1 |
 | `{} >> {}` | `__shr__` | 1 |
+| <code>{} &#124;&#124; {}</code> | `__or__` | 1 |
 | `{} && {}` | `__and__` | 1 |
 | `{} ^ {}` | `__xor__` | 1 |
+| <code>{} &#124; {}</code> | `__bitor__` | 1 |
 | `{} & {}` | `__bitand__` | 1 |
 | `{} > {}` | `__gt__` | 1 |
 | `{} >= {}` | `__ge__` | 1 |
@@ -509,14 +553,8 @@ Here is a list of operators that can be overloaded
 | `{} <<= {}` | `__setshl__` | 1 |
 | `{} >>= {}` | `__setshr__` | 1 |
 | `{} ^= {}` | `__setxor__` | 1 |
+| <code>{} &#124;= {}</code> | `__setor__` | 1 |
 | `{} &= {}` | `__setand__` | 1 |
 | `{}[{}]` | `__subscript__` | any |
-
-`{} || {}`: `__or__` : 1
-
-`{} | {}`: `__bitor__`: 1
-
-`{} |= {}`: `__setor__`: 1
-
 
 Additionally, Skye offers you copy constructors and destructors, mostly used for special types like smart pointers. They are respectively the `__copy__` method and the `__destruct__` method. The Skye compiler will warn you when it inserts calls to those methods inside the code, so that eventual debugging is easier.
