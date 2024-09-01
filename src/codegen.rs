@@ -1697,18 +1697,166 @@ impl CodeGen {
                         )
                     }
                     TokenType::LogicOr => {
-                        self.binary_operator(
-                            left, SkyeType::U8, &left_expr, &right_expr, 
-                            expr, "||", "__or__", Operator::Or, 
-                            index, allow_unknown
-                        )
+                        match left.type_.implements_op(Operator::Or) {
+                            ImplementsHow::Native => {
+                                // needed so short circuiting can work
+                                let tmp_var = self.get_temporary_var();
+
+                                self.definitions[index].push_indent();
+                                self.definitions[index].push("u8 ");
+                                self.definitions[index].push(&tmp_var);
+                                self.definitions[index].push(";\n");
+
+                                self.definitions[index].push_indent();
+                                self.definitions[index].push("if (");
+                                self.definitions[index].push(&left.value);
+                                self.definitions[index].push(") {\n");
+                                self.definitions[index].inc_indent();
+
+                                self.definitions[index].push_indent();
+                                self.definitions[index].push(&tmp_var);
+                                self.definitions[index].push(" = 1;\n");
+                                self.definitions[index].dec_indent();
+
+                                self.definitions[index].push_indent();
+                                self.definitions[index].push("} else {\n");
+                                self.definitions[index].inc_indent();
+
+                                let right = self.evaluate(right_expr, index, allow_unknown)?;
+
+                                if !left.type_.equals(&right.type_, EqualsLevel::Typewise) {
+                                    ast_error!(
+                                        self, right_expr, 
+                                        format!(
+                                            "Right operand type ({}) does not match left operand type ({})",
+                                            right.type_.stringify_native(), left.type_.stringify_native()
+                                        ).as_ref()
+                                    );
+                
+                                    return Err(ExecutionInterrupt::Error);
+                                }
+
+                                self.definitions[index].push_indent();
+                                self.definitions[index].push(&tmp_var);
+                                self.definitions[index].push(" = ");
+                                self.definitions[index].push(&right.value);
+                                self.definitions[index].push(";\n");
+                                self.definitions[index].dec_indent();
+
+                                self.definitions[index].push_indent();
+                                self.definitions[index].push("}\n");
+
+                                Ok(SkyeValue::new(Rc::from(tmp_var), SkyeType::U8, false))
+                            }
+                            ImplementsHow::ThirdParty => {
+                                let search_tok = Token::dummy(Rc::from("__or__"));
+                                if let Some(value) = self.get_method(&left, &search_tok, true) {
+                                    self.call(&value, expr, left_expr, &vec![*right_expr.clone()], index, allow_unknown)
+                                } else {
+                                    ast_error!(
+                                        self, left_expr, 
+                                        format!(
+                                            "This operator is not implemented for type {}",
+                                            left.type_.stringify_native()
+                                        ).as_ref()
+                                    );
+                
+                                    Err(ExecutionInterrupt::Error)
+                                }
+                            }
+                            ImplementsHow::No => {
+                                ast_error!(
+                                    self, left_expr, 
+                                    format!(
+                                        "Type {} cannot use this operator",
+                                        left.type_.stringify_native()
+                                    ).as_ref()
+                                );
+                
+                                Err(ExecutionInterrupt::Error)
+                            }
+                        }
                     }
                     TokenType::LogicAnd => {
-                        self.binary_operator(
-                            left, SkyeType::U8, &left_expr, &right_expr, 
-                            expr, "&&", "__and__", Operator::And, 
-                            index, allow_unknown
-                        )
+                        match left.type_.implements_op(Operator::And) {
+                            ImplementsHow::Native => {
+                                // needed so short circuiting can work
+                                let tmp_var = self.get_temporary_var();
+
+                                self.definitions[index].push_indent();
+                                self.definitions[index].push("u8 ");
+                                self.definitions[index].push(&tmp_var);
+                                self.definitions[index].push(";\n");
+
+                                self.definitions[index].push_indent();
+                                self.definitions[index].push("if (");
+                                self.definitions[index].push(&left.value);
+                                self.definitions[index].push(") {\n");
+                                self.definitions[index].inc_indent();
+
+                                let right = self.evaluate(right_expr, index, allow_unknown)?;
+
+                                if !left.type_.equals(&right.type_, EqualsLevel::Typewise) {
+                                    ast_error!(
+                                        self, right_expr, 
+                                        format!(
+                                            "Right operand type ({}) does not match left operand type ({})",
+                                            right.type_.stringify_native(), left.type_.stringify_native()
+                                        ).as_ref()
+                                    );
+                
+                                    return Err(ExecutionInterrupt::Error);
+                                }
+
+                                self.definitions[index].push_indent();
+                                self.definitions[index].push(&tmp_var);
+                                self.definitions[index].push(" = ");
+                                self.definitions[index].push(&right.value);
+                                self.definitions[index].push(";\n");
+                                self.definitions[index].dec_indent();
+
+                                self.definitions[index].push_indent();
+                                self.definitions[index].push("} else {\n");
+                                self.definitions[index].inc_indent();
+
+                                self.definitions[index].push_indent();
+                                self.definitions[index].push(&tmp_var);
+                                self.definitions[index].push(" = 0;\n");
+                                self.definitions[index].dec_indent();
+
+                                self.definitions[index].push_indent();
+                                self.definitions[index].push("}\n");
+
+                                Ok(SkyeValue::new(Rc::from(tmp_var), SkyeType::U8, false))
+                            }
+                            ImplementsHow::ThirdParty => {
+                                let search_tok = Token::dummy(Rc::from("__and__"));
+                                if let Some(value) = self.get_method(&left, &search_tok, true) {
+                                    self.call(&value, expr, left_expr, &vec![*right_expr.clone()], index, allow_unknown)
+                                } else {
+                                    ast_error!(
+                                        self, left_expr, 
+                                        format!(
+                                            "This operator is not implemented for type {}",
+                                            left.type_.stringify_native()
+                                        ).as_ref()
+                                    );
+                
+                                    Err(ExecutionInterrupt::Error)
+                                }
+                            }
+                            ImplementsHow::No => {
+                                ast_error!(
+                                    self, left_expr, 
+                                    format!(
+                                        "Type {} cannot use this operator",
+                                        left.type_.stringify_native()
+                                    ).as_ref()
+                                );
+                
+                                Err(ExecutionInterrupt::Error)
+                            }
+                        }
                     }
                     TokenType::BitwiseXor => {
                         self.binary_operator(
