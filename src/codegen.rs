@@ -4021,6 +4021,9 @@ impl CodeGen {
                 self.definitions[index].push("#undef ");
                 self.definitions[index].push(&name);
                 self.definitions[index].push("\n");
+
+                let mut env = self.environment.borrow_mut();
+                env.undef(Rc::clone(name));
             }
             Statement::Enum(name, type_expr, variants, is_simple, has_body, binding, generics) => {
                 let base_name = self.get_name(&name.lexeme);
