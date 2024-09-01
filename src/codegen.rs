@@ -925,8 +925,8 @@ impl CodeGen {
                     ast_error!(
                         self, right_expr, 
                         format!(
-                            "Right operand type ({}) does not match left operand type ({})",
-                            right.type_.stringify_native(), left.type_.stringify_native()
+                            "Left operand type ({}) does not match right operand type ({})",
+                            left.type_.stringify_native(), right.type_.stringify_native()
                         ).as_ref()
                     );
 
@@ -1728,8 +1728,8 @@ impl CodeGen {
                                     ast_error!(
                                         self, right_expr, 
                                         format!(
-                                            "Right operand type ({}) does not match left operand type ({})",
-                                            right.type_.stringify_native(), left.type_.stringify_native()
+                                            "Left operand type ({}) does not match right operand type ({})",
+                                            left.type_.stringify_native(), right.type_.stringify_native()
                                         ).as_ref()
                                     );
                 
@@ -1800,8 +1800,8 @@ impl CodeGen {
                                     ast_error!(
                                         self, right_expr, 
                                         format!(
-                                            "Right operand type ({}) does not match left operand type ({})",
-                                            right.type_.stringify_native(), left.type_.stringify_native()
+                                            "Left operand type ({}) does not match right operand type ({})",
+                                            left.type_.stringify_native(), right.type_.stringify_native()
                                         ).as_ref()
                                     );
                 
@@ -1875,8 +1875,8 @@ impl CodeGen {
                                 ast_error!(
                                     self, right_expr, 
                                     format!(
-                                        "Right operand type ({}) does not match left operand type ({})",
-                                        right.type_.stringify_native(), left.type_.stringify_native()
+                                        "Left operand type ({}) does not match right operand type ({})",
+                                        left.type_.stringify_native(), right.type_.stringify_native()
                                     ).as_ref()
                                 );
                                 
