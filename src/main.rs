@@ -1,11 +1,12 @@
-use std::{ffi:: OsString, fs::{create_dir, File}, io::{Error, Write}, path::PathBuf};
+use std::{collections::HashMap, env, ffi:: OsString, fs::{self, create_dir, remove_dir_all, remove_file, File}, io::{Error, Write}, path::PathBuf};
 
 use clap::{Parser, Subcommand};
-use skye::{compile_file_to_c, compile_file_to_exec, get_package_data, run_skye, write_package};
-use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
+use scopeguard::defer;
+use serde_json::Value;
+use skye::{compile_file_to_c, compile_file_to_exec, copy_dir_recursive, get_package_data, run_skye, write_package, MAX_PACKAGE_SIZE_BYTES, SKYE_PATH_VAR};
+use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
 
 // TODO
-// - add package manager
 // - check that copy constructors and destructors are working properly
 // - the compiler generates some artifacts while doing type inference, 
 //       creating types that contain unknown types (transpiled to void*): get rid of those
@@ -155,6 +156,8 @@ fn main() -> Result<(), Error> {
 
                     f = File::create(buf.join("main.skye"))?;
                     f.write_all(MAIN_FILE_INIT)?;
+
+                    println!("Standalone project created at {}", buf.to_str().unwrap());
                 }
                 ProjectType::Package { name } => {
                     if name == "core" || name == "build" || name == "std" || name == "setup" {
@@ -162,6 +165,7 @@ fn main() -> Result<(), Error> {
                     }
 
                     let mut buf = PathBuf::from(&name);
+                    let orig_buf = buf.clone();
                     create_dir(&buf)?;
 
                     buf = buf.join(name);
@@ -171,27 +175,163 @@ fn main() -> Result<(), Error> {
                     drop(f);
 
                     create_dir(&buf)?;
+
+                    println!("Package project created at {}", orig_buf.to_str().unwrap());
                 }
             }
         }
         CompilerCommand::Export { path } => {
-            let (data, project_name) = get_package_data(&path)?;
-            if data.len() == 0 {
+            let (data_absolute, data_relative, project_name) = get_package_data(&path)?;
+            if data_absolute.len() == 0 {
                 return Err(Error::other("Invalid project folder"));
             } 
 
             let buf = PathBuf::from(path);
 
-            let zip_file = File::create(buf.join(&project_name).with_extension("zip"))?;
+            let package_file = buf.join(&project_name).with_extension("zip");
+            let zip_file = File::create(&package_file)?;
             let mut writer = ZipWriter::new(zip_file);
 
             let options = SimpleFileOptions::default()
                 .compression_method(CompressionMethod::DEFLATE);
 
-            write_package(&data, options, &mut writer)?;
+            write_package(&data_absolute, &data_relative, options, &mut writer)?;
             writer.finish()?;
+
+            println!("Package exported successfully in {}", package_file.to_str().unwrap());
         }
-        _ => todo!("package manager is not implemented yet!")
+        CompilerCommand::Install { file } => {
+            let buf = PathBuf::from(file);
+
+            if !buf.exists() {
+                todo!("Try to fetch URL");
+            } 
+
+            if let Some(extension) = buf.extension() {
+                if extension != "zip" {
+                    return Err(Error::other("Invalid package file"));
+                }
+            } else {
+                return Err(Error::other("Invalid package file"));
+            }
+
+            let file = File::open(buf)?;
+            let mut archive = ZipArchive::new(file)?;
+
+            if let Some(size) = archive.decompressed_size() {
+                if size > MAX_PACKAGE_SIZE_BYTES {
+                    return Err(Error::other("Package decompressed size exceeds maximum package size"));
+                }
+            } else {
+                return Err(Error::other("Cannot verify package decompressed size"));
+            }
+
+            let skye_path = PathBuf::from(env::var(SKYE_PATH_VAR).map_err(
+                |e| Error::other(format!("Couldn't fetch SKYE_PATH environment variable. Error: {}", e.to_string()))
+            )?);
+
+            let tmp_folder = skye_path.join("tmp");
+            
+            create_dir(&tmp_folder)?;
+            archive.extract(&tmp_folder)?;
+            drop(archive);
+
+            defer! {
+                if let Err(e) = remove_dir_all(&tmp_folder) {
+                    println!("An error occurred while cleaning up temporary data: {}", e.to_string());
+                }
+            }
+
+            let (data_absolute, data_relative, package_name) = get_package_data(tmp_folder.to_str().unwrap())?;
+            if data_absolute.len() == 0 {
+                return Err(Error::other("Invalid package file"));
+            } 
+
+            let lib_folder = skye_path.join("lib");
+            let index_file = lib_folder.join("index.json");
+            let pkg_name_str = package_name.to_str().unwrap();
+            let pkg_name_string = String::from(pkg_name_str);
+
+            let mut index_map = {
+                if index_file.exists() {
+                    let index_data = fs::read_to_string(&index_file)?;
+                    let index_json: HashMap<String, Value> = serde_json::from_str(&index_data)?;
+                    
+                    if index_json.contains_key(&pkg_name_string) {
+                        println!("Package \"{}\" is already installed", pkg_name_str);
+                        return Ok(());
+                    }
+
+                    index_json
+                } else {
+                    HashMap::new()
+                }
+            };
+
+            if let Some(setup_file) = data_relative.iter().find(|x| **x == PathBuf::from("setup.skye")) {
+                run_skye(setup_file.clone().into_os_string(), &args.primitives)?;
+            }
+
+            copy_dir_recursive(&tmp_folder, &lib_folder)?;
+
+            let files: Vec<Value> = data_relative
+                .iter()
+                .map(|x| Value::String(String::from(lib_folder.join(x).to_str().unwrap())))
+                .collect();
+
+            index_map.insert(pkg_name_string, Value::Array(files));
+            let mut index = File::create(&index_file)?;
+            let stringified = serde_json::to_string(&index_map)?;
+            index.write_all(stringified.as_bytes())?;            
+
+            println!("Package \"{}\" was installed successfully", pkg_name_str);
+        }
+        CompilerCommand::Remove { package } => {
+            let skye_path = PathBuf::from(env::var(SKYE_PATH_VAR).map_err(
+                |e| Error::other(format!("Couldn't fetch SKYE_PATH environment variable. Error: {}", e.to_string()))
+            )?);
+
+            let lib_folder = skye_path.join("lib");
+            let index_file = lib_folder.join("index.json");
+
+            if !index_file.exists() {
+                return Err(Error::other("Index file does not exist"));
+            }
+
+            let index_data = fs::read_to_string(&index_file)?;
+            let mut index_json: HashMap<String, Value> = serde_json::from_str(&index_data)?;
+
+            if let Some(object) = index_json.get(&package) {
+                if let Value::Array(files) = object {
+                    for file_obj in files {
+                        if let Value::String(file_path) = file_obj {
+                            let file = PathBuf::from(file_path);
+                            
+                            if file.is_file() {
+                                remove_file(file)?;
+                            } else {
+                                remove_dir_all(file)?;
+                            }
+                        } else {
+                            return Err(Error::other("Index file is not structured properly"));
+                        }
+                    }
+                } else {
+                    return Err(Error::other("Index file is not structured properly"));
+                }
+            } else {
+                println!("Package \"{}\" is not installed", package);
+                return Ok(());
+            }
+
+            index_json.remove(&package);
+
+            let mut index = File::create(&index_file)?;
+            let stringified = serde_json::to_string(&index_json)?;
+            index.write_all(stringified.as_bytes())?;
+
+            println!("Package \"{}\" was removed successfully", package);
+        }
     }
 
     Ok(())

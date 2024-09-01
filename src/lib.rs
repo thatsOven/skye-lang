@@ -1,4 +1,4 @@
-use std::{env, ffi::{OsStr, OsString}, fs::{read_dir, remove_file, File}, io::{Error, Read, Write}, path::{Path, PathBuf}, process::Command, rc::Rc};
+use std::{env, ffi::{OsStr, OsString}, fs::{self, create_dir, read_dir, remove_file, File}, io::{Error, Read, Write}, path::{Path, PathBuf}, process::Command, rc::Rc};
 
 use ast::{ImportType, Statement};
 use codegen::CodeGen;
@@ -17,6 +17,7 @@ mod environment;
 mod codegen;
 
 pub const SKYE_PATH_VAR: &str = "SKYE_PATH";
+pub const MAX_PACKAGE_SIZE_BYTES: u128 = 2u128.pow(32); // Max uncompressed package size is 4 GB (basic protection against malicious ZIPs)
 
 pub fn parse(source: &String) -> Option<Vec<Statement>> {
     let mut scanner = Scanner::new(source);
@@ -158,11 +159,12 @@ pub fn run_skye(file: OsString, primitives: &String) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn get_package_data(orig_path: &str) -> Result<(Vec<PathBuf>, PathBuf), Error> {
+pub fn get_package_data(orig_path: &str) -> Result<(Vec<PathBuf>, Vec<PathBuf>, PathBuf), Error> {
     let mut file_count: usize = 0;
     let mut fold_count: usize = 0;
     let mut project_name = PathBuf::new();
-    let mut files = Vec::new();
+    let mut files_absolute = Vec::new();
+    let mut files_relative = Vec::new();
     
     let orig_path_buf = PathBuf::from(orig_path);
 
@@ -178,15 +180,17 @@ pub fn get_package_data(orig_path: &str) -> Result<(Vec<PathBuf>, PathBuf), Erro
                 let name = path.file_stem().unwrap();
 
                 if name == "setup" {
-                    files.push(orig_path_buf.join(path));
+                    files_absolute.push(orig_path_buf.join(&path));
+                    files_relative.push(path);
                     continue;
                 } else if project_name.as_os_str() == "" {
                     project_name = PathBuf::from(name);
                 } else if project_name != name {
-                    return Ok((Vec::new(), PathBuf::new()));
+                    return Ok((Vec::new(), Vec::new(), PathBuf::new()));
                 }
                 
-                files.push(orig_path_buf.join(path));
+                files_absolute.push(orig_path_buf.join(&path));
+                files_relative.push(path);
                 file_count += 1;
                 continue;
             }
@@ -194,46 +198,67 @@ pub fn get_package_data(orig_path: &str) -> Result<(Vec<PathBuf>, PathBuf), Erro
             if project_name.as_os_str() == "" {
                 project_name = PathBuf::from(name);
             } else if project_name.as_os_str() != name {
-                return Ok((Vec::new(), PathBuf::new()));
+                return Ok((Vec::new(), Vec::new(), PathBuf::new()));
             }
 
-            files.push(orig_path_buf.join(path));
+            files_absolute.push(orig_path_buf.join(&path));
+            files_relative.push(path);
             fold_count += 1;
         } else {
-            return Ok((Vec::new(), PathBuf::new()));
+            return Ok((Vec::new(), Vec::new(), PathBuf::new()));
         }
     }
 
     if file_count != 1 || fold_count != 1 {
-        return Ok((Vec::new(), PathBuf::new()));
+        return Ok((Vec::new(), Vec::new(), PathBuf::new()));
     }
 
-    Ok((files, project_name))
+    Ok((files_absolute, files_relative, project_name))
 }
 
-pub fn write_package(data: &Vec<PathBuf>, options: SimpleFileOptions, writer: &mut ZipWriter<File>) -> Result<(), Error> {
-    for item in data {
+pub fn write_package(data_absolute: &Vec<PathBuf>, data_relative: &Vec<PathBuf>, options: SimpleFileOptions, writer: &mut ZipWriter<File>) -> Result<(), Error> {
+    for (i, item) in data_absolute.iter().enumerate() {
         if item.is_file() {
             let mut file = File::open(&item)?;
-            let name = item.to_str().unwrap();
+            let output_name = data_relative[i].to_str().unwrap();
 
-            println!("exporting {}", name);
+            println!("Exporting {}", output_name);
 
-            writer.start_file(name, options)?;
+            writer.start_file(output_name, options)?;
             let mut buffer = Vec::new();
             file.read_to_end(&mut buffer)?;
             writer.write_all(&buffer)?;
         } else {
-            writer.add_directory_from_path(item, options)?;
+            writer.add_directory_from_path(&data_relative[i], options)?;
 
-            let inner_data = read_dir(item)?
+            let inner_data_absolute = read_dir(item)?
                 .filter(|x| x.is_ok())
                 .map(|x| item.join(x.unwrap().file_name()))
                 .collect();
 
-            write_package(&inner_data, options, writer)?;
+            let inner_data_relative = read_dir(item)?
+                .filter(|x| x.is_ok())
+                .map(|x| data_relative[i].join(x.unwrap().file_name()))
+                .collect();
+
+            write_package(&inner_data_absolute, &inner_data_relative, options, writer)?;
         }
     }
 
+    Ok(())
+}
+
+pub fn copy_dir_recursive(src: &PathBuf, dst: &PathBuf) -> Result<(), Error> {
+    for entry in read_dir(src)? {
+        let path = src.join(&entry?.file_name());
+        
+        if path.is_file() {
+            fs::copy(&path, &dst.join(path.file_name().unwrap()))?;
+        } else {
+            let dst_new = dst.join(path.file_name().unwrap());
+            create_dir(&dst_new)?;
+            copy_dir_recursive(&path, &dst_new)?;
+        }
+    }
     Ok(())
 }
