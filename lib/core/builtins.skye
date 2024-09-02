@@ -563,7 +563,7 @@ namespace core {
 
                 while r < amt {
                     const chunk = amt - r >= @FILE_READ_CHUNK_SIZE ? @FILE_READ_CHUNK_SIZE : amt - r;
-                    buf.resize(r + chunk);
+                    buf.grow(chunk);
 
                     const amtRead = self.readRaw(
                         @cast(voidptr, buf.array.ptr + buf.length),
@@ -591,7 +591,7 @@ namespace core {
                 let r = 0usz;
 
                 while true {
-                    buf.resize(r + 1);
+                    buf.grow(1);
 
                     const amtRead = self.readRaw(
                         @cast(voidptr, buf.array.ptr + buf.length),
