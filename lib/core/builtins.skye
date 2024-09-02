@@ -593,7 +593,7 @@ namespace core {
                 while true {
                     buf.resize(r + 1);
 
-                    let amtRead = self.readRaw(
+                    const amtRead = self.readRaw(
                         @cast(voidptr, buf.array.ptr + buf.length),
                         @sizeOf(char), 1
                     );
