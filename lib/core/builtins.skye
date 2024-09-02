@@ -574,7 +574,7 @@ namespace core {
                     r += amtRead;
 
                     if amtRead != @FILE_READ_CHUNK_SIZE {
-                        return r;  
+                        break;
                     }
                 }
 
