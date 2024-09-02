@@ -2201,6 +2201,22 @@ impl CodeGen {
             }
             Expression::Ternary(_, cond_expr, then_branch_expr, else_branch_expr) => {
                 let cond = self.evaluate(&cond_expr, index, allow_unknown)?;
+
+                match cond.type_ {
+                    SkyeType::U8  | SkyeType::I8  | SkyeType::U16 | SkyeType::I16 |
+                    SkyeType::U32 | SkyeType::I32 | SkyeType::U64 | SkyeType::I64 |
+                    SkyeType::Usz | SkyeType::AnyInt => (),
+                    _ => {
+                        ast_error!(
+                            self, cond_expr, 
+                            format!(
+                                "Expecting expression of primitive arithmetic type for ternary operator condition (got {})",
+                                cond.type_.stringify_native()
+                            ).as_ref()
+                        );
+                    }
+                }
+
                 let then_branch = self.evaluate(&then_branch_expr, index, allow_unknown)?;
                 let else_branch = self.evaluate(&else_branch_expr, index, allow_unknown)?;
 
