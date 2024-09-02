@@ -742,7 +742,12 @@ impl CodeGen {
                                 return Ok(SkyeValue::new(Rc::from(call_output.as_ref()), return_evaluated, true));
                             }
                         } else {
-                            // TODO
+                            if let Some(tok) = existing.tok {
+                                ast_error!(self, callee_expr, "Template generation for this call resulted in an invalid type");
+                                token_note!(tok, "This definition is invalid. Change the name of this symbol");
+                            } else {
+                                ast_error!(self, callee_expr, "Template generation for this call resulted in an invalid type. An invalid symbol definition is present in the code");
+                            }
                         }
                     }
 
@@ -2975,7 +2980,7 @@ impl CodeGen {
 
                 if let SkyeType::Enum(_, _, base_name) = value.type_ {
                     if base_name.as_ref() == "core_DOT_Result" {
-                        ast_error!(self, expr, "Cannot ignore error implicitly");
+                        ast_warning!(expr, "Error is being ignored implictly");
                         ast_note!(expr, "Handle this error or discard it using the \"let _ = x\" syntax");
                     }
                 }
@@ -3838,21 +3843,18 @@ impl CodeGen {
                     self.declarations.push(&full_name);
                     self.declarations.push(";\n");
                 }
+
+                let mut def_buf = CodeOutput::new();
                 
                 if *has_body && binding.is_none() {
-                    if !self.struct_definitions.contains_key(&base_name) {
-                        self.struct_definitions.insert(Rc::clone(&base_name), CodeOutput::new());
-                        self.struct_defs_order.push(Rc::clone(&base_name));
-                    }
-                    
-                    self.struct_definitions.get_mut(&base_name).unwrap().push(&buf);
+                    def_buf.push(&buf);
                 }
 
                 let type_ = {
                     if *has_body {
                         if binding.is_none() {
-                            self.struct_definitions.get_mut(&base_name).unwrap().push("{\n");
-                            self.struct_definitions.get_mut(&base_name).unwrap().inc_indent();
+                            def_buf.push("{\n");
+                            def_buf.inc_indent();
                         }
     
                         let mut output_fields = HashMap::new();
@@ -3884,21 +3886,24 @@ impl CodeGen {
                                 output_fields.insert(Rc::clone(&field.name.lexeme), (field_type, field.is_const));
                                 
                                 if binding.is_none() {
-                                    self.struct_definitions.get_mut(&base_name).unwrap().push_indent();
-                                    self.struct_definitions.get_mut(&base_name).unwrap().push(&field_type_stringified);
-                                    self.struct_definitions.get_mut(&base_name).unwrap().push(" ");
-                                    self.struct_definitions.get_mut(&base_name).unwrap().push(&field.name.lexeme);
-                                    self.struct_definitions.get_mut(&base_name).unwrap().push(";\n");
+                                    def_buf.push_indent();
+                                    def_buf.push(&field_type_stringified);
+                                    def_buf.push(" ");
+                                    def_buf.push(&field.name.lexeme);
+                                    def_buf.push(";\n");
                                 }
                             }
                         }
                         
                         if binding.is_none() {
-                            self.struct_definitions.get_mut(&base_name).unwrap().dec_indent();
-                            self.struct_definitions.get_mut(&base_name).unwrap().push("} ");
-                            self.struct_definitions.get_mut(&base_name).unwrap().push(&full_name);
-                            self.struct_definitions.get_mut(&base_name).unwrap().push(";\n\n");
+                            def_buf.dec_indent();
+                            def_buf.push("} ");
+                            def_buf.push(&full_name);
+                            def_buf.push(";\n\n");
                         }
+                        
+                        self.struct_definitions.insert(Rc::clone(&full_name), def_buf);
+                        self.struct_defs_order.push(Rc::clone(&full_name));
 
                         SkyeType::Struct(Rc::clone(&full_name), Some(output_fields), base_name)
                     } else {
@@ -4213,6 +4218,8 @@ impl CodeGen {
                         let base_struct_name = self.get_generics(&name.lexeme, generics, &self.environment)?;
                         let full_struct_name = self.get_name(&Rc::from(format!("SKYE_STRUCT_{}", base_struct_name)));
 
+                        let mut def_buf = CodeOutput::new();
+
                         if write_output {
                             let mut buf = String::from("typedef struct ");
                             buf.push_str(&full_struct_name);
@@ -4221,19 +4228,14 @@ impl CodeGen {
                             self.declarations.push(&buf);
                             self.declarations.push(&full_name);
                             self.declarations.push(";\n");
-
-                            if !self.struct_definitions.contains_key(&base_name) {
-                                self.struct_definitions.insert(Rc::clone(&base_name), CodeOutput::new());
-                                self.struct_defs_order.push(Rc::clone(&base_name));
-                            }
                             
-                            self.struct_definitions.get_mut(&base_name).unwrap().push(&buf);
-                            self.struct_definitions.get_mut(&base_name).unwrap().push("{\n");
-                            self.struct_definitions.get_mut(&base_name).unwrap().inc_indent();
+                            def_buf.push(&buf);
+                            def_buf.push("{\n");
+                            def_buf.inc_indent();
 
-                            self.struct_definitions.get_mut(&base_name).unwrap().push_indent();
-                            self.struct_definitions.get_mut(&base_name).unwrap().push("union {\n");
-                            self.struct_definitions.get_mut(&base_name).unwrap().inc_indent();
+                            def_buf.push_indent();
+                            def_buf.push("union {\n");
+                            def_buf.inc_indent();
                         }   
     
                         let mut output_fields = HashMap::new();
@@ -4359,11 +4361,11 @@ impl CodeGen {
                                 }
                             } else {
                                 if write_output {
-                                    self.struct_definitions.get_mut(&base_name).unwrap().push_indent();
-                                    self.struct_definitions.get_mut(&base_name).unwrap().push(&variant_type.stringify());
-                                    self.struct_definitions.get_mut(&base_name).unwrap().push(" ");
-                                    self.struct_definitions.get_mut(&base_name).unwrap().push(&lowercase_variant);
-                                    self.struct_definitions.get_mut(&base_name).unwrap().push(";\n");
+                                    def_buf.push_indent();
+                                    def_buf.push(&variant_type.stringify());
+                                    def_buf.push(" ");
+                                    def_buf.push(&lowercase_variant);
+                                    def_buf.push(";\n");
                                 }
                                 
                                 output_fields.insert(Rc::from(lowercase_variant), variant_type);
@@ -4373,21 +4375,21 @@ impl CodeGen {
                         if write_output {
                             output_fields.insert(Rc::from("kind"), simple_enum_type.clone());
 
-                            self.struct_definitions.get_mut(&base_name).unwrap().dec_indent();
-                            self.struct_definitions.get_mut(&base_name).unwrap().push_indent();
-                            self.struct_definitions.get_mut(&base_name).unwrap().push("};\n\n");
+                            def_buf.dec_indent();
+                            def_buf.push_indent();
+                            def_buf.push("};\n\n");
     
-                            self.struct_definitions.get_mut(&base_name).unwrap().push_indent();
-                            self.struct_definitions.get_mut(&base_name).unwrap().push(&simple_enum_full_name);
-                            self.struct_definitions.get_mut(&base_name).unwrap().push(" kind;\n");
-                            self.struct_definitions.get_mut(&base_name).unwrap().dec_indent();
+                            def_buf.push_indent();
+                            def_buf.push(&simple_enum_full_name);
+                            def_buf.push(" kind;\n");
+                            def_buf.dec_indent();
     
-                            self.struct_definitions.get_mut(&base_name).unwrap().push_indent();
-                            self.struct_definitions.get_mut(&base_name).unwrap().push("} ");
-                            self.struct_definitions.get_mut(&base_name).unwrap().push(&full_name);
-                            self.struct_definitions.get_mut(&base_name).unwrap().push(";\n\n");
+                            def_buf.push_indent();
+                            def_buf.push("} ");
+                            def_buf.push(&full_name);
+                            def_buf.push(";\n\n");
     
-                            self.struct_definitions.get_mut(&base_name).unwrap().push(&initializers.code);
+                            def_buf.push(&initializers.code);
 
                             let struct_output_type = SkyeType::Enum(
                                 Rc::clone(&full_name), Some(output_fields),
@@ -4451,6 +4453,9 @@ impl CodeGen {
                                     );
                                 }
                             }
+
+                            self.struct_definitions.insert(Rc::clone(&full_name), def_buf);
+                            self.struct_defs_order.push(Rc::clone(&full_name));
 
                             Some(struct_output_type)
                         } else {
@@ -4870,21 +4875,18 @@ impl CodeGen {
                     self.declarations.push(&full_name);
                     self.declarations.push(";\n");
                 }
+
+                let mut def_buf = CodeOutput::new();
                 
                 if *has_body && binding.is_none() {
-                    if !self.struct_definitions.contains_key(&full_name) {
-                        self.struct_definitions.insert(Rc::clone(&full_name), CodeOutput::new());
-                        self.struct_defs_order.push(Rc::clone(&full_name));
-                    }
-                    
-                    self.struct_definitions.get_mut(&full_name).unwrap().push(&buf);
+                    def_buf.push(&buf);
                 }
 
                 let type_ = {
                     if *has_body {
                         if binding.is_none() {
-                            self.struct_definitions.get_mut(&full_name).unwrap().push("{\n");
-                            self.struct_definitions.get_mut(&full_name).unwrap().inc_indent();
+                            def_buf.push("{\n");
+                            def_buf.inc_indent();
                         }
     
                         let mut output_fields = HashMap::new();
@@ -4914,21 +4916,24 @@ impl CodeGen {
                                 output_fields.insert(Rc::clone(&field.name.lexeme), field_type);
                                 
                                 if binding.is_none() {
-                                    self.struct_definitions.get_mut(&full_name).unwrap().push_indent();
-                                    self.struct_definitions.get_mut(&full_name).unwrap().push(&field_type_stringified);
-                                    self.struct_definitions.get_mut(&full_name).unwrap().push(" ");
-                                    self.struct_definitions.get_mut(&full_name).unwrap().push(&field.name.lexeme);
-                                    self.struct_definitions.get_mut(&full_name).unwrap().push(";\n");
+                                    def_buf.push_indent();
+                                    def_buf.push(&field_type_stringified);
+                                    def_buf.push(" ");
+                                    def_buf.push(&field.name.lexeme);
+                                    def_buf.push(";\n");
                                 }
                             }
                         }
                         
                         if binding.is_none() {
-                            self.struct_definitions.get_mut(&full_name).unwrap().dec_indent();
-                            self.struct_definitions.get_mut(&full_name).unwrap().push("} ");
-                            self.struct_definitions.get_mut(&full_name).unwrap().push(&full_name);
-                            self.struct_definitions.get_mut(&full_name).unwrap().push(";\n\n");
+                            def_buf.dec_indent();
+                            def_buf.push("} ");
+                            def_buf.push(&full_name);
+                            def_buf.push(";\n\n");
                         }
+
+                        self.struct_definitions.insert(Rc::clone(&full_name), def_buf);
+                        self.struct_defs_order.push(Rc::clone(&full_name));
 
                         SkyeType::Union(Rc::clone(&full_name), Some(output_fields))
                     } else {
@@ -5017,20 +5022,17 @@ impl CodeGen {
                     self.declarations.push(";\n");
                 }
                 
+                let mut def_buf = CodeOutput::new();
+                
                 if *has_body && binding.is_none() {
-                    if !self.struct_definitions.contains_key(&full_name) {
-                        self.struct_definitions.insert(Rc::clone(&full_name), CodeOutput::new());
-                        self.struct_defs_order.push(Rc::clone(&full_name));
-                    }
-                    
-                    self.struct_definitions.get_mut(&full_name).unwrap().push(&buf);
+                    def_buf.push(&buf);
                 }
 
                 let type_ = {
                     if *has_body {
                         if binding.is_none() {
-                            self.struct_definitions.get_mut(&full_name).unwrap().push("{\n");
-                            self.struct_definitions.get_mut(&full_name).unwrap().inc_indent();
+                            def_buf.push("{\n");
+                            def_buf.inc_indent();
                         }
     
                         let mut output_fields = HashMap::new();
@@ -5052,22 +5054,25 @@ impl CodeGen {
                                 output_fields.insert(Rc::clone(&field.name.lexeme), field_type);
                                 
                                 if binding.is_none() {
-                                    self.struct_definitions.get_mut(&full_name).unwrap().push_indent();
-                                    self.struct_definitions.get_mut(&full_name).unwrap().push(&field_type_stringified);
-                                    self.struct_definitions.get_mut(&full_name).unwrap().push(" ");
-                                    self.struct_definitions.get_mut(&full_name).unwrap().push(&field.name.lexeme);
-                                    self.struct_definitions.get_mut(&full_name).unwrap().push(format!(": {}", field.bits).as_ref());
-                                    self.struct_definitions.get_mut(&full_name).unwrap().push(";\n");
+                                    def_buf.push_indent();
+                                    def_buf.push(&field_type_stringified);
+                                    def_buf.push(" ");
+                                    def_buf.push(&field.name.lexeme);
+                                    def_buf.push(format!(": {}", field.bits).as_ref());
+                                    def_buf.push(";\n");
                                 }
                             }
                         }
                         
                         if binding.is_none() {
-                            self.struct_definitions.get_mut(&full_name).unwrap().dec_indent();
-                            self.struct_definitions.get_mut(&full_name).unwrap().push("} ");
-                            self.struct_definitions.get_mut(&full_name).unwrap().push(&full_name);
-                            self.struct_definitions.get_mut(&full_name).unwrap().push(";\n\n");
+                            def_buf.dec_indent();
+                            def_buf.push("} ");
+                            def_buf.push(&full_name);
+                            def_buf.push(";\n\n");
                         }
+
+                        self.struct_definitions.insert(Rc::clone(&full_name), def_buf);
+                        self.struct_defs_order.push(Rc::clone(&full_name));
 
                         SkyeType::Bitfield(Rc::clone(&full_name), Some(output_fields))
                     } else {

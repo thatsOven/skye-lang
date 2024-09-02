@@ -367,8 +367,6 @@ namespace core {
         }
     }
 
-    use Ptr[char, core::mem::HeapAllocator] as _;
-
     struct MutableString[U = core::mem::HeapAllocator] {
         array: Ptr[char, U],
         length: usz,

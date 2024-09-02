@@ -5,7 +5,6 @@ import <"string.h">;
 #bind fn malloc(size: usz) voidptr;
 #bind fn realloc(ptr: voidptr, size: usz) voidptr;
 #bind fn free(ptr: voidptr);
-#bind fn printf(const fmt: rawstring, len: usz, a: rawstring);
 #bind fn strlen(const str: rawstring) usz;
 #bind fn exit(code: i32);
 
