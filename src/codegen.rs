@@ -285,7 +285,15 @@ impl CodeGen {
         let val = self.evaluate(return_type_expr, index, allow_unknown)?;
 
         match val.type_ {
-            SkyeType::Type(inner_type) => Ok(*inner_type),
+            SkyeType::Type(inner_type) => {
+                if inner_type.check_completeness() {
+                    Ok(*inner_type)
+                } else {
+                    ast_error!(self, return_type_expr, "Cannot use incomplete type directly");
+                    ast_note!(return_type_expr, "Define this type or reference it through a pointer");
+                    Err(ExecutionInterrupt::Error)
+                }
+            }
             SkyeType::Void => Ok(val.type_),
             _ => {
                 ast_error!(self, return_type_expr, format!("Expecting type as return type (got {})", val.type_.stringify_native()).as_ref());
@@ -300,30 +308,37 @@ impl CodeGen {
         for i in 0 .. params.len() {
             let param_type: SkyeType = {
                 let inner_param_type = self.evaluate(&params[i].type_, index, allow_unknown)?.type_;
-                if let SkyeType::Type(inner_type) = inner_param_type {
-                    if has_decl {
-                        if let SkyeType::Function(existing_params, ..) = &existing.as_ref().unwrap().type_ {
-                            if !existing_params[i].type_.equals(&inner_type, EqualsLevel::Typewise) {
-                                ast_error!(
-                                    self, params[i].type_, 
-                                    format!(
-                                        "Function parameter type does not match declaration parameter type (expecting {} but got {})",
-                                        inner_type.stringify_native(), existing_params[i].type_.stringify_native()
-                                    ).as_ref()
-                                );
+                if inner_param_type.check_completeness() {
+                    if let SkyeType::Type(inner_type) = inner_param_type {
+                        if has_decl {
+                            if let SkyeType::Function(existing_params, ..) = &existing.as_ref().unwrap().type_ {
+                                if !existing_params[i].type_.equals(&inner_type, EqualsLevel::Typewise) {
+                                    ast_error!(
+                                        self, params[i].type_, 
+                                        format!(
+                                            "Function parameter type does not match declaration parameter type (expecting {} but got {})",
+                                            inner_type.stringify_native(), existing_params[i].type_.stringify_native()
+                                        ).as_ref()
+                                    );
+                                }
                             }
                         }
+                                
+                        *inner_type
+                    } else {
+                        ast_error!(
+                            self, params[i].type_, 
+                            format!(
+                                "Expecting type as parameter type (got {})", 
+                                inner_param_type.stringify_native()
+                            ).as_ref()
+                        );
+    
+                        SkyeType::Void
                     }
-                            
-                    *inner_type
                 } else {
-                    ast_error!(
-                        self, params[i].type_, 
-                        format!(
-                            "Expecting type as parameter type (got {})", 
-                            inner_param_type.stringify_native()
-                        ).as_ref()
-                    );
+                    ast_error!(self, params[i].type_, "Cannot use incomplete type directly");
+                    ast_note!(params[i].type_, "Define this type or reference it through a pointer");
 
                     SkyeType::Void
                 }
@@ -589,6 +604,12 @@ impl CodeGen {
                                 def_evaluated.type_
                             }
                         };
+
+                        if !def_type.check_completeness() {
+                            ast_error!(self, params[i].type_, "Cannot use incomplete type directly");
+                            ast_note!(params[i].type_, "Define this type or reference it through a pointer");
+                            ast_note!(expr, "This error is a result of template generation originating from this call");
+                        }
                         
                         if let SkyeType::Type(inner_type) = &def_type {
                             if inner_type.equals(&call_evaluated.type_, EqualsLevel::Permissive) {
@@ -704,7 +725,17 @@ impl CodeGen {
                     let return_evaluated = {
                         let ret_type = self.evaluate(&return_type_expr, index, false)?.type_;
                         match ret_type {
-                            SkyeType::Type(inner_type) => *inner_type.clone(),
+                            SkyeType::Type(inner_type) => {
+                                if inner_type.check_completeness() {
+                                    *inner_type.clone()
+                                } else {
+                                    ast_error!(self, return_type_expr, "Cannot use incomplete type directly");
+                                    ast_note!(return_type_expr, "Define this type or reference it through a pointer");
+                                    ast_note!(expr, "This error is a result of template generation originating from this call");
+
+                                    return Err(ExecutionInterrupt::Error);
+                                }
+                            }
                             SkyeType::Void => ret_type,
                             _ => {
                                 ast_error!(
@@ -1211,6 +1242,12 @@ impl CodeGen {
                         TokenType::Bang => {
                             if matches!(inner.type_, SkyeType::Type(_)) | matches!(inner.type_, SkyeType::Void) | matches!(inner.type_, SkyeType::Unknown(_)) {
                                 // !type syntax for void!type (result operator)
+                                
+                                if !inner.type_.check_completeness() {
+                                    ast_error!(self, inner_expr, "Cannot use incomplete type directly");
+                                    ast_note!(inner_expr, "Define this type or reference it through a pointer");
+                                    return Err(ExecutionInterrupt::Error);
+                                }
 
                                 let mut custom_token = op.clone();
                                 custom_token.set_lexeme("core_DOT_Result");
@@ -1237,6 +1274,12 @@ impl CodeGen {
                         TokenType::Question => {
                             if matches!(inner.type_, SkyeType::Type(_)) | matches!(inner.type_, SkyeType::Void) | matches!(inner.type_, SkyeType::Unknown(_)) {
                                 // option operator
+
+                                if !inner.type_.check_completeness() {
+                                    ast_error!(self, inner_expr, "Cannot use incomplete type directly");
+                                    ast_note!(inner_expr, "Define this type or reference it through a pointer");
+                                    return Err(ExecutionInterrupt::Error);
+                                }
 
                                 let mut custom_token = op.clone();
                                 custom_token.set_lexeme("core_DOT_Option");
@@ -1601,6 +1644,12 @@ impl CodeGen {
                                             let ret_type = self.evaluate(return_type.as_ref().unwrap(), index, allow_unknown)?;
 
                                             if let SkyeType::Type(inner_type) = ret_type.type_ {
+                                                if !inner_type.check_completeness() {
+                                                    ast_error!(self, return_type.as_ref().unwrap(), "Cannot use incomplete type directly");
+                                                    ast_note!(return_type.as_ref().unwrap(), "Define this type or reference it through a pointer");
+                                                    return Err(ExecutionInterrupt::Error);
+                                                }
+
                                                 Ok(SkyeValue::new(Rc::clone(name), *inner_type, true))
                                             } else {
                                                 ast_error!(
@@ -1965,10 +2014,22 @@ impl CodeGen {
                     TokenType::Bang => {
                         let left_ok = matches!(left.type_, SkyeType::Type(_)) | matches!(left.type_, SkyeType::Void) | matches!(left.type_, SkyeType::Unknown(_));
                         if left_ok {
+                            if !left.type_.check_completeness() {
+                                ast_error!(self, left_expr, "Cannot use incomplete type directly");
+                                ast_note!(left_expr, "Define this type or reference it through a pointer");
+                                return Err(ExecutionInterrupt::Error);
+                            }
+
                             let right = self.evaluate(&right_expr, index, allow_unknown)?;
                             
                             if matches!(right.type_, SkyeType::Type(_)) | matches!(right.type_, SkyeType::Void) | matches!(right.type_, SkyeType::Unknown(_)) {
                                 // result operator
+
+                                if !right.type_.check_completeness() {
+                                    ast_error!(self, right_expr, "Cannot use incomplete type directly");
+                                    ast_note!(left_expr, "Define this type or reference it through a pointer");
+                                    return Err(ExecutionInterrupt::Error);
+                                }
 
                                 let mut custom_token = op.clone();
                                 custom_token.set_lexeme("core_DOT_Result");
@@ -2159,6 +2220,12 @@ impl CodeGen {
 
                 match &identifier_type.type_ {
                     SkyeType::Type(inner_type) => {
+                        if !inner_type.check_completeness() {
+                            ast_error!(self, identifier_expr, "Cannot use incomplete type directly");
+                            ast_note!(identifier_expr, "Define this type or reference it through a pointer");
+                            return Err(ExecutionInterrupt::Error);
+                        }
+
                         match &**inner_type {
                             SkyeType::Struct(name, def_fields, _) => {
                                 if let Some(defined_fields) = def_fields {
@@ -2377,6 +2444,13 @@ impl CodeGen {
                                             def_evaluated.type_
                                         }
                                     };
+
+                                    if !def_type.check_completeness() {
+                                        ast_error!(self, def_field_expr, "Cannot use incomplete type directly");
+                                        ast_note!(def_field_expr, "Define this type or reference it through a pointer");
+                                        ast_note!(expr, "This error is a result of template generation originating from this compound literal");
+                                        return Err(ExecutionInterrupt::Error);
+                                    }
 
                                     if let SkyeType::Type(inner_type) = &def_type {
                                         if inner_type.equals(&literal_evaluated.type_, EqualsLevel::Permissive) {
@@ -2645,6 +2719,12 @@ impl CodeGen {
 
                                     continue;
                                 }
+                            }
+
+                            if !evaluated.check_completeness() {
+                                ast_error!(self, arguments[i], "Cannot use incomplete type directly");
+                                ast_note!(arguments[i], "Define this type or reference it through a pointer");
+                                return Err(ExecutionInterrupt::Error);
                             }
 
                             if let Some(bounds) = &generic.bounds {
@@ -2989,7 +3069,15 @@ impl CodeGen {
                         let type_spec_evaluated = self.evaluate(type_, index, false)?;
 
                         match type_spec_evaluated.type_ {
-                            SkyeType::Type(inner_type) => Some(*inner_type),
+                            SkyeType::Type(inner_type) => {
+                                if inner_type.check_completeness() {
+                                    Some(*inner_type)
+                                } else {
+                                    ast_error!(self, type_, "Cannot use incomplete type directly");
+                                    ast_note!(type_, "Define this type or reference it through a pointer");
+                                    Some(SkyeType::Void)
+                                }
+                            }
                             SkyeType::Group(..) => {
                                 ast_error!(self, type_, "Cannot use type group for variable declaration");
                                 Some(SkyeType::Void)
@@ -3847,7 +3935,15 @@ impl CodeGen {
                                 let tmp = self.evaluate(&field.expr, index, false)?.type_;
 
                                 match tmp {
-                                    SkyeType::Type(inner_type) => *inner_type,
+                                    SkyeType::Type(inner_type) => {
+                                        if inner_type.check_completeness() {
+                                            *inner_type
+                                        } else {
+                                            ast_error!(self, field.expr, "Cannot use incomplete type directly");
+                                            ast_note!(field.expr, "Define this type or reference it through a pointer");
+                                            SkyeType::Void
+                                        }
+                                    }
                                     SkyeType::Unknown(_) => tmp,
                                     _ => {
                                         ast_error!(
@@ -4228,7 +4324,15 @@ impl CodeGen {
                                 let type_ = self.evaluate(&variant.expr, index, false)?.type_;
                                 match type_ {
                                     SkyeType::Void | SkyeType::Unknown(_) => type_,
-                                    SkyeType::Type(inner_type) => *inner_type,
+                                    SkyeType::Type(inner_type) => {
+                                        if inner_type.check_completeness() {
+                                            *inner_type
+                                        } else {
+                                            ast_error!(self, variant.expr, "Cannot use incomplete type directly");
+                                            ast_note!(variant.expr, "Define this type or reference it through a pointer");
+                                            SkyeType::Void
+                                        }
+                                    }
                                     _ => {
                                         ast_error!(
                                             self, variant.expr, 
@@ -4658,7 +4762,13 @@ impl CodeGen {
                             let evaluated = self.evaluate(default, index, false)?;
     
                             if matches!(evaluated.type_, SkyeType::Type(_)) || matches!(evaluated.type_, SkyeType::Void) {
-                                Some(evaluated.type_)
+                                if evaluated.type_.check_completeness() {
+                                    Some(evaluated.type_)
+                                } else {
+                                    ast_error!(self, default, "Cannot use incomplete type directly");
+                                    ast_note!(default, "Define this type or reference it through a pointer");
+                                    None
+                                }
                             } else {
                                 ast_error!(
                                     self, default, 
@@ -4875,8 +4985,15 @@ impl CodeGen {
                             let field_type = {
                                 let inner_field_type = self.evaluate(&field.expr, index, false)?.type_;
                                 
-                                if let SkyeType::Type(inner_type) = inner_field_type {                    
-                                    *inner_type
+                                if let SkyeType::Type(inner_type) = inner_field_type {
+                                    if inner_type.check_completeness() {
+                                        *inner_type
+                                    } else {
+                                        ast_error!(self, field.expr, "Cannot use incomplete type directly");
+                                        ast_note!(field.expr, "Define this type or reference it through a pointer");
+                                        SkyeType::Void
+                                    }          
+                                    
                                 } else {
                                     ast_error!(
                                         self, field.expr, 

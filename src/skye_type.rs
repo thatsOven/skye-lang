@@ -780,4 +780,23 @@ impl SkyeType {
             }
         }
     }
+
+    pub fn check_completeness(&self) -> bool {
+        match self {
+            SkyeType::Type(inner) => inner.check_completeness(),
+
+            SkyeType::U8  | SkyeType::U16 | SkyeType::U32 | SkyeType::U64 | SkyeType::Usz |
+            SkyeType::I8  | SkyeType::I16 | SkyeType::I32 | SkyeType::I64 | SkyeType::AnyInt |
+            SkyeType::F32 | SkyeType::F64 | SkyeType::AnyFloat |
+            SkyeType::Char | SkyeType::RawString | SkyeType::Void | SkyeType::Unknown(_) | 
+            SkyeType::Pointer(..) | SkyeType::Function(..) | SkyeType::Enum(..) => true,
+
+            SkyeType::Group(..) | SkyeType::Namespace(_) | SkyeType::Template(..) |
+            SkyeType::Macro(..) => false,
+            
+            SkyeType::Struct(_, fields, _) => fields.is_some(),
+            SkyeType::Union(_, fields) |
+            SkyeType::Bitfield(_, fields) => fields.is_some()
+        }
+    }
 }
