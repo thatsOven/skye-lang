@@ -925,16 +925,18 @@ impl Parser {
     }
 
     fn struct_decl(&mut self, incoming_generics: &Vec<Generic>) -> Option<Statement> {
-        if self.curr_qualifiers.len() != 0 {
-            let kw = self.previous();
-            token_error!(self, kw, "Cannot use qualifiers on \"struct\" statement");
+        let mut typedefed = false;
+        let mut force_defined = false;
 
-            for (_, qualifier) in self.curr_qualifiers.iter() {
-                token_note!(qualifier, "Qualifier specified here");
+        for (name, qualifier) in self.curr_qualifiers.iter() {
+            match name.as_ref() {
+                "typedef" => typedefed = true,
+                "defined" => force_defined = true,
+                _ => token_error!(self, qualifier, "Unsupported qualifier for struct definition")
             }
-
-            self.curr_qualifiers.clear();
         }
+
+        self.curr_qualifiers.clear();
 
         let name = self.consume(TokenType::Identifier, "Expecting struct name")?.clone();
         let generics = self.parse_generics(incoming_generics)?;
@@ -948,6 +950,10 @@ impl Parser {
                     Some(self.consume(TokenType::Identifier, "Expecting C struct name after struct binding")?.clone())
                 }
             } else {
+                if typedefed {
+                    token_error!(self, self.previous(), "Cannot use #typedef qualifier on struct that is not a binding");
+                }
+
                 None
             }
         };
@@ -980,7 +986,7 @@ impl Parser {
         };
         
         if generics.len() == 0 {
-            Some(Statement::Struct(name, fields, has_body, binding, Vec::new()))
+            Some(Statement::Struct(name, fields, has_body, binding, Vec::new(), typedefed, force_defined))
         } else {
             let mut generic_names = Vec::new();
             for generic in &generics {
@@ -989,7 +995,7 @@ impl Parser {
 
             Some(Statement::Template(
                 name.clone(), 
-                Box::new(Statement::Struct(name, fields, has_body, binding, generic_names.clone())),
+                Box::new(Statement::Struct(name, fields, has_body, binding, generic_names.clone(), typedefed, force_defined)),
                 generics, generic_names
             ))
         } 
@@ -1068,16 +1074,18 @@ impl Parser {
     }
 
     fn enum_decl(&mut self, incoming_generics: &Vec<Generic>) -> Option<Statement> {
-        if self.curr_qualifiers.len() != 0 {
-            let kw = self.previous();
-            token_error!(self, kw, "Cannot use qualifiers on \"enum\" statement");
+        let mut typedefed = false;
+        let mut force_defined = false;
 
-            for (_, qualifier) in self.curr_qualifiers.iter() {
-                token_note!(qualifier, "Qualifier specified here");
+        for (name, qualifier) in self.curr_qualifiers.iter() {
+            match name.as_ref() {
+                "typedef" => typedefed = true,
+                "defined" => force_defined = true,
+                _ => token_error!(self, qualifier, "Unsupported qualifier for enum definition")
             }
-
-            self.curr_qualifiers.clear();
         }
+
+        self.curr_qualifiers.clear();
 
         let name = self.consume(TokenType::Identifier, "Expecting enum name")?.clone();
         let generics = self.parse_generics(incoming_generics)?;
@@ -1091,6 +1099,10 @@ impl Parser {
                     Some(self.consume(TokenType::Identifier, "Expecting C enum name after enum binding")?.clone())
                 }
             } else {
+                if typedefed {
+                    token_error!(self, self.previous(), "Cannot use #typedef qualifier on enum that is not a binding");
+                }
+
                 None
             }
         };
@@ -1163,7 +1175,7 @@ impl Parser {
         }
 
         if generics.len() == 0 {
-            Some(Statement::Enum(name, type_, variants, is_simple, has_body, binding, Vec::new()))
+            Some(Statement::Enum(name, type_, variants, is_simple, has_body, binding, Vec::new(), typedefed, force_defined))
         } else {
             let mut generic_names = Vec::new();
             for generic in &generics {
@@ -1172,7 +1184,7 @@ impl Parser {
 
             Some(Statement::Template(
                 name.clone(), 
-                Box::new(Statement::Enum(name, type_, variants, is_simple, has_body, binding, generic_names.clone())),
+                Box::new(Statement::Enum(name, type_, variants, is_simple, has_body, binding, generic_names.clone(), typedefed, force_defined)),
                 generics, generic_names
             ))
         }        
@@ -1213,16 +1225,18 @@ impl Parser {
     }
 
     fn union_decl(&mut self) -> Option<Statement> {
-        if self.curr_qualifiers.len() != 0 {
-            let kw = self.previous();
-            token_error!(self, kw, "Cannot use qualifiers on \"union\" statement");
+        let mut typedefed = false;
+        let mut force_defined = false;
 
-            for (_, qualifier) in self.curr_qualifiers.iter() {
-                token_note!(qualifier, "Qualifier specified here");
+        for (name, qualifier) in self.curr_qualifiers.iter() {
+            match name.as_ref() {
+                "typedef" => typedefed = true,
+                "defined" => force_defined = true,
+                _ => token_error!(self, qualifier, "Unsupported qualifier for union definition")
             }
-
-            self.curr_qualifiers.clear();
         }
+
+        self.curr_qualifiers.clear();
 
         let name = self.consume(TokenType::Identifier, "Expecting union name")?.clone();
         if self.parse_generics(&Vec::new())?.len() != 0 {
@@ -1233,6 +1247,10 @@ impl Parser {
             if self.match_(&[TokenType::Colon]) {
                 Some(self.consume(TokenType::Identifier, "Expecting C union name after union binding")?.clone())
             } else {
+                if typedefed {
+                    token_error!(self, self.previous(), "Cannot use #typedef qualifier on union that is not a binding");
+                }
+
                 None
             }
         };
@@ -1263,20 +1281,22 @@ impl Parser {
             }
         };
         
-        Some(Statement::Union(name, fields, has_body, binding))
+        Some(Statement::Union(name, fields, has_body, binding, typedefed, force_defined))
     }
 
     fn bitfield_decl(&mut self) -> Option<Statement> {
-        if self.curr_qualifiers.len() != 0 {
-            let kw = self.previous();
-            token_error!(self, kw, "Cannot use qualifiers on \"bitfield\" statement");
+        let mut typedefed = false;
+        let mut force_defined = false;
 
-            for (_, qualifier) in self.curr_qualifiers.iter() {
-                token_note!(qualifier, "Qualifier specified here");
+        for (name, qualifier) in self.curr_qualifiers.iter() {
+            match name.as_ref() {
+                "typedef" => typedefed = true,
+                "defined" => force_defined = true,
+                _ => token_error!(self, qualifier, "Unsupported qualifier for union definition")
             }
-
-            self.curr_qualifiers.clear();
         }
+
+        self.curr_qualifiers.clear();
 
         let name = self.consume(TokenType::Identifier, "Expecting bitfield name")?.clone();
         if self.parse_generics(&Vec::new())?.len() != 0 {
@@ -1287,6 +1307,10 @@ impl Parser {
             if self.match_(&[TokenType::Colon]) {
                 Some(self.consume(TokenType::Identifier, "Expecting C bitfield name after bitfield binding")?.clone())
             } else {
+                if typedefed {
+                    token_error!(self, self.previous(), "Cannot use #typedef qualifier on bitfield that is not a binding");
+                }
+
                 None
             }
         };
@@ -1327,7 +1351,7 @@ impl Parser {
             }
         };
         
-        Some(Statement::Bitfield(name, fields, has_body, binding))
+        Some(Statement::Bitfield(name, fields, has_body, binding, typedefed, force_defined))
     }
 
     fn macro_decl(&mut self) -> Option<Statement> {

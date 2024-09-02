@@ -340,11 +340,11 @@ pub enum Statement {
     For(Token, Option<Box<Statement>>, Expression, Option<Expression>, Box<Statement>), // kw init cond increment body
     Function(Token, Vec<FunctionParam>, Expression, Option<Vec<Statement>>, Vec<Token>, Vec<Token>, bool), // name params return_type body qualifiers generics_names bind
     Return(Token, Option<Expression>), // kw value
-    Struct(Token, Vec<StructField>, bool, Option<Token>, Vec<Token>), // name fields has_body binding generics_names
+    Struct(Token, Vec<StructField>, bool, Option<Token>, Vec<Token>, bool, bool), // name fields has_body binding generics_names bind_typedefed force_defined
     Impl(Expression, Vec<Statement>), // struct declarations
     Namespace(Token, Vec<Statement>), // name body
     Use(Expression, Token), // use_expr as
-    Enum(Token, Expression, Vec<EnumVariant>, bool, bool, Option<Token>, Vec<Token>), // name kind_type variants is_simple has_body binding generics_names
+    Enum(Token, Expression, Vec<EnumVariant>, bool, bool, Option<Token>, Vec<Token>, bool, bool), // name kind_type variants is_simple has_body binding generics_names bind_typedefed force_defined
     Defer(Token, Box<Statement>), // kw statement
     Switch(Token, Expression, Vec<SwitchCase>), // kw expr cases
     Template(Token, Box<Statement>, Vec<Generic>, Vec<Token>), // name templated_expr generics generics_names
@@ -353,8 +353,8 @@ pub enum Statement {
     Break(Token), // kw
     Continue(Token), // kw
     Import(Token, ImportType), // path is_ang
-    Union(Token, Vec<StructField>, bool, Option<Token>), // name fields has_body binding
-    Bitfield(Token, Vec<BitfieldField>, bool, Option<Token>), // name fields has_body binding
+    Union(Token, Vec<StructField>, bool, Option<Token>, bool, bool), // name fields has_body binding bind_typedefed force_defined
+    Bitfield(Token, Vec<BitfieldField>, bool, Option<Token>, bool, bool), // name fields has_body binding bind_typedefed force_defined
     Macro(Token, Option<Vec<Token>>, Option<Expression>, Option<Expression>), // name params return_expr return_type
     Foreach(Token, Token, Expression, Box<Statement>) // kw variable iterator body
 }
@@ -375,17 +375,17 @@ impl Statement {
             Statement::DoWhile(tok, _, _) |
             Statement::Function(tok, _, _, _, _, _, _) |
             Statement::Return(tok, _) |
-            Statement::Struct(tok, _, _, _, _) |
+            Statement::Struct(tok, _, _, _, _, _, _) |
             Statement::Namespace(tok, _) |
-            Statement::Enum(tok, _, _, _, _, _, _) |
+            Statement::Enum(tok, _, _, _, _, _, _, _, _) |
             Statement::Defer(tok, _) |
             Statement::Switch(tok, _, _) |
             Statement::Template(tok, _, _, _) |
             Statement::Break(tok) |
             Statement::Continue(tok) |
             Statement::Import(tok, _) |
-            Statement::Union(tok, _, _, _) |
-            Statement::Bitfield(tok, _, _, _) |
+            Statement::Union(tok, _, _, _, _, _) |
+            Statement::Bitfield(tok, _, _, _, _, _) |
             Statement::Macro(tok, _, _, _) |
             Statement::Foreach(tok, _, _, _) => {
                 AstPos::new(Rc::clone(&tok.source), tok.pos, tok.pos + tok.lexeme.len(), tok.line)

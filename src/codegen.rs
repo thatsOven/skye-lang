@@ -726,18 +726,24 @@ impl CodeGen {
                     let search_tok = Token::dummy(Rc::clone(&final_name));
 
                     let mut env = self.globals.borrow_mut();
-                    if env.get(&search_tok).is_some() {
-                        env = tmp_env.borrow_mut();
+                    if let Some(existing) = env.get(&search_tok) {
+                        if let SkyeType::Function(_, _, has_body) = existing.type_ {
+                            if has_body {
+                                env = tmp_env.borrow_mut();
 
-                        for generic in generics {
-                            env.undef(Rc::clone(&generic.name.lexeme));
+                                for generic in generics {
+                                    env.undef(Rc::clone(&generic.name.lexeme));
+                                }
+
+                                self.curr_name   = previous_name;
+                                self.environment = previous;
+                                
+                                let call_output = self.output_call(&return_evaluated, &final_name, &args, index);
+                                return Ok(SkyeValue::new(Rc::from(call_output.as_ref()), return_evaluated, true));
+                            }
+                        } else {
+                            // TODO
                         }
-
-                        self.curr_name   = previous_name;
-                        self.environment = previous;
-                        
-                        let call_output = self.output_call(&return_evaluated, &final_name, &args, index);
-                        return Ok(SkyeValue::new(Rc::from(call_output.as_ref()), return_evaluated, true));
                     }
 
                     drop(env);
@@ -1590,7 +1596,21 @@ impl CodeGen {
                                             self.evaluate(real_return_expr, index, allow_unknown)
                                         } else {
                                             let ret_type = self.evaluate(return_type.as_ref().unwrap(), index, allow_unknown)?;
-                                            Ok(SkyeValue::new(Rc::clone(name), ret_type.type_, true))
+
+                                            if let SkyeType::Type(inner_type) = ret_type.type_ {
+                                                Ok(SkyeValue::new(Rc::clone(name), *inner_type, true))
+                                            } else {
+                                                ast_error!(
+                                                    self, return_type.as_ref().unwrap(), 
+                                                    format!(
+                                                        "Expecting type as return type (got {})",
+                                                        ret_type.type_.stringify_native()
+                                                    ).as_ref()
+                                                );
+                                                
+                                                ast_note!(expr, "This error is a result of this macro expansion");
+                                                Err(ExecutionInterrupt::Error)
+                                            }
                                         }
                                     } else {
                                         Ok(SkyeValue::new(Rc::clone(name), *inner_type, true))
@@ -2304,7 +2324,7 @@ impl CodeGen {
                         }
                     }
                     SkyeType::Template(name, definition, generics, generics_names, curr_name, read_env) => {
-                        if let Statement::Struct(struct_name, defined_fields, _, _, _) = &definition {
+                        if let Statement::Struct(struct_name, defined_fields, _, _, _, _, _) = &definition {
                             if fields.len() != defined_fields.len() {
                                 ast_error!(self, expr, format!(
                                     "Expecting {} fields but got {}", 
@@ -2666,16 +2686,32 @@ impl CodeGen {
 
                         let mut env = self.globals.borrow_mut();
                         if let Some(var) = env.get(&search_tok) {
-                            env = tmp_env.borrow_mut();
+                            if let SkyeType::Function(_, _, has_body) = var.type_ {
+                                if has_body {
+                                    env = tmp_env.borrow_mut();
 
-                            for generic in generics {
-                                env.undef(Rc::clone(&generic.name.lexeme));
-                            }
+                                    for generic in generics {
+                                        env.undef(Rc::clone(&generic.name.lexeme));
+                                    }
 
-                            if let Some(self_info) = subscripted.self_info {
-                                return Ok(SkyeValue::with_self_info(final_name, var.type_, var.is_const, self_info));
+                                    if let Some(self_info) = subscripted.self_info {
+                                        return Ok(SkyeValue::with_self_info(final_name, var.type_, var.is_const, self_info));
+                                    } else {
+                                        return Ok(SkyeValue::new(final_name, var.type_, var.is_const));
+                                    }
+                                }
                             } else {
-                                return Ok(SkyeValue::new(final_name, var.type_, var.is_const));
+                                env = tmp_env.borrow_mut();
+
+                                for generic in generics {
+                                    env.undef(Rc::clone(&generic.name.lexeme));
+                                }
+
+                                if let Some(self_info) = subscripted.self_info {
+                                    return Ok(SkyeValue::with_self_info(final_name, var.type_, var.is_const, self_info));
+                                } else {
+                                    return Ok(SkyeValue::new(final_name, var.type_, var.is_const));
+                                }
                             }
                         }
 
@@ -2937,6 +2973,13 @@ impl CodeGen {
 
                 let value = self.evaluate(expr, index, false)?;
 
+                if let SkyeType::Enum(_, _, base_name) = value.type_ {
+                    if base_name.as_ref() == "core_DOT_Result" {
+                        ast_error!(self, expr, "Cannot ignore error implicitly");
+                        ast_note!(expr, "Handle this error or discard it using the \"let _ = x\" syntax");
+                    }
+                }
+
                 if value.value.as_ref() != "" { // can happen with try operator returning void
                     self.definitions[index].push_indent();
                     self.definitions[index].push(&value.value);
@@ -3034,65 +3077,83 @@ impl CodeGen {
                 }
 
                 let is_global = matches!(self.curr_function, CurrentFn::None);
+                let is_discard = name.lexeme.as_ref() == "_";
 
-                let full_name = {
-                    if is_global {
-                        self.get_name(&name.lexeme)
+                if is_discard {
+                    if let Some(init) = initializer {
+                        if is_global {
+                            ast_error!(self, init, "Cannot discard a value in the global scope");
+                            ast_note!(init, "Move the statement inside a function");
+                        }
                     } else {
-                        Rc::clone(&name.lexeme)
-                    }
-                };
-
-                let mut buf = String::new();
-
-                for qualifier in qualifiers {
-                    buf.push_str(&qualifier.lexeme);
-                    buf.push(' ');
-                }
-
-                buf.push_str(&type_stringified);
-                buf.push(' ');
-                buf.push_str(&full_name);
-
-                if value.is_some() {
-                    buf.push_str(" = ");
-                    buf.push_str(&value.as_ref().unwrap().value);
-                }
-
-                buf.push_str(";\n");
-
-                if is_global {
-                    if *is_const {
-                        token_error!(self, name, "Global constants are not allowed");
-                        token_note!(name, "If you want to create a compile-time constant, use a macro");
-                    } else if let Some(init) = initializer {
-                        ast_error!(self, init, "Cannot assign a value to a global variable directly");
-                        ast_note!(init, "Remove the initializer and assign this value through a function");
+                        token_error!(self, name, "Cannot use this name for variable declaration");
+                        token_note!(name, "Rename this variable");
+                        return Err(ExecutionInterrupt::Error);
                     }
 
-                    self.declarations.push_indent();
-                    self.declarations.push(&buf);
-                } else {
                     self.definitions[index].push_indent();
-                    self.definitions[index].push(&buf);
-                }
-
-                let mut env = self.environment.borrow_mut();
-
-                if let Some(var) = env.get_in_scope(&Token::dummy(Rc::clone(&full_name))) {
-                    token_error!(self, name, "Cannot declare variable with same name as existing symbol defined in the same scope");
-                            
-                    if let Some(token) = &var.tok {
-                        token_note!(*token, "Previously defined here");
+                    self.definitions[index].push(&value.as_ref().unwrap().value);
+                    self.definitions[index].push(";\n");
+                } else {
+                    let full_name = {
+                        if is_global {
+                            self.get_name(&name.lexeme)
+                        } else {
+                            Rc::clone(&name.lexeme)
+                        }
+                    };
+    
+                    let mut buf = String::new();
+    
+                    for qualifier in qualifiers {
+                        buf.push_str(&qualifier.lexeme);
+                        buf.push(' ');
                     }
+    
+                    buf.push_str(&type_stringified);
+                    buf.push(' ');
+                    buf.push_str(&full_name);
+    
+                    if value.is_some() {
+                        buf.push_str(" = ");
+                        buf.push_str(&value.as_ref().unwrap().value);
+                    }
+    
+                    buf.push_str(";\n");
+
+                    if is_global {
+                        if *is_const {
+                            token_error!(self, name, "Global constants are not allowed");
+                            token_note!(name, "If you want to create a compile-time constant, use a macro");
+                        } else if let Some(init) = initializer {
+                            ast_error!(self, init, "Cannot assign a value to a global variable directly");
+                            ast_note!(init, "Remove the initializer and assign this value through a function");
+                        }
+    
+                        self.declarations.push_indent();
+                        self.declarations.push(&buf);
+                    } else {
+                        self.definitions[index].push_indent();
+                        self.definitions[index].push(&buf);
+                    }
+
+                    let mut env = self.environment.borrow_mut();
+
+                    if let Some(var) = env.get_in_scope(&Token::dummy(Rc::clone(&full_name))) {
+                        token_error!(self, name, "Cannot declare variable with same name as existing symbol defined in the same scope");
+                                
+                        if let Some(token) = &var.tok {
+                            token_note!(*token, "Previously defined here");
+                        }
+                    }
+                    
+                    env.define(
+                        Rc::clone(&full_name), SkyeVariable::new(
+                            type_, initializer.is_some() | *force_defined, *is_const,
+                            Some(Box::new(name.clone()))
+                        )
+                    );
                 }
-                
-                env.define(
-                    Rc::clone(&full_name), SkyeVariable::new(
-                        type_, initializer.is_some() | *force_defined, *is_const,
-                        Some(Box::new(name.clone()))
-                    )
-                );
             }
             Statement::Block(kw, statements) => {
                 if matches!(self.curr_function, CurrentFn::None) {
@@ -3706,7 +3767,7 @@ impl CodeGen {
 
                 return Err(ExecutionInterrupt::Return(Rc::from(buf.as_ref())))
             }
-            Statement::Struct(name, fields, has_body, binding, generics) => {
+            Statement::Struct(name, fields, has_body, binding, generics, bind_typedefed, force_defined) => {
                 let base_name = self.get_name(&name.lexeme);
                 let full_name = self.get_generics(&base_name, generics, &self.environment)?;
 
@@ -3755,13 +3816,18 @@ impl CodeGen {
 
                 drop(env);
 
-                let mut buf = String::from("typedef struct ");
+                let mut buf = String::from("typedef ");
 
                 if let Some(bound_name) = binding {
+                    if !*bind_typedefed {
+                        buf.push_str("struct ");
+                    }
+                    
                     buf.push_str(&bound_name.lexeme);
                 } else {
                     let base_struct_name = self.get_generics(&name.lexeme, generics, &self.environment)?;
                     let full_struct_name = self.get_name(&Rc::from(format!("SKYE_STRUCT_{}", base_struct_name)));
+                    buf.push_str("struct ");
                     buf.push_str(&full_struct_name);
                 }
                 
@@ -3848,7 +3914,7 @@ impl CodeGen {
                     Rc::clone(&full_name), 
                     SkyeVariable::new(
                         output_type.clone(), 
-                        *has_body, true,
+                        *has_body || *force_defined, true,
                         Some(Box::new(name.clone()))
                     )
                 );
@@ -3896,8 +3962,8 @@ impl CodeGen {
                     }
                     SkyeType::Template(_, definition, _, _, _, _) => {
                         match definition {
-                            Statement::Struct(_, _, _, _, _) |
-                            Statement::Enum(_, _, _, _, _, _, _) => {
+                            Statement::Struct(_, _, _, _, _, _, _) |
+                            Statement::Enum(_, _, _, _, _, _, _, _, _) => {
                                 let mut env = self.globals.borrow_mut();
                                 env.define(
                                     Rc::from("Self"), 
@@ -4025,7 +4091,7 @@ impl CodeGen {
                 let mut env = self.environment.borrow_mut();
                 env.undef(Rc::clone(name));
             }
-            Statement::Enum(name, type_expr, variants, is_simple, has_body, binding, generics) => {
+            Statement::Enum(name, type_expr, variants, is_simple, has_body, binding, generics, bind_typedefed, force_defined) => {
                 let base_name = self.get_name(&name.lexeme);
                 let full_name = self.get_generics(&base_name, generics, &self.environment)?;
 
@@ -4091,9 +4157,13 @@ impl CodeGen {
                                 }
                             }
                         } else {
-                            self.declarations.push("typedef enum ");
+                            self.declarations.push("typedef ");
     
                             if let Some(bound_name) = binding {
+                                if !*bind_typedefed {
+                                    self.declarations.push("enum ");
+                                }
+
                                 self.declarations.push(&bound_name.lexeme);
                                 self.declarations.push(": ");
                                 self.declarations.push(&type_.stringify());
@@ -4101,6 +4171,8 @@ impl CodeGen {
                                 self.declarations.push(&full_name);
                                 self.declarations.push(";\n");
                             } else {
+                                self.declarations.push("enum ");
+                                
                                 let full_struct_name = self.get_name(&Rc::from(format!("SKYE_ENUM_{}", simple_enum_name)));
                                 self.declarations.push(&full_struct_name);
                                 self.declarations.push(": ");
@@ -4434,7 +4506,7 @@ impl CodeGen {
                         Rc::clone(&full_name), 
                         SkyeVariable::new(
                             final_type.clone(), 
-                            *has_body, true,
+                            *has_body || *force_defined, true,
                             Some(Box::new(name.clone()))
                         )
                     );
@@ -4619,13 +4691,6 @@ impl CodeGen {
                     
                     generics_evaluated.push(SkyeGeneric::new(generic.name.clone(), bounds_type, default_type));
                 }
-
-                if matches!(**definition, Statement::Struct(_, _, _, _, _) | Statement::Enum(_, _, _, _, _, _, _)) {
-                    if !self.struct_definitions.contains_key(&full_name) {
-                        self.struct_definitions.insert(Rc::clone(&full_name), CodeOutput::new());
-                        self.struct_defs_order.push(Rc::clone(&full_name));
-                    }
-                }
                 
                 let mut env = self.globals.borrow_mut();
                 let cloned_globals = Rc::new(RefCell::new(env.clone()));
@@ -4738,7 +4803,7 @@ impl CodeGen {
                     }
                 }
             }
-            Statement::Union(name, fields, has_body, binding) => {
+            Statement::Union(name, fields, has_body, binding, bind_typedefed, force_defined) => {
                 let full_name = self.get_name(&name.lexeme);
 
                 let env = self.globals.borrow();
@@ -4784,11 +4849,16 @@ impl CodeGen {
 
                 drop(env);
 
-                let mut buf = String::from("typedef union ");
+                let mut buf = String::from("typedef ");
 
                 if let Some(bound_name) = binding {
+                    if !*bind_typedefed {
+                        buf.push_str("union ");
+                    }
+
                     buf.push_str(&bound_name.lexeme);
                 } else {
+                    buf.push_str("union ");
                     let full_union_name = self.get_name(&Rc::from(format!("SKYE_UNION_{}", name.lexeme)));
                     buf.push_str(&full_union_name);
                 }
@@ -4874,12 +4944,12 @@ impl CodeGen {
                     Rc::clone(&full_name), 
                     SkyeVariable::new(
                         output_type.clone(), 
-                        *has_body, true,
+                        *has_body || *force_defined, true,
                         Some(Box::new(name.clone()))
                     )
                 );
             }
-            Statement::Bitfield(name, fields, has_body, binding) => {
+            Statement::Bitfield(name, fields, has_body, binding, bind_typedefed, force_defined) => {
                 let full_name = self.get_name(&name.lexeme);
 
                 let env = self.globals.borrow();
@@ -4925,11 +4995,16 @@ impl CodeGen {
 
                 drop(env);
 
-                let mut buf = String::from("typedef struct ");
+                let mut buf = String::from("typedef ");
 
                 if let Some(bound_name) = binding {
+                    if !*bind_typedefed {
+                        buf.push_str("struct ");
+                    }
+                    
                     buf.push_str(&bound_name.lexeme);
                 } else {
+                    buf.push_str("struct ");
                     let full_struct_name = self.get_name(&Rc::from(format!("SKYE_STRUCT_{}", name.lexeme)));
                     buf.push_str(&full_struct_name);
                 }
@@ -5008,7 +5083,7 @@ impl CodeGen {
                     Rc::clone(&full_name), 
                     SkyeVariable::new(
                         output_type.clone(), 
-                        *has_body, true,
+                        *has_body || *force_defined, true,
                         Some(Box::new(name.clone()))
                     )
                 );

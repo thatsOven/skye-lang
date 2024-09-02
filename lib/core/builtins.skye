@@ -62,9 +62,14 @@ namespace core {
     }
 
     namespace io {
+        fn print(const msg: String) {
+            let _ = core::io::stdOut.write(msg.asSlice());
+        }
+
         fn println(const msg: String) {
             core::io::print(msg);
-            core::io::print("\n");
+            let _ = core::io::stdOut.write({'\n'});
+            let _ = core::io::stdOut.flush();
         }
     }
 
@@ -92,9 +97,6 @@ namespace core {
                 self.freeRaw(@cast(voidptr, ptr.ptr));
             }
         }
-
-        #defined
-        let heapAllocator: core::mem::HeapAllocator;
     }
 
     struct Ptr[T, U = core::mem::HeapAllocator] {
@@ -365,6 +367,8 @@ namespace core {
         }
     }
 
+    use Ptr[char, core::mem::HeapAllocator] as _;
+
     struct MutableString[U = core::mem::HeapAllocator] {
         array: Ptr[char, U],
         length: usz,
@@ -547,6 +551,7 @@ use core::Array as Array;
 
 fn _SKYE_INIT() {
     core::mem::heapAllocator = core::mem::HeapAllocator::new();
+    _SKYE_PRIMITIVES_INIT();
 }
 
 fn _SKYE_CONVERT_ARGS(const argc: usz, const argv: **char) core::Array[core::String] {

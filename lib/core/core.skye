@@ -24,11 +24,6 @@ use (
 use f32 | f64 as AnyFloat;
 
 namespace core {
-    struct String {
-        const raw: rawstring,
-        const length: usz
-    }
-
     enum Option[T] {
         Some(T),
         None
@@ -94,6 +89,17 @@ namespace core {
 
         fn iter(const self) core::SliceIterator[T] {
             return core::SliceIterator::new(self);
+        }
+    }
+
+    struct String {
+        const raw: rawstring,
+        const length: usz
+    }
+
+    impl core::String {
+        fn asSlice(const self) core::Slice[char] {
+            return core::Slice::new(@cast(*const char, self.raw), self.length);
         }
     }
 

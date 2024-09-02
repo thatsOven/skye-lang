@@ -9,6 +9,17 @@ import <"string.h">;
 #bind fn strlen(const str: rawstring) usz;
 #bind fn exit(code: i32);
 
+#typedef #defined struct CFile: FILE;
+#bind fn fopen(filename: rawstring, mode: rawstring) *CFile;
+#bind fn fclose(file: *CFile) i32;
+#bind fn fwrite(ptr: voidptr, size: usz, nmemb: usz, file: *CFile) usz;
+#bind fn fflush(file: *CFile) i32;
+
+// actually not macros but this "hides" the C handles a little bit
+macro stdout -> *CFile;
+macro stderr -> *CFile;
+macro stdin  -> *CFile;
+
 fn panic(const msg: String);
 
 namespace core {
@@ -44,12 +55,98 @@ namespace core {
                 free(ptr);
             }
         }
+
+        #defined let heapAllocator: core::mem::HeapAllocator;
     }
 
     namespace io {
-        fn print(const msg: String) {
-            printf(`%.*s\0`, msg.length, msg.raw);
+        enum FileOpenMode {
+            Read,
+            Write,
+            Append,
+            ExistingRW,
+            ReadWrite,
+            ReadAppend
         }
+
+        fn fileOpenModeToCMode(const mode: core::io::FileOpenMode) rawstring {
+            use core::io::FileOpenMode as f;
+
+            switch mode {
+                f::Read {
+                    return `rb\0`;
+                }
+                f::Write {
+                    return `wb\0`;
+                }
+                f::Append {
+                    return `ab\0`;
+                }
+                f::ExistingRW {
+                    return `rb+\0`;
+                }
+                f::ReadWrite {
+                    return `wb+\0`;
+                }
+                f::ReadAppend {
+                    return `ab+\0`;
+                }
+            }
+        }
+
+        struct File {
+            const cFile: *CFile
+        }
+
+        impl core::io::File {
+            fn fromCFile(const cFile: *CFile) Self {
+                return Self.{ cFile };
+            }
+
+            fn open(const filename: String, const mode: core::io::FileOpenMode) Self!void {
+                let buf = @cast(*char, core::mem::heapAllocator.allocRaw(filename.length + 1));
+                defer core::mem::heapAllocator.freeRaw(@cast(voidptr, buf));
+
+                core::mem::typedBlockCopy(@cast(*const char, filename.raw), buf, filename.length);
+                buf[filename.length] = '\0';
+
+                const cFile = fopen(@cast(rawstring, buf), core::io::fileOpenModeToCMode(mode));
+                
+                if cFile == @nullptr {
+                    return (Self!void)::Error;
+                }
+                
+                return (Self!void)::Ok(Self.{ cFile });
+            }
+
+            fn close(self) !void {
+                if fclose(self.cFile) {
+                    return (!void)::Error;
+                }
+
+                return (!void)::Ok;
+            }
+
+            fn write[T](self, const items: core::Slice[T]) !void {
+                if fwrite(@cast(voidptr, items.ptr), @sizeOf(T), items.length, self.cFile) != items.length {
+                    return (!void)::Error;
+                }
+
+                return (!void)::Ok;
+            }
+
+            fn flush(self) !void {
+                if fflush(self.cFile) {
+                    return (!void)::Error;
+                }
+
+                return (!void)::Ok;
+            }
+        }
+
+        #defined let stdOut: core::io::File;
+        #defined let stdErr: core::io::File;
+        #defined let stdIn: core::io::File;
     }
 
     namespace utils {
@@ -59,9 +156,16 @@ namespace core {
     }
 }
 
+fn _SKYE_PRIMITIVES_INIT() {
+    core::io::stdOut = core::io::File::fromCFile(@stdout);
+    core::io::stdErr = core::io::File::fromCFile(@stderr);
+    core::io::stdIn  = core::io::File::fromCFile(@stdin);
+}
+
 fn panic(const msg: String) {
-    core::io::print("Skye program panicked!\n");
-    core::io::print(msg);
-    core::io::print("\n");
+    let _ = core::io::stdOut.write("Skye program panicked!\n".asSlice());
+    let _ = core::io::stdOut.write(msg.asSlice());
+    let _ = core::io::stdOut.write({'\n'});
+    let _ = core::io::stdOut.flush();
     exit(1);
 }
