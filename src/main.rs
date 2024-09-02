@@ -8,8 +8,6 @@ use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
 
 // TODO
 // - check that copy constructors and destructors are working properly
-// - the compiler generates some artifacts while doing type inference, 
-//       creating types that contain unknown types (transpiled to void*): get rid of those
 // - windows support!
 // - optional warnings and notes
 // - extend standard library (still needs A LOT of work)

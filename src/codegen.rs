@@ -167,8 +167,8 @@ pub struct CodeGen {
 
     strings:            HashMap<Rc<str>, usize>,
     strings_code:       CodeOutput,
-    declarations:       CodeOutput,
     includes:           CodeOutput,
+    declarations:       Vec<CodeOutput>,
     struct_definitions: HashMap<Rc<str>, CodeOutput>,
     struct_defs_order:  Vec<Rc<str>>,
     definitions:        Vec<CodeOutput>,
@@ -223,7 +223,7 @@ impl CodeGen {
             definitions: Vec::new(), 
             struct_definitions: HashMap::new(),
             struct_defs_order: Vec::new(),
-            declarations: CodeOutput::new(),
+            declarations: Vec::new(),
             strings_code: CodeOutput::new(),
             includes: CodeOutput::new(),
             strings: HashMap::new(),
@@ -378,14 +378,15 @@ impl CodeGen {
             }
         } else {
             drop(env);
-
-            self.declarations.push("typedef ");
-            self.declarations.push(return_stringified);
-            self.declarations.push(" (*");
-            self.declarations.push(&mangled);
-            self.declarations.push(")(");
-            self.declarations.push(&params_string);
-            self.declarations.push(");\n");
+        
+            self.declarations.push(CodeOutput::new());
+            self.declarations.last_mut().unwrap().push("typedef ");
+            self.declarations.last_mut().unwrap().push(return_stringified);
+            self.declarations.last_mut().unwrap().push(" (*");
+            self.declarations.last_mut().unwrap().push(&mangled);
+            self.declarations.last_mut().unwrap().push(")(");
+            self.declarations.last_mut().unwrap().push(&params_string);
+            self.declarations.last_mut().unwrap().push(");\n");
 
             let mut env = self.globals.borrow_mut();
             env.define(
@@ -3207,8 +3208,9 @@ impl CodeGen {
                             ast_note!(init, "Remove the initializer and assign this value through a function");
                         }
     
-                        self.declarations.push_indent();
-                        self.declarations.push(&buf);
+                        self.declarations.push(CodeOutput::new());
+                        self.declarations.last_mut().unwrap().push_indent();
+                        self.declarations.last_mut().unwrap().push(&buf);
                     } else {
                         self.definitions[index].push_indent();
                         self.definitions[index].push(&buf);
@@ -3411,8 +3413,9 @@ impl CodeGen {
                     buf.push(')');
 
                     if (!has_decl) || (!has_body) {
-                        self.declarations.push(&buf);
-                        self.declarations.push(";\n");
+                        self.declarations.push(CodeOutput::new());
+                        self.declarations.last_mut().unwrap().push(&buf);
+                        self.declarations.last_mut().unwrap().push(";\n");
                     }
                 }
                 
@@ -3911,9 +3914,10 @@ impl CodeGen {
                 buf.push(' ');
 
                 if (!has_decl) || (!*has_body) {
-                    self.declarations.push(&buf);
-                    self.declarations.push(&full_name);
-                    self.declarations.push(";\n");
+                    self.declarations.push(CodeOutput::new());
+                    self.declarations.last_mut().unwrap().push(&buf);
+                    self.declarations.last_mut().unwrap().push(&full_name);
+                    self.declarations.last_mut().unwrap().push(";\n");
                 }
 
                 let mut def_buf = CodeOutput::new();
@@ -4148,7 +4152,8 @@ impl CodeGen {
                         buf.push('\n');
 
                         if matches!(self.curr_function, CurrentFn::None) {
-                            self.declarations.push(&buf);
+                            self.declarations.push(CodeOutput::new());
+                            self.declarations.last_mut().unwrap().push(&buf);
                         } else {
                             self.definitions[index].push_indent();
                             self.definitions[index].push(&buf);
@@ -4241,44 +4246,45 @@ impl CodeGen {
                                 }
                             }
                         } else {
-                            self.declarations.push("typedef ");
+                            self.declarations.push(CodeOutput::new());
+                            self.declarations.last_mut().unwrap().push("typedef ");
     
                             if let Some(bound_name) = binding {
                                 if !*bind_typedefed {
-                                    self.declarations.push("enum ");
+                                    self.declarations.last_mut().unwrap().push("enum ");
                                 }
 
-                                self.declarations.push(&bound_name.lexeme);
-                                self.declarations.push(": ");
-                                self.declarations.push(&type_.stringify());
-                                self.declarations.push(" ");
-                                self.declarations.push(&full_name);
-                                self.declarations.push(";\n");
+                                self.declarations.last_mut().unwrap().push(&bound_name.lexeme);
+                                self.declarations.last_mut().unwrap().push(": ");
+                                self.declarations.last_mut().unwrap().push(&type_.stringify());
+                                self.declarations.last_mut().unwrap().push(" ");
+                                self.declarations.last_mut().unwrap().push(&full_name);
+                                self.declarations.last_mut().unwrap().push(";\n");
                             } else {
-                                self.declarations.push("enum ");
+                                self.declarations.last_mut().unwrap().push("enum ");
                                 
                                 let full_struct_name = self.get_name(&Rc::from(format!("SKYE_ENUM_{}", simple_enum_name)));
-                                self.declarations.push(&full_struct_name);
-                                self.declarations.push(": ");
-                                self.declarations.push(&type_.stringify());
-                                self.declarations.push(" {\n");
-                                self.declarations.inc_indent();
+                                self.declarations.last_mut().unwrap().push(&full_struct_name);
+                                self.declarations.last_mut().unwrap().push(": ");
+                                self.declarations.last_mut().unwrap().push(&type_.stringify());
+                                self.declarations.last_mut().unwrap().push(" {\n");
+                                self.declarations.last_mut().unwrap().inc_indent();
         
                                 for (i, variant) in variants.iter().enumerate() {
-                                    self.declarations.push_indent();
-                                    self.declarations.push(&simple_enum_full_name);
-                                    self.declarations.push("_DOT_");
-                                    self.declarations.push(&variant.name.lexeme);
+                                    self.declarations.last_mut().unwrap().push_indent();
+                                    self.declarations.last_mut().unwrap().push(&simple_enum_full_name);
+                                    self.declarations.last_mut().unwrap().push("_DOT_");
+                                    self.declarations.last_mut().unwrap().push(&variant.name.lexeme);
         
                                     if i != variants.len() - 1 {
-                                        self.declarations.push(",\n");
+                                        self.declarations.last_mut().unwrap().push(",\n");
                                     }
                                 }
         
-                                self.declarations.dec_indent();
-                                self.declarations.push("\n} ");
-                                self.declarations.push(&simple_enum_full_name);
-                                self.declarations.push(";\n");
+                                self.declarations.last_mut().unwrap().dec_indent();
+                                self.declarations.last_mut().unwrap().push("\n} ");
+                                self.declarations.last_mut().unwrap().push(&simple_enum_full_name);
+                                self.declarations.last_mut().unwrap().push(";\n");
                             }
 
                             drop(env);
@@ -4303,9 +4309,10 @@ impl CodeGen {
                             buf.push_str(&full_struct_name);
                             buf.push(' ');
 
-                            self.declarations.push(&buf);
-                            self.declarations.push(&full_name);
-                            self.declarations.push(";\n");
+                            self.declarations.push(CodeOutput::new());
+                            self.declarations.last_mut().unwrap().push(&buf);
+                            self.declarations.last_mut().unwrap().push(&full_name);
+                            self.declarations.last_mut().unwrap().push(";\n");
                             
                             def_buf.push(&buf);
                             def_buf.push("{\n");
@@ -4399,8 +4406,9 @@ impl CodeGen {
 
                                 buf.push(')');
 
-                                self.declarations.push(&buf);
-                                self.declarations.push(";\n");
+                                self.declarations.push(CodeOutput::new());
+                                self.declarations.last_mut().unwrap().push(&buf);
+                                self.declarations.last_mut().unwrap().push(";\n");
 
                                 initializers.push_indent();
                                 initializers.push(&buf);
@@ -4435,15 +4443,16 @@ impl CodeGen {
                             
                             if is_void {
                                 if write_output {
-                                    self.declarations.push("#define ");
-                                    self.declarations.push(&full_name);
-                                    self.declarations.push("_DOT_");
-                                    self.declarations.push(&variant.name.lexeme);
-                                    self.declarations.push(" ");
-                                    self.declarations.push(&full_name);
-                                    self.declarations.push("_DOT_SKYE_ENUM_INIT_");
-                                    self.declarations.push(&variant.name.lexeme);
-                                    self.declarations.push("()\n");
+                                    self.declarations.push(CodeOutput::new());
+                                    self.declarations.last_mut().unwrap().push("#define ");
+                                    self.declarations.last_mut().unwrap().push(&full_name);
+                                    self.declarations.last_mut().unwrap().push("_DOT_");
+                                    self.declarations.last_mut().unwrap().push(&variant.name.lexeme);
+                                    self.declarations.last_mut().unwrap().push(" ");
+                                    self.declarations.last_mut().unwrap().push(&full_name);
+                                    self.declarations.last_mut().unwrap().push("_DOT_SKYE_ENUM_INIT_");
+                                    self.declarations.last_mut().unwrap().push(&variant.name.lexeme);
+                                    self.declarations.last_mut().unwrap().push("()\n");
                                 }
                             } else {
                                 if write_output {
@@ -4550,11 +4559,12 @@ impl CodeGen {
                     } else {
                         if binding.is_none() {
                             let full_struct_name = self.get_name(&Rc::from(format!("SKYE_STRUCT_{}", simple_enum_name)));
-                            self.declarations.push("typedef struct ");
-                            self.declarations.push(&full_struct_name);
-                            self.declarations.push(" ");
-                            self.declarations.push(&full_name);
-                            self.declarations.push(";\n");
+                            self.declarations.push(CodeOutput::new());
+                            self.declarations.last_mut().unwrap().push("typedef struct ");
+                            self.declarations.last_mut().unwrap().push(&full_struct_name);
+                            self.declarations.last_mut().unwrap().push(" ");
+                            self.declarations.last_mut().unwrap().push(&full_name);
+                            self.declarations.last_mut().unwrap().push(";\n");
                         } 
     
                         Some(SkyeType::Enum(Rc::clone(&full_name), None, base_name))
@@ -4962,9 +4972,10 @@ impl CodeGen {
                 buf.push(' ');
 
                 if (!has_decl) || (!*has_body) {
-                    self.declarations.push(&buf);
-                    self.declarations.push(&full_name);
-                    self.declarations.push(";\n");
+                    self.declarations.push(CodeOutput::new());
+                    self.declarations.last_mut().unwrap().push(&buf);
+                    self.declarations.last_mut().unwrap().push(&full_name);
+                    self.declarations.last_mut().unwrap().push(";\n");
                 }
 
                 let mut def_buf = CodeOutput::new();
@@ -5114,9 +5125,10 @@ impl CodeGen {
                 buf.push(' ');
 
                 if (!has_decl) || (!*has_body) {
-                    self.declarations.push(&buf);
-                    self.declarations.push(&full_name);
-                    self.declarations.push(";\n");
+                    self.declarations.push(CodeOutput::new());
+                    self.declarations.last_mut().unwrap().push(&buf);
+                    self.declarations.last_mut().unwrap().push(&full_name);
+                    self.declarations.last_mut().unwrap().push(";\n");
                 }
                 
                 let mut def_buf = CodeOutput::new();
@@ -5454,13 +5466,20 @@ impl CodeGen {
                 output.push('\n');
             }
             
-            if self.declarations.code.len() != 0 {
-                output.push_str(&self.declarations.code);
+            if self.declarations.len() != 0 {
+                for declaration in &self.declarations {
+                    if !declaration.code.contains("_UNKNOWN_") {
+                        output.push_str(&declaration.code);
+                    }
+                }
+
                 output.push('\n');
             }
 
             for definition in &self.struct_defs_order {
-                output.push_str(&self.struct_definitions.get(definition).unwrap().code);
+                if !definition.contains("_UNKNOWN_") {
+                    output.push_str(&self.struct_definitions.get(definition).unwrap().code);
+                }
             }
             
             for definition in &self.definitions {
