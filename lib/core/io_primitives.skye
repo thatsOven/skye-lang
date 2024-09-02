@@ -65,7 +65,13 @@ namespace core {
             Append,
             ExistingRW,
             ReadWrite,
-            ReadAppend
+            ReadAppend,
+            ReadBin,
+            WriteBin,
+            AppendBin,
+            ExistingRWBin,
+            ReadWriteBin,
+            ReadAppendBin
         }
 
         fn fileOpenModeToCMode(const mode: core::io::FileOpenMode) rawstring {
@@ -73,21 +79,39 @@ namespace core {
 
             switch mode {
                 f::Read {
-                    return `rb\0`;
+                    return `r\0`;
                 }
                 f::Write {
-                    return `wb\0`;
+                    return `w\0`;
                 }
                 f::Append {
-                    return `ab\0`;
+                    return `a\0`;
                 }
                 f::ExistingRW {
-                    return `rb+\0`;
+                    return `r+\0`;
                 }
                 f::ReadWrite {
-                    return `wb+\0`;
+                    return `w+\0`;
                 }
                 f::ReadAppend {
+                    return `a+\0`;
+                }
+                f::ReadBin {
+                    return `rb\0`;
+                }
+                f::WriteBin {
+                    return `wb\0`;
+                }
+                f::AppendBin {
+                    return `ab\0`;
+                }
+                f::ExistingRWBin {
+                    return `rb+\0`;
+                }
+                f::ReadWriteBin {
+                    return `wb+\0`;
+                }
+                f::ReadAppendBin {
                     return `ab+\0`;
                 }
             }
@@ -145,7 +169,7 @@ namespace core {
 
         #defined let stdOut: core::io::File;
         #defined let stdErr: core::io::File;
-        #defined let stdIn: core::io::File;
+        #defined let stdIn:  core::io::File;
     }
 
     namespace utils {
