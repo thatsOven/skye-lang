@@ -598,12 +598,8 @@ namespace core {
                         @sizeOf(char), 1
                     );
 
-                    if buf.array[buf.length++] == '\n' {
+                    if amtRead != 1 || buf.array[buf.length++] == '\n' {
                         break;
-                    }
-
-                    if amtRead != 1 {
-                        return r;  
                     }
 
                     r++;
