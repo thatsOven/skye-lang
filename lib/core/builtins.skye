@@ -136,6 +136,7 @@ use core::io::print   as print;
 use core::io::println as println;
 
 macro MIN_ARRAY_CAPACITY 8;
+macro FILE_READ_CHUNK_SIZE 64;
 
 namespace core {
     struct Rc[T, U = core::mem::HeapAllocator] {
@@ -312,6 +313,12 @@ namespace core {
             self.array[self.length++] = item;
         }
 
+        fn append(self, const other: core::Array[T]) {
+            for let i = 0usz; i < other.length; i++ {
+                self.push(other.array[i]);
+            }
+        }
+
         fn pop(self) T {
             return self.array[--self.length];
         }
@@ -482,6 +489,12 @@ namespace core {
             self.array[self.length++] = item;
         }
 
+        fn append(self, const other: core::MutableString[U]) {
+            for let i = 0usz; i < other.length; i++ {
+                self.push(other.array[i]);
+            }
+        }
+
         fn pop(self) char {
             return self.array[--self.length];
         }
@@ -539,6 +552,69 @@ namespace core {
         fn pushString(self, const string: String) {
             for let i = 0usz; i < string.length; i++ {
                 self.push(string.raw[i]);
+            }
+        }
+    }
+
+    namespace io {
+        impl core::io::File {
+            fn read[T, U = core::mem::HeapAllocator](self, const buf: *core::Array[T, U], const amt: usz) usz {
+                let r = 0usz;
+
+                for ; r < amt; r += @FILE_READ_CHUNK_SIZE {
+                    const chunk = amt - r >= @FILE_READ_CHUNK_SIZE ? @FILE_READ_CHUNK_SIZE : amt - r;
+                    buf.resize(r + chunk);
+
+                    const amtRead = self.readRaw(
+                        @cast(voidptr, buf.array.ptr + buf.length),
+                        @sizeOf(T), chunk
+                    );
+
+                    buf.length += amtRead;
+
+                    if amtRead != @FILE_READ_CHUNK_SIZE {
+                        return r + amtRead;  
+                    }
+                }
+
+                return r;
+            }
+
+            fn allocRead[T, U = core::mem::HeapAllocator](self, const alloc: *U, const amt: usz) core::Array[T, U] {
+                let buf = core::Array::init[T, U](alloc);
+                self.read(&buf, amt);
+                return buf;
+            }
+
+            fn readLine[U = core::mem::HeapAllocator](self, const buf: *core::MutableString[U]) usz {
+                let r = 0usz;
+
+                while true {
+                    buf.resize(r + 1);
+
+                    let amtRead = self.readRaw(
+                        @cast(voidptr, buf.array.ptr + buf.length),
+                        @sizeOf(char), 1
+                    );
+
+                    if buf.array[buf.length++] == '\n' {
+                        break;
+                    }
+
+                    if amtRead != 1 {
+                        return r;  
+                    }
+
+                    r++;
+                }
+
+                return r;
+            }
+
+            fn allocReadLine[U = core::mem::HeapAllocator](self, const alloc: *U) core::MutableString[U] {
+                let buf = core::MutableString::init(alloc);
+                self.readLine(&buf, amt);
+                return buf;
             }
         }
     }

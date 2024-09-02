@@ -13,6 +13,7 @@ import <"string.h">;
 #bind fn fclose(file: *CFile) i32;
 #bind fn fwrite(ptr: voidptr, size: usz, nmemb: usz, file: *CFile) usz;
 #bind fn fflush(file: *CFile) i32;
+#bind fn fread(buf: voidptr, size: usz, count: usz, file: *CFile) usz;
 
 // actually not macros but this "hides" the C handles a little bit
 macro stdout -> *CFile;
@@ -164,6 +165,11 @@ namespace core {
                 }
 
                 return (!void)::Ok;
+            }
+
+            // buf has to point to at least amt * size bytes
+            fn readRaw(self, buf: voidptr, size: usz, amt: usz) usz {
+                return fread(buf, size, amt, self.cFile);
             }
         }
 
