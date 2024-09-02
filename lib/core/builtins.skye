@@ -136,7 +136,6 @@ use core::io::print   as print;
 use core::io::println as println;
 
 macro MIN_ARRAY_CAPACITY 8;
-macro FILE_READ_CHUNK_SIZE 64;
 
 namespace core {
     struct Rc[T, U = core::mem::HeapAllocator] {
@@ -559,25 +558,14 @@ namespace core {
     namespace io {
         impl core::io::File {
             fn read[T, U = core::mem::HeapAllocator](self, const buf: *core::Array[T, U], const amt: usz) usz {
-                let r = 0usz;
+                buf.resizeExact(buf.length + amt);
 
-                while r < amt {
-                    const chunk = amt - r >= @FILE_READ_CHUNK_SIZE ? @FILE_READ_CHUNK_SIZE : amt - r;
-                    buf.grow(chunk);
+                const r = self.readRaw(
+                    @cast(voidptr, buf.array.ptr + buf.length),
+                    @sizeOf(T), chunk
+                );
 
-                    const amtRead = self.readRaw(
-                        @cast(voidptr, buf.array.ptr + buf.length),
-                        @sizeOf(T), chunk
-                    );
-
-                    buf.length += amtRead;
-                    r += amtRead;
-
-                    if amtRead != @FILE_READ_CHUNK_SIZE {
-                        break;
-                    }
-                }
-
+                buf.length += r;
                 return r;
             }
 
