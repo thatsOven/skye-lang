@@ -561,7 +561,7 @@ namespace core {
             fn read[T, U = core::mem::HeapAllocator](self, const buf: *core::Array[T, U], const amt: usz) usz {
                 let r = 0usz;
 
-                for ; r < amt; r += @FILE_READ_CHUNK_SIZE {
+                while r < amt {
                     const chunk = amt - r >= @FILE_READ_CHUNK_SIZE ? @FILE_READ_CHUNK_SIZE : amt - r;
                     buf.resize(r + chunk);
 
@@ -571,9 +571,10 @@ namespace core {
                     );
 
                     buf.length += amtRead;
+                    r += amtRead;
 
                     if amtRead != @FILE_READ_CHUNK_SIZE {
-                        return r + amtRead;  
+                        return r;  
                     }
                 }
 
