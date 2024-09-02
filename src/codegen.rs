@@ -192,20 +192,20 @@ impl CodeGen {
 
         let cloned = Rc::clone(&globals);
         let mut globals_ref = cloned.borrow_mut();
-        globals_ref.define(Rc::from("u8"),  SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::U8)), true, true, None));
-        globals_ref.define(Rc::from("i8"),  SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::I8)), true, true, None));
-        globals_ref.define(Rc::from("u16"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::U16)), true, true, None));
-        globals_ref.define(Rc::from("i16"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::I16)), true, true, None));
-        globals_ref.define(Rc::from("u32"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::U32)), true, true, None));
-        globals_ref.define(Rc::from("i32"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::I32)), true, true, None));
-        globals_ref.define(Rc::from("f32"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::F32)), true, true, None));
-        globals_ref.define(Rc::from("u64"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::U64)), true, true, None));
-        globals_ref.define(Rc::from("i64"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::I64)), true, true, None));
-        globals_ref.define(Rc::from("f64"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::F64)), true, true, None));
-        globals_ref.define(Rc::from("usz"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::Usz)), true, true, None));
+        globals_ref.define(Rc::from("u8"),  SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::U8)), true, None));
+        globals_ref.define(Rc::from("i8"),  SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::I8)), true, None));
+        globals_ref.define(Rc::from("u16"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::U16)),true, None));
+        globals_ref.define(Rc::from("i16"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::I16)), true, None));
+        globals_ref.define(Rc::from("u32"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::U32)), true, None));
+        globals_ref.define(Rc::from("i32"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::I32)), true, None));
+        globals_ref.define(Rc::from("f32"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::F32)), true, None));
+        globals_ref.define(Rc::from("u64"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::U64)), true, None));
+        globals_ref.define(Rc::from("i64"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::I64)), true, None));
+        globals_ref.define(Rc::from("f64"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::F64)), true, None));
+        globals_ref.define(Rc::from("usz"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::Usz)), true, None));
         
-        globals_ref.define(Rc::from("char"),      SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::Char)),      true, true, None));
-        globals_ref.define(Rc::from("rawstring"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::RawString)), true, true, None));
+        globals_ref.define(Rc::from("char"),      SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::Char)),      true, None));
+        globals_ref.define(Rc::from("rawstring"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::RawString)), true, None));
 
         globals_ref.define(
             Rc::from("voidptr"), 
@@ -215,7 +215,7 @@ impl CodeGen {
                         Box::new(SkyeType::Void), false
                     ))
                 ), 
-                true, true, None
+                true, None
             )
         );
 
@@ -302,7 +302,7 @@ impl CodeGen {
                 let inner_param_type = self.evaluate(&params[i].type_, index, allow_unknown)?.type_;
                 if let SkyeType::Type(inner_type) = inner_param_type {
                     if has_decl {
-                        if let SkyeType::Function(existing_params, _, _) = &existing.as_ref().unwrap().type_ {
+                        if let SkyeType::Function(existing_params, ..) = &existing.as_ref().unwrap().type_ {
                             if !existing_params[i].type_.equals(&inner_type, EqualsLevel::Typewise) {
                                 ast_error!(
                                     self, params[i].type_, 
@@ -376,7 +376,7 @@ impl CodeGen {
             env.define(
                 mangled.clone().into(), 
                 SkyeVariable::new(
-                    type_.clone(), true, true,
+                    type_.clone(), true,
                     Some(Box::new(tok.clone()))
                 )
             );
@@ -393,7 +393,7 @@ impl CodeGen {
 
     fn get_method(&mut self, object: &SkyeValue, name: &Token, strict: bool) -> Option<SkyeValue> {
         match object.type_.get_method(name, strict) {
-            GetResult::Ok(value, _, _) => {                
+            GetResult::Ok(value, ..) => {                
                 let search_tok = Token::dummy(Rc::clone(&value));
 
                 let result = self.globals.borrow().get(&search_tok);
@@ -514,7 +514,7 @@ impl CodeGen {
                 Ok(SkyeValue::new(Rc::from(call_output.as_ref()), *return_type.clone(), true))
             }
             SkyeType::Template(name, definition, generics, generics_names, curr_name, read_env) => {
-                if let Statement::Function(_, params, return_type_expr, _, _, _, _) = definition {
+                if let Statement::Function(_, params, return_type_expr, ..) = definition {
                     if params.len() != arguments_len {
                         ast_error!(
                             self, expr, 
@@ -683,8 +683,7 @@ impl CodeGen {
                             env.define(
                                 Rc::clone(&name),
                                 SkyeVariable::new(
-                                    inner_type, 
-                                    true, true, 
+                                    inner_type, true, 
                                     Some(Box::new(mapped.name.clone()))
                                 )
                             );
@@ -727,7 +726,7 @@ impl CodeGen {
 
                     let mut env = self.globals.borrow_mut();
                     if let Some(existing) = env.get(&search_tok) {
-                        if let SkyeType::Function(_, _, has_body) = existing.type_ {
+                        if let SkyeType::Function(.., has_body) = existing.type_ {
                             if has_body {
                                 env = tmp_env.borrow_mut();
 
@@ -771,8 +770,8 @@ impl CodeGen {
                     env.define(
                         Rc::clone(&final_name), 
                         SkyeVariable::new(
-                            type_.clone(), 
-                            true, true, None
+                            type_.clone(), true, 
+                            None
                         )
                     );
 
@@ -831,8 +830,7 @@ impl CodeGen {
                             env.define(
                                 Rc::clone(&params[i].lexeme),
                                 SkyeVariable::new(
-                                    arg.type_,
-                                    true, true,
+                                    arg.type_, true,
                                     Some(Box::new(params[i].clone()))
                                 )
                             );
@@ -1479,7 +1477,7 @@ impl CodeGen {
                                         if return_type.equals(&inner.type_, EqualsLevel::Typewise) {
                                             self.definitions[index].push(&tmp_var_name);
                                             self.definitions[index].push(";\n");
-                                        } else if let SkyeType::Enum(full_name, _, _) = &return_type {
+                                        } else if let SkyeType::Enum(full_name, ..) = &return_type {
                                             self.definitions[index].push(&full_name);
                                             self.definitions[index].push("_DOT_None;\n");
                                         } else {
@@ -2017,17 +2015,7 @@ impl CodeGen {
                 let var = env.get(&name);
 
                 if let Some(var_info) = var {
-                    if var_info.is_defined {
-                        Ok(SkyeValue::new(name.lexeme.clone(), var_info.type_, var_info.is_const))
-                    } else {
-                        token_error!(self, &name, "Cannot reference symbol with no value assigned to it");
-                        
-                        if let Some(var_tok) = var_info.tok {
-                            token_note!(var_tok, "Assign a value to this variable before using it");
-                        }
-
-                        Err(ExecutionInterrupt::Error)
-                    }
+                    Ok(SkyeValue::new(name.lexeme.clone(), var_info.type_, var_info.is_const))
                 } else if allow_unknown {
                     Ok(SkyeValue::special(SkyeType::Unknown(Rc::clone(&name.lexeme))))
                 } else {
@@ -2329,7 +2317,7 @@ impl CodeGen {
                         }
                     }
                     SkyeType::Template(name, definition, generics, generics_names, curr_name, read_env) => {
-                        if let Statement::Struct(struct_name, defined_fields, _, _, _, _, _) = &definition {
+                        if let Statement::Struct(struct_name, defined_fields, ..) = &definition {
                             if fields.len() != defined_fields.len() {
                                 ast_error!(self, expr, format!(
                                     "Expecting {} fields but got {}", 
@@ -2462,8 +2450,7 @@ impl CodeGen {
                                     env.define(
                                         Rc::clone(&name),
                                         SkyeVariable::new(
-                                            inner_type, 
-                                            true, true, 
+                                            inner_type, true, 
                                             Some(Box::new(mapped.name.clone()))
                                         )
                                     );
@@ -2517,8 +2504,7 @@ impl CodeGen {
                             env.define(
                                 Rc::clone(&final_name), 
                                 SkyeVariable::new(
-                                    type_.clone(), 
-                                    true, true, None
+                                    type_.clone(), true, None
                                 )
                             );
 
@@ -2679,8 +2665,7 @@ impl CodeGen {
                             env.define(
                                 Rc::clone(&generic.name.lexeme),
                                 SkyeVariable::new(
-                                    evaluated, 
-                                    true, true, 
+                                    evaluated, true, 
                                     Some(Box::new(generic.name.clone()))
                                 )
                             );
@@ -2691,7 +2676,7 @@ impl CodeGen {
 
                         let mut env = self.globals.borrow_mut();
                         if let Some(var) = env.get(&search_tok) {
-                            if let SkyeType::Function(_, _, has_body) = var.type_ {
+                            if let SkyeType::Function(.., has_body) = var.type_ {
                                 if has_body {
                                     env = tmp_env.borrow_mut();
 
@@ -2741,8 +2726,7 @@ impl CodeGen {
                         env.define(
                             Rc::clone(&final_name), 
                             SkyeVariable::new(
-                                type_.clone(), 
-                                true, true, None
+                                type_.clone(), true, None
                             )
                         );
 
@@ -2833,14 +2817,14 @@ impl CodeGen {
                 let object = self.evaluate(&object_expr, index, allow_unknown)?;
 
                 match object.type_.static_get(name) {
-                    GetResult::Ok(value, _, _) => {
+                    GetResult::Ok(value, ..) => {
                         let mut search_tok = Token::dummy(Rc::clone(&value));
                         let env = self.globals.borrow();
 
                         if let Some(var) = env.get(&search_tok) {
                             return Ok(SkyeValue::new(value, var.type_, var.is_const))
                         } else if let SkyeType::Type(inner_type) = &object.type_ {
-                            if let SkyeType::Enum(enum_name, _, _) = &**inner_type {
+                            if let SkyeType::Enum(enum_name, ..) = &**inner_type {
                                 search_tok.set_lexeme(format!("{}_DOT_{}", enum_name, name.lexeme).as_ref());
 
                                 if let Some(var) = env.get(&search_tok) {
@@ -2889,7 +2873,7 @@ impl CodeGen {
             let vars = self.environment.borrow().iter_local();
 
             for (name, var) in vars {
-                if matches!(var.type_, SkyeType::Struct(_, _, _) | SkyeType::Enum(_, _, _)) {
+                if matches!(var.type_, SkyeType::Struct(..) | SkyeType::Enum(..)) {
                     let search_tok = Token::dummy(Rc::from("__destruct__"));
                     let var_value = SkyeValue::new(Rc::clone(&name), var.type_.clone(), var.is_const);
 
@@ -2978,7 +2962,7 @@ impl CodeGen {
 
                 let value = self.evaluate(expr, index, false)?;
 
-                if let SkyeType::Enum(_, _, base_name) = value.type_ {
+                if let SkyeType::Enum(.., base_name) = value.type_ {
                     if base_name.as_ref() == "core_DOT_Result" {
                         ast_warning!(expr, "Error is being ignored implictly");
                         ast_note!(expr, "Handle this error or discard it using the \"let _ = x\" syntax");
@@ -2991,7 +2975,7 @@ impl CodeGen {
                     self.definitions[index].push(";\n");
                 }
             }
-            Statement::VarDecl(name, initializer, type_spec_expr, is_const, qualifiers, force_defined) => {                
+            Statement::VarDecl(name, initializer, type_spec_expr, is_const, qualifiers) => {                
                 let value = {
                     if let Some(init) = initializer {
                         Some(self.evaluate(init, index, false)?)
@@ -3006,7 +2990,7 @@ impl CodeGen {
 
                         match type_spec_evaluated.type_ {
                             SkyeType::Type(inner_type) => Some(*inner_type),
-                            SkyeType::Group(_, _) => {
+                            SkyeType::Group(..) => {
                                 ast_error!(self, type_, "Cannot use type group for variable declaration");
                                 Some(SkyeType::Void)
                             }
@@ -3154,7 +3138,7 @@ impl CodeGen {
                     
                     env.define(
                         Rc::clone(&full_name), SkyeVariable::new(
-                            type_, initializer.is_some() | *force_defined, *is_const,
+                            type_, *is_const,
                             Some(Box::new(name.clone()))
                         )
                     );
@@ -3198,7 +3182,7 @@ impl CodeGen {
 
                 let has_decl = {
                     if let Some(var) = &existing {
-                        if let SkyeType::Function(_, _, has_body) = var.type_ {
+                        if let SkyeType::Function(.., has_body) = var.type_ {
                             if has_body && body.is_some() {
                                 token_error!(self, name, "Cannot redeclare functions");
                             
@@ -3269,7 +3253,7 @@ impl CodeGen {
                     let has_args = {
                         params_output.len() == 1 &&
                         {
-                            if let SkyeType::Struct(_, _, base_name) = &params_output[0].type_ {
+                            if let SkyeType::Struct(.., base_name) = &params_output[0].type_ {
                                 base_name.as_ref() == "core_DOT_Array"
                             } else {
                                 false
@@ -3353,7 +3337,7 @@ impl CodeGen {
                             Rc::clone(&params[i].name.as_ref().unwrap().lexeme), 
                             SkyeVariable::new(
                                 params_output[i].type_.clone(), 
-                                true, params_output[i].is_const,
+                                params_output[i].is_const,
                                 Some(Box::new(params[i].name.as_ref().unwrap().clone()))
                             )
                         );
@@ -3363,7 +3347,7 @@ impl CodeGen {
                 let mut env = self.globals.borrow_mut();
                 env.define(
                     Rc::clone(&full_name), SkyeVariable::new(
-                        type_.clone(), true, true,
+                        type_.clone(), true,
                         Some(Box::new(name.clone()))
                     )
                 );
@@ -3422,7 +3406,7 @@ impl CodeGen {
                 }
 
                 let not_grouping = !matches!(cond_expr, Expression::Grouping(_));
-                let not_block    = !matches!(**then_branch, Statement::Block(_, _));
+                let not_block    = !matches!(**then_branch, Statement::Block(..));
 
                 self.definitions[index].push_indent();
                 self.definitions[index].push("if ");
@@ -3462,7 +3446,7 @@ impl CodeGen {
                 }
 
                 if let Some(else_branch_statement) = else_branch {
-                    let not_block = !matches!(**else_branch_statement, Statement::Block(_, _));
+                    let not_block = !matches!(**else_branch_statement, Statement::Block(..));
 
                     self.definitions[index].push_indent();
                     self.definitions[index].push("else\n");
@@ -3514,7 +3498,7 @@ impl CodeGen {
                 }
 
                 let not_grouping = !matches!(cond_expr, Expression::Grouping(_));
-                let not_block    = !matches!(**body, Statement::Block(_, _));
+                let not_block    = !matches!(**body, Statement::Block(..));
 
                 self.definitions[index].push_indent();
                 self.definitions[index].push("while ");
@@ -3564,7 +3548,7 @@ impl CodeGen {
                     token_note!(kw, "Place this for loop inside a function");
                 }
 
-                let not_block = !matches!(**body, Statement::Block(_, _));
+                let not_block = !matches!(**body, Statement::Block(..));
 
                 if let Some(init) = initializer {
                     let _ = self.execute(&init, index);
@@ -3652,7 +3636,7 @@ impl CodeGen {
                 }
 
                 let not_grouping = !matches!(cond_expr, Expression::Grouping(_));
-                let not_block    = !matches!(**body, Statement::Block(_, _));
+                let not_block    = !matches!(**body, Statement::Block(..));
 
                 self.definitions[index].push_indent();
                 self.definitions[index].push("do\n");
@@ -3772,7 +3756,7 @@ impl CodeGen {
 
                 return Err(ExecutionInterrupt::Return(Rc::from(buf.as_ref())))
             }
-            Statement::Struct(name, fields, has_body, binding, generics, bind_typedefed, force_defined) => {
+            Statement::Struct(name, fields, has_body, binding, generics, bind_typedefed) => {
                 let base_name = self.get_name(&name.lexeme);
                 let full_name = self.get_generics(&base_name, generics, &self.environment)?;
 
@@ -3918,8 +3902,7 @@ impl CodeGen {
                 env.define(
                     Rc::clone(&full_name), 
                     SkyeVariable::new(
-                        output_type.clone(), 
-                        *has_body || *force_defined, true,
+                        output_type.clone(), true,
                         Some(Box::new(name.clone()))
                     )
                 );
@@ -3932,14 +3915,14 @@ impl CodeGen {
                 match &struct_name.type_ {
                     SkyeType::Type(inner_type) => {
                         match inner_type.as_ref() {
-                            SkyeType::Struct(_, _, _) | 
-                            SkyeType::Enum(_, _, _) => { 
+                            SkyeType::Struct(..) | 
+                            SkyeType::Enum(..) => { 
                                 let mut env = self.globals.borrow_mut();
                                 env.define(
                                     Rc::from("Self"), 
                                     SkyeVariable::new(
                                         struct_name.type_.clone(), 
-                                        true, true, None
+                                        true, None
                                     )
                                 );
                                 drop(env);
@@ -3965,16 +3948,16 @@ impl CodeGen {
                             }
                         }
                     }
-                    SkyeType::Template(_, definition, _, _, _, _) => {
+                    SkyeType::Template(_, definition, ..) => {
                         match definition {
-                            Statement::Struct(_, _, _, _, _, _, _) |
-                            Statement::Enum(_, _, _, _, _, _, _, _, _) => {
+                            Statement::Struct(..) |
+                            Statement::Enum(..) => {
                                 let mut env = self.globals.borrow_mut();
                                 env.define(
                                     Rc::from("Self"), 
                                     SkyeVariable::new(
                                         struct_name.type_.clone(), 
-                                        true, true, None
+                                        true, None
                                     )
                                 );
                                 drop(env);
@@ -4038,7 +4021,7 @@ impl CodeGen {
                         Rc::clone(&full_name),
                         SkyeVariable::new(
                             SkyeType::Namespace(Rc::clone(&full_name)),
-                            true, true,
+                            true,
                             Some(Box::new(name.clone()))
                         )
                     );
@@ -4081,8 +4064,8 @@ impl CodeGen {
                     let mut env = self.environment.borrow_mut();
                     env.define(
                         Rc::clone(&identifier.lexeme), SkyeVariable::new(
-                            use_value.type_, true, 
-                            use_value.is_const, Some(Box::new(identifier.clone()))
+                            use_value.type_, use_value.is_const, 
+                            Some(Box::new(identifier.clone()))
                         )
                     );
                 }
@@ -4096,7 +4079,7 @@ impl CodeGen {
                 let mut env = self.environment.borrow_mut();
                 env.undef(Rc::clone(name));
             }
-            Statement::Enum(name, type_expr, variants, is_simple, has_body, binding, generics, bind_typedefed, force_defined) => {
+            Statement::Enum(name, type_expr, variants, is_simple, has_body, binding, generics, bind_typedefed) => {
                 let base_name = self.get_name(&name.lexeme);
                 let full_name = self.get_generics(&base_name, generics, &self.environment)?;
 
@@ -4208,8 +4191,7 @@ impl CodeGen {
                                 Rc::clone(&simple_enum_full_name), 
                                 SkyeVariable::new(
                                     SkyeType::Type(Box::new(simple_enum_type.clone())), 
-                                    true, true,
-                                    Some(Box::new(name.clone()))
+                                    true, Some(Box::new(name.clone()))
                                 )
                             );
                         }
@@ -4271,7 +4253,7 @@ impl CodeGen {
                                 env.define(
                                     Rc::clone(&variant.name.lexeme), 
                                     SkyeVariable::new(
-                                        type_.clone(), true, true,
+                                        type_.clone(), true,
                                         Some(Box::new(variant.name.clone()))
                                     )
                                 );
@@ -4279,7 +4261,7 @@ impl CodeGen {
                                 env.define(
                                     Rc::from(format!("{}_DOT_{}", simple_enum_full_name, variant.name.lexeme)), 
                                     SkyeVariable::new(
-                                        type_.clone(), true, true,
+                                        type_.clone(), true,
                                         Some(Box::new(variant.name.clone()))
                                     )
                                 );
@@ -4404,7 +4386,7 @@ impl CodeGen {
                                         Rc::from(format!("{}_DOT_{}", full_name, variant.name.lexeme)), 
                                         SkyeVariable::new(
                                             struct_output_type.clone(),
-                                            true, true,
+                                            true,
                                             Some(Box::new(variant.name.clone()))
                                         )
                                     );
@@ -4417,7 +4399,7 @@ impl CodeGen {
                                     env.define(
                                         Rc::from(format!("{}_DOT_SKYE_ENUM_INIT_{}", full_name, variant.name.lexeme)), 
                                         SkyeVariable::new(
-                                            type_.clone(), true, true,
+                                            type_.clone(), true,
                                             Some(Box::new(variant.name.clone()))
                                         )
                                     );
@@ -4439,7 +4421,7 @@ impl CodeGen {
                                     env.define(
                                         Rc::from(format!("{}_DOT_{}", full_name, variant.name.lexeme)), 
                                         SkyeVariable::new(
-                                            type_.clone(), true, true,
+                                            type_.clone(), true,
                                             Some(Box::new(variant.name.clone()))
                                         )
                                     );
@@ -4510,8 +4492,7 @@ impl CodeGen {
                     env.define(
                         Rc::clone(&full_name), 
                         SkyeVariable::new(
-                            final_type.clone(), 
-                            *has_body || *force_defined, true,
+                            final_type.clone(), true,
                             Some(Box::new(name.clone()))
                         )
                     );
@@ -4707,7 +4688,7 @@ impl CodeGen {
                             generics_evaluated, generics_names.clone(),
                             self.curr_name.clone(), cloned_globals
                         ), 
-                        true, true, 
+                        true, 
                         Some(Box::new(name.clone()))
                     )
                 );
@@ -4808,7 +4789,7 @@ impl CodeGen {
                     }
                 }
             }
-            Statement::Union(name, fields, has_body, binding, bind_typedefed, force_defined) => {
+            Statement::Union(name, fields, has_body, binding, bind_typedefed) => {
                 let full_name = self.get_name(&name.lexeme);
 
                 let env = self.globals.borrow();
@@ -4948,13 +4929,12 @@ impl CodeGen {
                 env.define(
                     Rc::clone(&full_name), 
                     SkyeVariable::new(
-                        output_type.clone(), 
-                        *has_body || *force_defined, true,
+                        output_type.clone(), true,
                         Some(Box::new(name.clone()))
                     )
                 );
             }
-            Statement::Bitfield(name, fields, has_body, binding, bind_typedefed, force_defined) => {
+            Statement::Bitfield(name, fields, has_body, binding, bind_typedefed) => {
                 let full_name = self.get_name(&name.lexeme);
 
                 let env = self.globals.borrow();
@@ -5087,8 +5067,7 @@ impl CodeGen {
                 env.define(
                     Rc::clone(&full_name), 
                     SkyeVariable::new(
-                        output_type.clone(), 
-                        *has_body || *force_defined, true,
+                        output_type.clone(), true,
                         Some(Box::new(name.clone()))
                     )
                 );
@@ -5110,7 +5089,7 @@ impl CodeGen {
                                 return_type.clone()
                             )
                         )), 
-                        true, true,
+                        true,
                         Some(Box::new(name.clone()))
                     )
                 );
@@ -5125,7 +5104,7 @@ impl CodeGen {
 
                 let tmp_iter_var_name = self.get_temporary_var();
 
-                if !matches!(iterator_raw.type_, SkyeType::Struct(_, _, _) | SkyeType::Enum(_, _, _)) {
+                if !matches!(iterator_raw.type_, SkyeType::Struct(..) | SkyeType::Enum(..)) {
                     ast_error!(
                         self, iterator_expr, 
                         format!(
@@ -5165,7 +5144,7 @@ impl CodeGen {
                             )?;
 
                             let iterator_type_stringified = iterator_call.type_.stringify();
-                            if iterator_type_stringified.len() == 0 || !matches!(iterator.type_, SkyeType::Struct(_, _, _) | SkyeType::Enum(_, _, _)) {
+                            if iterator_type_stringified.len() == 0 || !matches!(iterator.type_, SkyeType::Struct(..) | SkyeType::Enum(..)) {
                                 ast_error!(
                                     self, iterator_expr, 
                                     format!(
@@ -5270,7 +5249,7 @@ impl CodeGen {
                     Rc::clone(&var_name.lexeme),
                     SkyeVariable::new(
                         item_type,
-                        true, true,
+                        true,
                         Some(Box::new(var_name.clone()))
                     )
                 );
@@ -5303,7 +5282,7 @@ impl CodeGen {
                 let previous_in_loop = self.in_loop;
                 self.in_loop = true;
 
-                if matches!(**body, Statement::Block(_, _)) {
+                if matches!(**body, Statement::Block(..)) {
                     self.execute_block(
                         &vec![*body.clone()], 
                         Rc::new(RefCell::new(Environment::with_enclosing(

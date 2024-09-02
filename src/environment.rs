@@ -5,14 +5,13 @@ use crate::{skye_type::SkyeType, tokens::Token};
 #[derive(Debug, Clone)]
 pub struct SkyeVariable {
     pub type_: SkyeType,
-    pub is_defined: bool,
     pub is_const: bool,
     pub tok: Option<Box<Token>>
 }
 
 impl SkyeVariable {
-    pub fn new(type_: SkyeType, is_defined: bool, is_const: bool, tok: Option<Box<Token>>) -> Self {
-        SkyeVariable { type_, is_defined, is_const, tok }
+    pub fn new(type_: SkyeType, is_const: bool, tok: Option<Box<Token>>) -> Self {
+        SkyeVariable { type_, is_const, tok }
     }
 }
 

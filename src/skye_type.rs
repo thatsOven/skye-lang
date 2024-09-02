@@ -182,20 +182,20 @@ impl SkyeType {
             SkyeType::Void       => String::from("void"),
             SkyeType::Unknown(_) => String::from("void*"),
 
-            SkyeType::Group(_, _) | 
-            SkyeType::Template(_, _, _, _, _, _) | 
-            SkyeType::Macro(_, _, _, _) => String::new(),
+            SkyeType::Group(..) | 
+            SkyeType::Template(..) | 
+            SkyeType::Macro(..) => String::new(),
             
             SkyeType::Type(inner) => inner.stringify(),
-            SkyeType::Function(_, _, _) => self.mangle(),
+            SkyeType::Function(..) => self.mangle(),
 
             SkyeType::Pointer(inner, _) => {
                 String::from(format!("{}*", inner.stringify()))
             }
 
-            SkyeType::Struct(name, _, _) | 
+            SkyeType::Struct(name, ..) | 
             SkyeType::Namespace(name) |
-            SkyeType::Enum(name, _, _) | 
+            SkyeType::Enum(name, ..) | 
             SkyeType::Union(name, _) | 
             SkyeType::Bitfield(name, _) => name.to_string(),
         }
@@ -221,9 +221,9 @@ impl SkyeType {
 
             SkyeType::Unknown(name) => format!("unknown \"{}\"", name),
             SkyeType::Group(left, right) => format!("{} | {}", left.stringify_native(), right.stringify_native()),
-            SkyeType::Template(name, _, _, _, _, _) => format!("template \"{}\"", name.replace("_DOT_", "::")),
+            SkyeType::Template(name, ..) => format!("template \"{}\"", name.replace("_DOT_", "::")),
             SkyeType::Namespace(name) => format!("namespace \"{}\"", name.replace("_DOT_", "::")),
-            SkyeType::Macro(name, _, _, _) => format!("macro {}", name),
+            SkyeType::Macro(name, ..) => format!("macro {}", name),
             
             SkyeType::Type(inner) => format!("type \"{}\"", inner.stringify_native()),
             SkyeType::Function(args, return_type, _) => {
@@ -253,8 +253,8 @@ impl SkyeType {
                 }
             }
 
-            SkyeType::Struct(name, _, _) | 
-            SkyeType::Enum(name, _, _) => {
+            SkyeType::Struct(name, ..) | 
+            SkyeType::Enum(name, ..) => {
                 // not ideal, but it's just error reporting ¯\_(ツ)_/¯
                 name.to_string()
                     .replace("_DOT_", "::")
@@ -292,14 +292,14 @@ impl SkyeType {
             SkyeType::Void       => String::from("void"),
             SkyeType::Unknown(_) => String::from("_UNKNOWN_"),
 
-            SkyeType::Group(_, _) | 
+            SkyeType::Group(..) | 
             SkyeType::Namespace(_) | 
-            SkyeType::Template(_, _, _, _, _, _) | 
-            SkyeType::Macro(_, _, _, _) => String::new(),
+            SkyeType::Template(..) | 
+            SkyeType::Macro(..) => String::new(),
             
             SkyeType::Type(inner) => inner.mangle(),
-            SkyeType::Struct(name, _, _) | 
-            SkyeType::Enum(name, _, _) |
+            SkyeType::Struct(name, ..) | 
+            SkyeType::Enum(name, ..) |
             SkyeType::Union(name, _) | 
             SkyeType::Bitfield(name, _) => name.to_string(),
 
@@ -358,10 +358,10 @@ impl SkyeType {
 
             SkyeType::Void => matches!(other, SkyeType::Void),
 
-            SkyeType::Group(_, _) | 
+            SkyeType::Group(..) | 
             SkyeType::Namespace(_) | 
-            SkyeType::Template(_, _, _, _, _, _) | 
-            SkyeType::Macro(_, _, _, _) => false,
+            SkyeType::Template(..) | 
+            SkyeType::Macro(..) => false,
 
             SkyeType::Unknown(_) => true,
 
@@ -410,13 +410,13 @@ impl SkyeType {
             }
             SkyeType::Struct(self_name, _, self_base_name) => {
                 if matches!(level, EqualsLevel::Permissive) {
-                    if let SkyeType::Struct(_, _, other_base_name) = other {
+                    if let SkyeType::Struct(.., other_base_name) = other {
                         self_base_name == other_base_name
                     } else {
                         false
                     }
                 } else {
-                    if let SkyeType::Struct(other_name, _, _) = other {
+                    if let SkyeType::Struct(other_name, ..) = other {
                         self_name == other_name
                     } else {
                         false
@@ -425,13 +425,13 @@ impl SkyeType {
             }
             SkyeType::Enum(self_name, _, self_base_name) => {
                 if matches!(level, EqualsLevel::Permissive) {
-                    if let SkyeType::Enum(_, _, other_base_name) = other {
+                    if let SkyeType::Enum(.., other_base_name) = other {
                         self_base_name == other_base_name
                     } else {
                         false
                     }
                 } else {
-                    if let SkyeType::Enum(other_name, _, _) = other {
+                    if let SkyeType::Enum(other_name, ..) = other {
                         self_name == other_name
                     } else {
                         false
@@ -466,7 +466,7 @@ impl SkyeType {
     }
 
     pub fn is_type(&self) -> bool {
-        matches!(self, SkyeType::Type(_)) || matches!(self, SkyeType::Group(_, _))
+        matches!(self, SkyeType::Type(_)) || matches!(self, SkyeType::Group(..))
     }
 
     pub fn finalize(&self) -> SkyeType {
@@ -483,7 +483,7 @@ impl SkyeType {
                 let inner_res = inner_type.get_internal(from, name, *is_pointer_const, d + 1);
                 if let GetResult::Ok(inner_str, type_, is_const) = inner_res {
                     if d == 0 {
-                        if let SkyeType::Pointer(_, _) = **inner_type {
+                        if let SkyeType::Pointer(..) = **inner_type {
                             GetResult::Ok(Rc::from(format!("({})->{}", inner_str, name.lexeme)), type_, *is_pointer_const || is_const)
                         } else {
                             GetResult::Ok(Rc::from(format!("{}->{}", inner_str, name.lexeme)), type_, *is_pointer_const || is_const)
@@ -559,9 +559,9 @@ impl SkyeType {
                 }
             }
             SkyeType::Namespace(namespace_name) | 
-            SkyeType::Struct(_, _, namespace_name) |
-            SkyeType::Enum(_, _, namespace_name) | 
-            SkyeType::Template(namespace_name, _, _, _, _, _) => {
+            SkyeType::Struct(.., namespace_name) |
+            SkyeType::Enum(.., namespace_name) | 
+            SkyeType::Template(namespace_name, ..) => {
                 GetResult::Ok(Rc::from(format!("{}_DOT_{}", namespace_name, name.lexeme)), SkyeType::Void, false)
             }
             _ => GetResult::InvalidType
@@ -581,9 +581,9 @@ impl SkyeType {
                     inner_type.get_method(name, strict)
                 }
             }
-            SkyeType::Struct(_, _, obj_name) |
-            SkyeType::Enum(_, _, obj_name) | 
-            SkyeType::Template(obj_name, _, _, _, _, _) => {
+            SkyeType::Struct(.., obj_name) |
+            SkyeType::Enum(.., obj_name) | 
+            SkyeType::Template(obj_name, ..) => {
                 GetResult::Ok(Rc::from(format!("{}_DOT_{}", obj_name, name.lexeme)), SkyeType::Void, false)
             }
             _ => GetResult::InvalidType
@@ -600,7 +600,7 @@ impl SkyeType {
                     Some((Rc::from(format!("*{}", inner_val)), inner_type))
                 }
             }
-            SkyeType::Struct(_, _, _) | SkyeType::Enum(_, _, _) => {
+            SkyeType::Struct(..) | SkyeType::Enum(..) => {
                 if d == 0 {
                     Some((Rc::from(format!("&{}", from)), SkyeType::Pointer(Box::new(self.clone()), is_source_const)))
                 } else {
@@ -623,8 +623,8 @@ impl SkyeType {
             SkyeType::U32 | SkyeType::I32 | SkyeType::U64 | SkyeType::I64 |
             SkyeType::Usz | SkyeType::F32 | SkyeType::F64 | SkyeType::AnyInt |
             SkyeType::AnyFloat | SkyeType::Char | SkyeType::RawString  | 
-            SkyeType::Void | SkyeType::Group(_, _) | SkyeType::Namespace(_) | 
-            SkyeType::Template(_, _, _, _, _, _) | SkyeType::Macro(_, _, _, _) => (),
+            SkyeType::Void | SkyeType::Group(..) | SkyeType::Namespace(_) | 
+            SkyeType::Template(..) | SkyeType::Macro(..) => (),
 
             SkyeType::Unknown(name) => {
                 if let SkyeType::Pointer(inner_type, _) = other {
@@ -731,11 +731,11 @@ impl SkyeType {
 
     pub fn implements_op(&self, op: Operator) -> ImplementsHow {
         match self {
-            SkyeType::Unknown(_) | SkyeType::Pointer(_, _) => ImplementsHow::Native,
+            SkyeType::Unknown(_) | SkyeType::Pointer(..) => ImplementsHow::Native,
 
             // at this stage, the compiler can't know whether the operator is implemented or not, 
             // so it assumes it is, that way it can try to find the relative function
-            SkyeType::Template(_, _, _, _, _, _) | SkyeType::Struct(_, _, _) => ImplementsHow::ThirdParty,
+            SkyeType::Template(..) | SkyeType::Struct(..) => ImplementsHow::ThirdParty,
 
             SkyeType::Enum(_, variants, _) => {
                 if variants.is_none() {
@@ -749,12 +749,12 @@ impl SkyeType {
                 }
             }
 
-            SkyeType::Void | SkyeType::Type(_) | SkyeType::Group(_, _) | 
-            SkyeType::Namespace(_) | SkyeType::Macro(_, _, _, _) => {
+            SkyeType::Void | SkyeType::Type(_) | SkyeType::Group(..) | 
+            SkyeType::Namespace(_) | SkyeType::Macro(..) => {
                 ImplementsHow::No
             }
 
-            SkyeType::Union(_, _) | SkyeType::Function(_, _, _) | SkyeType::Bitfield(_, _) => {
+            SkyeType::Union(..) | SkyeType::Function(..) | SkyeType::Bitfield(..) => {
                 if matches!(op, Operator::Ref | Operator::ConstRef) {
                     ImplementsHow::Native
                 } else {

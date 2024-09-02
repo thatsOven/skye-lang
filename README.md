@@ -54,8 +54,6 @@ const c = 3; // This variable is immutable, it cannot be modified
 let d: f32; // Variables can be left undefined, but the type needs to be specified
 ```
 
-Reading from an undefined variable is a compile time error.
-
 # Primitive types
 ```
 Integers:

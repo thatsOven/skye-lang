@@ -8,7 +8,7 @@ import <"string.h">;
 #bind fn strlen(const str: rawstring) usz;
 #bind fn exit(code: i32);
 
-#typedef #defined struct CFile: FILE;
+#typedef struct CFile: FILE;
 #bind fn fopen(filename: rawstring, mode: rawstring) *CFile;
 #bind fn fclose(file: *CFile) i32;
 #bind fn fwrite(ptr: voidptr, size: usz, nmemb: usz, file: *CFile) usz;
@@ -56,7 +56,7 @@ namespace core {
             }
         }
 
-        #defined let heapAllocator: core::mem::HeapAllocator;
+        let heapAllocator: core::mem::HeapAllocator;
     }
 
     namespace io {
@@ -173,9 +173,9 @@ namespace core {
             }
         }
 
-        #defined let stdOut: core::io::File;
-        #defined let stdErr: core::io::File;
-        #defined let stdIn:  core::io::File;
+        let stdOut: core::io::File;
+        let stdErr: core::io::File;
+        let stdIn:  core::io::File;
     }
 
     namespace utils {

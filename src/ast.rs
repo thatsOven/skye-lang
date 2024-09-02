@@ -224,7 +224,7 @@ impl Expression {
 
     pub fn is_valid_assignment_target(&self) -> bool {
         match self {
-            Expression::Variable(_) | Expression::Get(_, _) | Expression::StaticGet(_, _) | Expression::Subscript(_, _, _) => true,
+            Expression::Variable(_) | Expression::Get(..) | Expression::StaticGet(..) | Expression::Subscript(..) => true,
             Expression::Unary(op, _, is_prefix) => *is_prefix && op.type_ == TokenType::Star,
             Expression::Grouping(inner) => inner.is_valid_assignment_target(),
             _ => false
@@ -234,7 +234,7 @@ impl Expression {
     pub fn replace_variable(&self, name: &Rc<str>, replace_expr: &Expression) -> Expression {
         match self {
             Expression::Grouping(expr) => expr.replace_variable(name, replace_expr),
-            Expression::Literal(_, _, _) => self.clone(),
+            Expression::Literal(..) => self.clone(),
             Expression::Variable(tok) => {
                 if tok.lexeme.as_ref() == name.as_ref() {
                     replace_expr.clone()
@@ -332,7 +332,7 @@ impl Generic {
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Statement {
     Expression(Expression),
-    VarDecl(Token, Option<Expression>, Option<Expression>, bool, Vec<Token>, bool), // name initializer type is_const qualifiers force_defined
+    VarDecl(Token, Option<Expression>, Option<Expression>, bool, Vec<Token>), // name initializer type is_const qualifiers
     Block(Token, Vec<Statement>), // kw statements
     If(Token, Expression, Box<Statement>, Option<Box<Statement>>), // kw cond then else
     While(Token, Expression, Box<Statement>), // kw cond body
@@ -340,11 +340,11 @@ pub enum Statement {
     For(Token, Option<Box<Statement>>, Expression, Option<Expression>, Box<Statement>), // kw init cond increment body
     Function(Token, Vec<FunctionParam>, Expression, Option<Vec<Statement>>, Vec<Token>, Vec<Token>, bool), // name params return_type body qualifiers generics_names bind
     Return(Token, Option<Expression>), // kw value
-    Struct(Token, Vec<StructField>, bool, Option<Token>, Vec<Token>, bool, bool), // name fields has_body binding generics_names bind_typedefed force_defined
+    Struct(Token, Vec<StructField>, bool, Option<Token>, Vec<Token>, bool), // name fields has_body binding generics_names bind_typedefed
     Impl(Expression, Vec<Statement>), // struct declarations
     Namespace(Token, Vec<Statement>), // name body
     Use(Expression, Token), // use_expr as
-    Enum(Token, Expression, Vec<EnumVariant>, bool, bool, Option<Token>, Vec<Token>, bool, bool), // name kind_type variants is_simple has_body binding generics_names bind_typedefed force_defined
+    Enum(Token, Expression, Vec<EnumVariant>, bool, bool, Option<Token>, Vec<Token>, bool), // name kind_type variants is_simple has_body binding generics_names bind_typedefed
     Defer(Token, Box<Statement>), // kw statement
     Switch(Token, Expression, Vec<SwitchCase>), // kw expr cases
     Template(Token, Box<Statement>, Vec<Generic>, Vec<Token>), // name templated_expr generics generics_names
@@ -353,8 +353,8 @@ pub enum Statement {
     Break(Token), // kw
     Continue(Token), // kw
     Import(Token, ImportType), // path is_ang
-    Union(Token, Vec<StructField>, bool, Option<Token>, bool, bool), // name fields has_body binding bind_typedefed force_defined
-    Bitfield(Token, Vec<BitfieldField>, bool, Option<Token>, bool, bool), // name fields has_body binding bind_typedefed force_defined
+    Union(Token, Vec<StructField>, bool, Option<Token>, bool), // name fields has_body binding bind_typedefed
+    Bitfield(Token, Vec<BitfieldField>, bool, Option<Token>, bool), // name fields has_body binding bind_typedefed
     Macro(Token, Option<Vec<Token>>, Option<Expression>, Option<Expression>), // name params return_expr return_type
     Foreach(Token, Token, Expression, Box<Statement>) // kw variable iterator body
 }
@@ -367,27 +367,27 @@ impl Statement {
             Statement::Impl(expr, _) | 
             Statement::Use(expr, _) => expr.get_pos(),
             
-            Statement::VarDecl(tok, _, _, _, _, _) | 
+            Statement::VarDecl(tok, ..) | 
             Statement::Block(tok, _) |
-            Statement::If(tok, _, _, _) |
-            Statement::While(tok, _, _) |
-            Statement::For(tok, _, _, _, _) |
-            Statement::DoWhile(tok, _, _) |
-            Statement::Function(tok, _, _, _, _, _, _) |
+            Statement::If(tok, ..) |
+            Statement::While(tok, ..) |
+            Statement::For(tok, ..) |
+            Statement::DoWhile(tok, ..) |
+            Statement::Function(tok, ..) |
             Statement::Return(tok, _) |
-            Statement::Struct(tok, _, _, _, _, _, _) |
+            Statement::Struct(tok, ..) |
             Statement::Namespace(tok, _) |
-            Statement::Enum(tok, _, _, _, _, _, _, _, _) |
+            Statement::Enum(tok, ..) |
             Statement::Defer(tok, _) |
-            Statement::Switch(tok, _, _) |
-            Statement::Template(tok, _, _, _) |
+            Statement::Switch(tok, ..) |
+            Statement::Template(tok, ..) |
             Statement::Break(tok) |
             Statement::Continue(tok) |
             Statement::Import(tok, _) |
-            Statement::Union(tok, _, _, _, _, _) |
-            Statement::Bitfield(tok, _, _, _, _, _) |
-            Statement::Macro(tok, _, _, _) |
-            Statement::Foreach(tok, _, _, _) => {
+            Statement::Union(tok, ..) |
+            Statement::Bitfield(tok, ..) |
+            Statement::Macro(tok, ..) |
+            Statement::Foreach(tok, ..) => {
                 AstPos::new(Rc::clone(&tok.source), tok.pos, tok.pos + tok.lexeme.len(), tok.line)
             } 
         }
