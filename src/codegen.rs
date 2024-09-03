@@ -1045,6 +1045,60 @@ impl CodeGen {
         }
     }
 
+    fn binary_operator_int_on_right(
+        &mut self, left: SkyeValue, return_type: SkyeType, 
+        left_expr: &Expression, right_expr: &Expression, expr: &Expression, 
+        op_stringified: &str, op_method: &str, op_type: Operator, 
+        index: usize, allow_unknown: bool
+    ) -> Result<SkyeValue, ExecutionInterrupt> {
+        match left.type_.implements_op(op_type) {
+            ImplementsHow::Native => {
+                let right = self.evaluate(right_expr, index, allow_unknown)?;
+
+                if right.type_.equals(&SkyeType::AnyInt, EqualsLevel::Typewise) {
+                    Ok(SkyeValue::new(Rc::from(format!("{} {} {}", left.value, op_stringified, right.value)), return_type, false))
+                } else {
+                    ast_error!(
+                        self, right_expr, 
+                        format!(
+                            "Expecting right operand type to be integer but got {}",
+                            right.type_.stringify_native()
+                        ).as_ref()
+                    );
+
+                    Err(ExecutionInterrupt::Error)
+                }
+            }
+            ImplementsHow::ThirdParty => {
+                let search_tok = Token::dummy(Rc::from(op_method));
+                if let Some(value) = self.get_method(&left, &search_tok, true) {
+                    self.call(&value, expr, left_expr, &vec![right_expr.clone()], index, allow_unknown)
+                } else {
+                    ast_error!(
+                        self, left_expr, 
+                        format!(
+                            "This operator is not implemented for type {}",
+                            left.type_.stringify_native()
+                        ).as_ref()
+                    );
+
+                    Err(ExecutionInterrupt::Error)
+                }
+            }
+            ImplementsHow::No => {
+                ast_error!(
+                    self, left_expr, 
+                    format!(
+                        "Type {} cannot use this operator",
+                        left.type_.stringify_native()
+                    ).as_ref()
+                );
+
+                Err(ExecutionInterrupt::Error)
+            }
+        }
+    }
+
     fn suffix_unary_native_only(&mut self, inner: SkyeValue, op_stringified: &str, op_type: Operator, op: &Token) -> Result<SkyeValue, ExecutionInterrupt> {
         match inner.type_.implements_op(op_type) {
             ImplementsHow::Native => Ok(SkyeValue::new(Rc::from(format!("{}{}", inner.value, op_stringified)), inner.type_, false)),
@@ -1311,7 +1365,25 @@ impl CodeGen {
                         TokenType::BitwiseAnd => {
                             match inner.type_.implements_op(Operator::Ref) {
                                 ImplementsHow::Native | ImplementsHow::ThirdParty => {
-                                    Ok(SkyeValue::new(Rc::from(format!("&{}", inner.value)), SkyeType::Pointer(Box::new(inner.type_), inner.is_const), true))
+                                    let value = {
+                                        if inner_expr.is_valid_assignment_target() {
+                                            inner.value
+                                        } else {
+                                            let tmp_var = self.get_temporary_var();
+
+                                            self.definitions[index].push_indent();
+                                            self.definitions[index].push(&inner.type_.stringify());
+                                            self.definitions[index].push(" ");
+                                            self.definitions[index].push(&tmp_var);
+                                            self.definitions[index].push(" = ");
+                                            self.definitions[index].push(&inner.value);
+                                            self.definitions[index].push(";\n");
+    
+                                            Rc::from(tmp_var)
+                                        }
+                                    };
+
+                                    Ok(SkyeValue::new(Rc::from(format!("&{}", value)), SkyeType::Pointer(Box::new(inner.type_), inner.is_const), true))
                                 }
                                 ImplementsHow::No => {
                                     token_error!(
@@ -1329,7 +1401,25 @@ impl CodeGen {
                         TokenType::RefConst => {
                             match inner.type_.implements_op(Operator::ConstRef) {
                                 ImplementsHow::Native | ImplementsHow::ThirdParty => {
-                                    Ok(SkyeValue::new(Rc::from(format!("&{}", inner.value)), SkyeType::Pointer(Box::new(inner.type_), true), true))
+                                    let value = {
+                                        if inner_expr.is_valid_assignment_target() {
+                                            inner.value
+                                        } else {
+                                            let tmp_var = self.get_temporary_var();
+
+                                            self.definitions[index].push_indent();
+                                            self.definitions[index].push(&inner.type_.stringify());
+                                            self.definitions[index].push(" ");
+                                            self.definitions[index].push(&tmp_var);
+                                            self.definitions[index].push(" = ");
+                                            self.definitions[index].push(&inner.value);
+                                            self.definitions[index].push(";\n");
+    
+                                            Rc::from(tmp_var)
+                                        }
+                                    };
+
+                                    Ok(SkyeValue::new(Rc::from(format!("&{}", value)), SkyeType::Pointer(Box::new(inner.type_), true), true))
                                 }
                                 ImplementsHow::No => {
                                     token_error!(
@@ -1756,14 +1846,14 @@ impl CodeGen {
                         )
                     }
                     TokenType::ShiftLeft => {
-                        self.binary_operator(
+                        self.binary_operator_int_on_right(
                             left, left_type, &left_expr, &right_expr, 
                             expr, "<<", "__shl__", Operator::Shl, 
                             index, allow_unknown
                         )
                     }
                     TokenType::ShiftRight => {
-                        self.binary_operator(
+                        self.binary_operator_int_on_right(
                             left, left_type, &left_expr, &right_expr, 
                             expr, ">>", "__shr__", Operator::Shr, 
                             index, allow_unknown
@@ -2073,10 +2163,7 @@ impl CodeGen {
                 }
             }
             Expression::Variable(name) => {
-                let env = self.environment.borrow();
-                let var = env.get(&name);
-
-                if let Some(var_info) = var {
+                if let Some(var_info) = self.environment.borrow().get(&name) {
                     Ok(SkyeValue::new(name.lexeme.clone(), var_info.type_, var_info.is_const))
                 } else if allow_unknown {
                     Ok(SkyeValue::special(SkyeType::Unknown(Rc::clone(&name.lexeme))))
