@@ -355,7 +355,7 @@ namespace core {
         }
 
         fn slice(const self, const a: usz, const b: usz) core::Slice[T] {
-            if a < self.length && b < self.length {
+            if a < self.length && b <= self.length {
                 return core::Slice::new(self.array.ptr + a, b - a);
             } else {
                 panic("Array: out of bounds slicing");
@@ -543,7 +543,7 @@ namespace core {
         }
 
         fn slice(const self, const a: usz, const b: usz) core::Slice[char] {
-            if a < self.length && b < self.length {
+            if a < self.length && b <= self.length {
                 return core::Slice::new(self.array.ptr + a, b - a);
             } else {
                 panic("MutableString: out of bounds slicing");
@@ -619,26 +619,7 @@ namespace core {
         }
 
         fn strip(self) Self[U] {
-            let a = 0usz;
-            let b = self.length - 1;
-
-            while a < b {
-                switch self.array[a] {
-                    ' ' | '\n' | '\t' | '\r' {
-                        a++;
-                    }
-                    default {}
-                }
-
-                switch self.array[b] {
-                    ' ' | '\n' | '\t' | '\r' {
-                        b--;
-                    }
-                    default {}
-                }
-            }
-
-            return Self::initFrom(String::fromSlice(self.slice(a, b)), self.allocator);
+            return self.stripLeft().stripRight();
         }
     }
 

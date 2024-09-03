@@ -527,7 +527,7 @@ impl CodeGen {
                 }
 
                 let call_output = self.output_call(return_type, &callee.value, &args, index);
-                Ok(SkyeValue::new(Rc::from(call_output.as_ref()), *return_type.clone(), true))
+                Ok(SkyeValue::new(Rc::from(call_output.as_ref()), *return_type.clone(), false))
             }
             SkyeType::Template(name, definition, generics, generics_names, curr_name, read_env) => {
                 if let Statement::Function(_, params, return_type_expr, ..) = definition {
@@ -808,7 +808,7 @@ impl CodeGen {
                     );
 
                     let call_output = self.output_call(&return_evaluated, &final_name, &args, index);
-                    Ok(SkyeValue::new(Rc::from(call_output.as_ref()), return_evaluated, true))
+                    Ok(SkyeValue::new(Rc::from(call_output.as_ref()), return_evaluated, false))
                 } else {
                     ast_error!(self, callee_expr, "Cannot call this expression");
                     ast_note!(
@@ -881,7 +881,7 @@ impl CodeGen {
                         self.environment = previous;
 
                         if let SkyeType::Type(inner_type) = call_return_type.type_ {
-                            Ok(SkyeValue::new(Rc::from(format!("{}({})", callee.value, args)), *inner_type, true))
+                            Ok(SkyeValue::new(Rc::from(format!("{}({})", callee.value, args)), *inner_type, false))
                         } else {
                             ast_error!(
                                 self, return_type.as_ref().unwrap(), 
