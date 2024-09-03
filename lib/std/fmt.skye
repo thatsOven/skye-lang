@@ -41,12 +41,12 @@ namespace std {
                 let tmpBuf = core::MutableString::new();
                 defer tmpBuf.free();
                 std::fmt::__reversedIntToString(&tmpBuf, decPart);
+                tmpBuf.reverse();
                 
                 while tmpBuf.length < decPrecision {
                     tmpBuf.push('0');
                 }
 
-                tmpBuf.reverse();
                 buf.pushString(tmpBuf.toString());
             }
         }
