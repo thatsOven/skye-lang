@@ -619,7 +619,31 @@ namespace core {
         }
 
         fn strip(self) Self[U] {
-            return self.stripLeft().stripRight();
+            let a = 0usz;
+
+            while a < self.length {
+                switch self.array[a] {
+                    ' ' | '\n' | '\t' | '\r' {
+                        a++;
+                    }
+                    default {
+                        break;
+                    }
+                }
+            }
+
+            let b = self.length;
+
+            while b-- > 0 {
+                switch self.array[b] {
+                    ' ' | '\n' | '\t' | '\r' {}
+                    default {
+                        break;
+                    }
+                }
+            }
+
+            return Self::initFrom(String::fromSlice(self.slice(a, b + 1)), self.allocator);
         }
     }
 
