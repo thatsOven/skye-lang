@@ -1,4 +1,4 @@
-impl String {
+impl core::String {
     fn __subscript__(const self, idx: usz) *const char {
         if idx < self.length {
             return @cast(*char, self.raw) + idx;
