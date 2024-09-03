@@ -687,14 +687,14 @@ namespace core {
                 return (?T)::None;
             }
 
-            let e = 0usz;
+            let e = 0f64;
             let result: T = 0;
 
             while i-- > 0 {
                 const ch = self.array[i];
 
                 if '0' <= ch && ch <= '9' {
-                    result += @cast(T, ch - 48) * @cast(T, pow(10f64, @cast(f64, e++)));
+                    result += @cast(T, ch - 48) * @cast(T, pow(10f64, e++));
                 } else if doMinus && ch == '-' {
                     if result == 0 {
                         return (?T)::None;
