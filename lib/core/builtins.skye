@@ -683,7 +683,7 @@ namespace core {
         fn __parseIntInternal[T](self, doMinus: u8) ?T {
             let i = self.length;
 
-            if i == 0 || self.array[0] < '0' || self.array[0] > '9' {
+            if i == 0 || ((self.array[0] < '0' || self.array[0] > '9') && self.array[0] != '-') {
                 return (?T)::None;
             }
 
@@ -696,7 +696,7 @@ namespace core {
                 if '0' <= ch && ch <= '9' {
                     result += @cast(T, ch - 48) * @cast(T, pow(10f64, e++));
                 } else if doMinus && ch == '-' {
-                    if result == 0 {
+                    if result == 0 || self.array[0] != '-' {
                         return (?T)::None;
                     }
 
