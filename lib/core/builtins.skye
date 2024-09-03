@@ -304,17 +304,17 @@ namespace core {
         }
 
         fn grow(self, const amt: usz) {
-            if self.capacity < self.length + size {
+            if self.capacity < self.length + amt {
                 do self.capacity <<= 1;
-                while self.capacity < self.length + size;
+                while self.capacity < self.length + amt;
 
                 self.allocator.realloc(&self.array, self.capacity);
             }
         }
 
         fn growExact(self, const amt: usz) {
-            if self.capacity < self.length + size {
-                self.capacity = self.length + size;
+            if self.capacity < self.length + amt {
+                self.capacity = self.length + amt;
                 self.allocator.realloc(&self.array, self.capacity);
             }
         }
@@ -492,17 +492,17 @@ namespace core {
         }
 
         fn grow(self, const amt: usz) {
-            if self.capacity < self.length + size {
+            if self.capacity < self.length + amt {
                 do self.capacity <<= 1;
-                while self.capacity < self.length + size;
+                while self.capacity < self.length + amt;
 
                 self.allocator.realloc(&self.array, self.capacity);
             }
         }
 
         fn growExact(self, const amt: usz) {
-            if self.capacity < self.length + size {
-                self.capacity = self.length + size;
+            if self.capacity < self.length + amt {
+                self.capacity = self.length + amt;
                 self.allocator.realloc(&self.array, self.capacity);
             }
         }
@@ -587,20 +587,18 @@ namespace core {
         }
 
         fn stripRight(self) Self[U] {
-            let new = self.clone();
+            let i = self.length;
 
-            while new.length > 0 {
-                switch new.array[new.length] {
-                    ' ' | '\n' | '\t' | '\r' {
-                        new.length--;
-                    }
+            while i-- > 0 {
+                switch self.array[i] {
+                    ' ' | '\n' | '\t' | '\r' {}
                     default {
                         break;
                     }
                 }
             }
 
-            return new;
+            return Self::initFrom(String::fromSlice(self.slice(0, i + 1)), self.allocator);
         }
 
         fn stripLeft(self) Self[U] {
@@ -675,10 +673,11 @@ namespace core {
                         @sizeOf(char), 1
                     );
 
-                    if amtRead != 1 || buf.array[buf.length++] == '\n' {
+                    if amtRead != 1 || buf.array[buf.length] == '\n' {
                         break;
                     }
 
+                    buf.length++;
                     r++;
                 }
 
@@ -687,7 +686,7 @@ namespace core {
 
             fn allocReadLine[U = core::mem::HeapAllocator](self, const alloc: *U) core::MutableString[U] {
                 let buf = core::MutableString::init(alloc);
-                self.readLine(&buf, amt);
+                self.readLine(&buf);
                 return buf;
             }
         }
