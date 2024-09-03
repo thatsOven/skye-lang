@@ -779,6 +779,7 @@ impl Parser {
         let mut generics = Vec::new();
         generics.append(&mut incoming_generics.clone());
 
+        let mut had_default = false;
         let mut has_default = false;
         if self.match_(&[TokenType::LeftSquare]) {
             loop {
@@ -794,13 +795,16 @@ impl Parser {
 
                 let default = {
                     if self.match_(&[TokenType::Equal]) {
-                        has_default = true;
-                        Some(self.expression()?)
-                    } else {
-                        if has_default {
-                            token_error!(self, name, "Cannot use generic with no default type after generic with default type");
+                        if had_default && !has_default {
+                            token_error!(self, name, "Cannot alternate generic with no default type with generic with default type");
+                            None
+                        } else {
+                            has_default = true;
+                            had_default = true;
+                            Some(self.expression()?)
                         }
-
+                    } else {
+                        has_default = false;
                         None
                     }
                 };

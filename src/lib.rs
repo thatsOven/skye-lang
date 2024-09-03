@@ -118,6 +118,7 @@ pub fn basic_compile_c(input: &OsStr, output: &OsStr) -> Result<(), Error> {
             .arg(output)
             .arg("-Wall")
             .arg("-Wextra")
+            .arg("-lm")
             .status()?;
     } else if cfg!(windows) {
         todo!("Windows is not yet supported, sorry!")

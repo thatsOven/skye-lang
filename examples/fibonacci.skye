@@ -1,6 +1,5 @@
 import "std/fmt";
-
-macro N 10;
+use core::io as io;
 
 fn main() !void {
     let a = 0;
@@ -9,7 +8,12 @@ fn main() !void {
     let stringBuffer = core::MutableString::new();
     defer stringBuffer.free();
 
-    for let i = 0; i < @N; i++ {
+    println("Insert amount of terms");
+    io::stdIn.readLine(&stringBuffer);
+    const n = stringBuffer.parseInt[u64]().expect("Invalid number");
+    stringBuffer.clear();
+
+    for let i = 0; i < n; i++ {
         std::fmt::intToString(&stringBuffer, a);
         defer stringBuffer.clear();
 

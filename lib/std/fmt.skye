@@ -1,7 +1,3 @@
-import <"math.h">;
-
-#bind fn pow(base: f64, exp: f64) f64;
-
 namespace std {
     namespace fmt {
         fn __reversedIntToString[T: AnyInt, U](const buf: *core::MutableString[U], value: T) {

@@ -1,6 +1,9 @@
 import <"stdlib.h">;
 import <"stdio.h">;
 import <"string.h">;
+import <"math.h">;
+
+#bind fn pow(base: f64, exp: f64) f64;
 
 #bind fn malloc(size: usz) voidptr;
 #bind fn realloc(ptr: voidptr, size: usz) voidptr;

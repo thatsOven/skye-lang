@@ -2776,14 +2776,14 @@ impl CodeGen {
                         }
                     }
                     SkyeType::Template(name, definition, generics, generics_names, curr_name, read_env) => {
-                        if arguments.len() != generics.len() {
-                            let mut needed_cnt = 0;
-                            for generic in &generics {
-                                if generic.default.is_none() {
-                                    needed_cnt += 1;
-                                }
+                        let mut needed_cnt = 0;
+                        for generic in &generics {
+                            if generic.default.is_none() {
+                                needed_cnt += 1;
                             }
-
+                        }
+                        
+                        if arguments.len() != generics.len() {
                             if arguments.len() < needed_cnt || arguments.len() > generics.len() {
                                 ast_error!(
                                     self, expr, 
@@ -2801,10 +2801,22 @@ impl CodeGen {
                             Environment::with_enclosing(Rc::clone(&read_env))
                         ));
 
+                        let offs = {
+                            if generics.len() > 1 {
+                                if generics.first().unwrap().default.is_some() && generics.last().unwrap().default.is_none() {
+                                    generics.len() - arguments.len()
+                                } else {
+                                    0
+                                }
+                            } else {
+                                0
+                            }
+                        };
+
                         for (i, generic) in generics.iter().enumerate() {
                             let evaluated = {
-                                if i < arguments.len() {
-                                    self.evaluate(&arguments[i], index, allow_unknown)?.type_
+                                if i >= offs && i - offs < arguments.len() {
+                                    self.evaluate(&arguments[i - offs], index, allow_unknown)?.type_
                                 } else {
                                     generic.default.as_ref().unwrap().clone()
                                 }
@@ -2814,7 +2826,7 @@ impl CodeGen {
                                 SkyeType::Type(_) | SkyeType::Void | SkyeType::Unknown(_) => (),
                                 _ => {
                                     ast_error!(
-                                        self, arguments[i], 
+                                        self, arguments[i - offs], 
                                         format!(
                                             "Expecting type as generic type (got {})",
                                             evaluated.stringify_native()
@@ -2826,15 +2838,15 @@ impl CodeGen {
                             }
 
                             if !evaluated.check_completeness() {
-                                ast_error!(self, arguments[i], "Cannot use incomplete type directly");
-                                ast_note!(arguments[i], "Define this type or reference it through a pointer");
+                                ast_error!(self, arguments[i - offs], "Cannot use incomplete type directly");
+                                ast_note!(arguments[i - offs], "Define this type or reference it through a pointer");
                                 return Err(ExecutionInterrupt::Error);
                             }
 
                             if let Some(bounds) = &generic.bounds {
                                 if !bounds.is_respected_by(&evaluated) {
                                     ast_error!(
-                                        self, arguments[i], 
+                                        self, arguments[i - offs], 
                                         format!(
                                             "Generic bound is not respected by this type (expecting {} but got {})",
                                             bounds.stringify_native(), evaluated.stringify_native()
