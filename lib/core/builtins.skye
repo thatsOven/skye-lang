@@ -558,7 +558,7 @@ namespace core {
     namespace io {
         impl core::io::File {
             fn read[T, U = core::mem::HeapAllocator](self, const buf: *core::Array[T, U], const amt: usz) usz {
-                buf.resizeExact(buf.length + amt);
+                buf.growExact(amt);
 
                 const r = self.readRaw(
                     @cast(voidptr, buf.array.ptr + buf.length),
