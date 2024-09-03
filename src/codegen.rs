@@ -181,7 +181,7 @@ pub struct CodeGen {
     deferred:      Rc<RefCell<Vec<Vec<Statement>>>>,
     curr_function: CurrentFn,
     curr_name:     String,
-    in_loop:       bool,
+    curr_loop:     Option<Rc<str>>,
 
     had_error: bool
 }
@@ -232,7 +232,7 @@ impl CodeGen {
             deferred: Rc::new(RefCell::new(Vec::new())),
             curr_function: CurrentFn::None, 
             string_type: None, tmp_var_cnt: 0,
-            in_loop: false, had_error: false, 
+            curr_loop: None, had_error: false, 
             globals, source_path: {
                 if let Some(real_path) = path {
                     Some(Box::new(PathBuf::from(real_path)))
@@ -3674,6 +3674,13 @@ impl CodeGen {
                     token_note!(kw, "Place this while loop inside a function");
                 }
 
+                let not_grouping = !matches!(cond_expr, Expression::Grouping(_));
+                let not_block    = !matches!(**body, Statement::Block(..));
+
+                self.definitions[index].push_indent();
+                self.definitions[index].push("while (1) {\n");
+                self.definitions[index].inc_indent();
+
                 let cond = self.evaluate(cond_expr, index, false)?;
 
                 match cond.type_ {
@@ -3691,12 +3698,9 @@ impl CodeGen {
                     }
                 }
 
-                let not_grouping = !matches!(cond_expr, Expression::Grouping(_));
-                let not_block    = !matches!(**body, Statement::Block(..));
-
                 self.definitions[index].push_indent();
-                self.definitions[index].push("while ");
-                
+                self.definitions[index].push("if (!");
+
                 if not_grouping {
                     self.definitions[index].push("(");
                 }
@@ -3707,16 +3711,14 @@ impl CodeGen {
                     self.definitions[index].push(")");
                 }
 
-                self.definitions[index].push("\n");
+                self.definitions[index].push(") break;\n");
 
-                let previous_in_loop = self.in_loop;
-                self.in_loop = true;
+                let break_label = self.get_temporary_var();
+
+                let previous_loop = self.curr_loop.clone();
+                self.curr_loop = Some(Rc::from(break_label.clone()));
 
                 if not_block {
-                    self.definitions[index].push_indent();
-                    self.definitions[index].push("{\n");
-                    self.definitions[index].inc_indent();
-
                     self.execute_block(
                         &vec![*body.clone()], 
                         Rc::new(RefCell::new(Environment::with_enclosing(
@@ -3728,13 +3730,15 @@ impl CodeGen {
                     let _ = self.execute(&body, index);
                 }
                 
-                self.in_loop = previous_in_loop;
+                self.curr_loop = previous_loop;
 
-                if not_block {
-                    self.definitions[index].dec_indent();
-                    self.definitions[index].push_indent();
-                    self.definitions[index].push("}\n");
-                }
+                self.definitions[index].dec_indent();
+                self.definitions[index].push_indent();
+                self.definitions[index].push("}\n");
+
+                self.definitions[index].push_indent();
+                self.definitions[index].push(&break_label);
+                self.definitions[index].push(":;\n");
             }
             Statement::For(kw, initializer, cond_expr, increment, body) => {
                 if matches!(self.curr_function, CurrentFn::None) {
@@ -3743,10 +3747,23 @@ impl CodeGen {
                 }
 
                 let not_block = !matches!(**body, Statement::Block(..));
+                let not_grouping = !matches!(cond_expr, Expression::Grouping(_));
 
                 if let Some(init) = initializer {
                     let _ = self.execute(&init, index);
                 }
+
+                self.definitions[index].push_indent();
+                self.definitions[index].push("for (;; ");
+
+                if let Some(inc_expr) = increment {
+                    let inc = self.evaluate(inc_expr, index, false)?;
+
+                    self.definitions[index].push(&inc.value);
+                }
+
+                self.definitions[index].push(") {\n");
+                self.definitions[index].inc_indent();
 
                 let cond = self.evaluate(cond_expr, index, false)?;
 
@@ -3766,27 +3783,26 @@ impl CodeGen {
                 }
 
                 self.definitions[index].push_indent();
-                self.definitions[index].push("for (; ");
-                self.definitions[index].push(&cond.value);
-                self.definitions[index].push(";");
+                self.definitions[index].push("if (!");
 
-                if let Some(inc_expr) = increment {
-                    let inc = self.evaluate(inc_expr, index, false)?;
-
-                    self.definitions[index].push(" ");
-                    self.definitions[index].push(&inc.value);
+                if not_grouping {
+                    self.definitions[index].push("(");
                 }
 
-                self.definitions[index].push(")\n");
+                self.definitions[index].push(&cond.value);
 
-                let previous_in_loop = self.in_loop;
-                self.in_loop = true;
+                if not_grouping {
+                    self.definitions[index].push(")");
+                }
+
+                self.definitions[index].push(") break;\n");
+
+                let break_label = self.get_temporary_var();
+
+                let previous_loop = self.curr_loop.clone();
+                self.curr_loop = Some(Rc::from(break_label.clone()));
 
                 if not_block {
-                    self.definitions[index].push_indent();
-                    self.definitions[index].push("{\n");
-                    self.definitions[index].inc_indent();
-
                     self.execute_block(
                         &vec![*body.clone()], 
                         Rc::new(RefCell::new(Environment::with_enclosing(
@@ -3798,19 +3814,47 @@ impl CodeGen {
                     let _ = self.execute(&body, index);
                 }
 
-                self.in_loop = previous_in_loop;
+                self.curr_loop = previous_loop;
 
-                if not_block {
-                    self.definitions[index].dec_indent();
-                    self.definitions[index].push_indent();
-                    self.definitions[index].push("}\n");
-                }
+                self.definitions[index].dec_indent();
+                self.definitions[index].push_indent();
+                self.definitions[index].push("}\n");
+
+                self.definitions[index].push_indent();
+                self.definitions[index].push(&break_label);
+                self.definitions[index].push(":;\n");
             }
             Statement::DoWhile(kw, cond_expr, body) => {
                 if matches!(self.curr_function, CurrentFn::None) {
                     token_error!(self, kw, "Only declarations are allowed at top level");
                     token_note!(kw, "Place this do-while loop inside a function");
                 }
+
+                let not_grouping = !matches!(cond_expr, Expression::Grouping(_));
+                let not_block    = !matches!(**body, Statement::Block(..));
+
+                self.definitions[index].push_indent();
+                self.definitions[index].push("while (1) {\n");
+                self.definitions[index].inc_indent();
+
+                let break_label = self.get_temporary_var();
+
+                let previous_loop = self.curr_loop.clone();
+                self.curr_loop = Some(Rc::from(break_label.clone()));
+
+                if not_block {
+                    self.execute_block(
+                        &vec![*body.clone()], 
+                        Rc::new(RefCell::new(Environment::with_enclosing(
+                            Rc::clone(&self.environment)
+                        ))), 
+                        index, false
+                    );
+                } else {
+                    let _ = self.execute(&body, index);
+                }
+                
+                self.curr_loop = previous_loop;
 
                 let cond = self.evaluate(cond_expr, index, false)?;
 
@@ -3829,42 +3873,9 @@ impl CodeGen {
                     }
                 }
 
-                let not_grouping = !matches!(cond_expr, Expression::Grouping(_));
-                let not_block    = !matches!(**body, Statement::Block(..));
-
                 self.definitions[index].push_indent();
-                self.definitions[index].push("do\n");
+                self.definitions[index].push("if (!");
 
-                let previous_in_loop = self.in_loop;
-                self.in_loop = true;
-
-                if not_block {
-                    self.definitions[index].push_indent();
-                    self.definitions[index].push("{\n");
-                    self.definitions[index].inc_indent();
-
-                    self.execute_block(
-                        &vec![*body.clone()], 
-                        Rc::new(RefCell::new(Environment::with_enclosing(
-                            Rc::clone(&self.environment)
-                        ))), 
-                        index, false
-                    );
-                } else {
-                    let _ = self.execute(&body, index);
-                }
-                
-                self.in_loop = previous_in_loop;
-
-                if not_block {
-                    self.definitions[index].dec_indent();
-                    self.definitions[index].push_indent();
-                    self.definitions[index].push("}\n");
-                }
-
-                self.definitions[index].push_indent();
-                self.definitions[index].push("while ");
-                
                 if not_grouping {
                     self.definitions[index].push("(");
                 }
@@ -3875,7 +3886,15 @@ impl CodeGen {
                     self.definitions[index].push(")");
                 }
 
-                self.definitions[index].push(";\n");
+                self.definitions[index].push(") break;\n");
+                self.definitions[index].dec_indent();
+
+                self.definitions[index].push_indent();
+                self.definitions[index].push("}\n");
+
+                self.definitions[index].push_indent();
+                self.definitions[index].push(&break_label);
+                self.definitions[index].push(":;\n");
             }
             Statement::Return(kw, ret_expr) => {
                 if matches!(self.curr_function, CurrentFn::None) {
@@ -4745,7 +4764,7 @@ impl CodeGen {
                     SkyeType::U8  | SkyeType::I8  | SkyeType::U16 | SkyeType::I16 |
                     SkyeType::U32 | SkyeType::I32 | SkyeType::U64 | SkyeType::I64 |
                     SkyeType::Usz | SkyeType::F32 | SkyeType::F64 | SkyeType::AnyInt |
-                    SkyeType::AnyFloat => (),
+                    SkyeType::AnyFloat | SkyeType::Char => (),
                     SkyeType::Enum(_, variants, _) => {
                         if variants.is_some() {
                             ast_error!(
@@ -4795,7 +4814,7 @@ impl CodeGen {
                                 SkyeType::U8  | SkyeType::I8  | SkyeType::U16 | SkyeType::I16 |
                                 SkyeType::U32 | SkyeType::I32 | SkyeType::U64 | SkyeType::I64 |
                                 SkyeType::Usz | SkyeType::F32 | SkyeType::F64 | SkyeType::AnyInt |
-                                SkyeType::AnyFloat => (),
+                                SkyeType::AnyFloat | SkyeType::Char => (),
                                 _ => {
                                     ast_error!(
                                         self, real_case, 
@@ -4917,14 +4936,14 @@ impl CodeGen {
                 );
             }
             Statement::Break(kw) => {
-                if self.in_loop {                    
-                    return Err(ExecutionInterrupt::Interrupt(Rc::from("break;\n")));
+                if let Some(label) = &self.curr_loop {                    
+                    return Err(ExecutionInterrupt::Interrupt(Rc::from(format!("goto {};\n", label))));
                 } else {
                     token_error!(self, kw, "Can only use break inside loops");
                 }
             }
             Statement::Continue(kw) => {
-                if self.in_loop {
+                if self.curr_loop.is_some() {
                     return Err(ExecutionInterrupt::Interrupt(Rc::from("continue;\n")));
                 } else {
                     token_error!(self, kw, "Can only use continue inside loops");
@@ -5511,8 +5530,10 @@ impl CodeGen {
                 self.definitions[index].push(&tmp_item_var_name);
                 self.definitions[index].push(".some;\n");
 
-                let previous_in_loop = self.in_loop;
-                self.in_loop = true;
+                let break_label = self.get_temporary_var();
+
+                let previous_loop = self.curr_loop.clone();
+                self.curr_loop = Some(Rc::from(break_label.clone()));
 
                 if matches!(**body, Statement::Block(..)) {
                     self.execute_block(
@@ -5526,7 +5547,8 @@ impl CodeGen {
                     let _ = self.execute(&body, index);
                 }
                 
-                self.in_loop = previous_in_loop;
+                self.curr_loop = previous_loop;
+                self.environment = previous;
 
                 self.definitions[index].dec_indent();
                 self.definitions[index].push_indent();
@@ -5536,7 +5558,9 @@ impl CodeGen {
                 self.definitions[index].push_indent();
                 self.definitions[index].push("}\n");
                 
-                self.environment = previous;
+                self.definitions[index].push_indent();
+                self.definitions[index].push(&break_label);
+                self.definitions[index].push(":;\n");
             }
         }
 

@@ -98,6 +98,10 @@ namespace core {
     }
 
     impl core::String {
+        fn fromSlice(const slice: core::Slice[char]) Self {
+            return Self.{ raw: @cast(rawstring, slice.ptr), length: slice.length };
+        }
+
         fn asSlice(const self) core::Slice[char] {
             return core::Slice::new(@cast(*const char, self.raw), self.length);
         }
