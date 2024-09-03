@@ -588,12 +588,12 @@ namespace core {
             self.array.free();
         }
 
-        fn toString(const self) String {
+        fn asString(const self) String {
             return core::String.{ raw: @cast(rawstring, self.array.ptr), length: self.length };
         }
 
         fn clone(const self) Self[U] {
-            return Self::initFrom(self.toString(), self.allocator);
+            return Self::initFrom(self.asString(), self.allocator);
         }
 
         fn pushString(self, const string: String) {

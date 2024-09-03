@@ -17,7 +17,7 @@ fn main() !void {
         std::fmt::intToString(&stringBuffer, a);
         defer stringBuffer.clear();
 
-        println(stringBuffer.toString());
+        println(stringBuffer.asString());
         
         const c = a + b;
         a = b;

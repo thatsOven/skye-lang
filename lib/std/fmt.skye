@@ -47,7 +47,7 @@ namespace std {
                     tmpBuf.push('0');
                 }
 
-                buf.pushString(tmpBuf.toString());
+                buf.pushString(tmpBuf.asString());
             }
         }
 
