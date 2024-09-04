@@ -276,7 +276,7 @@ impl SkyeType {
             }
             
             SkyeType::Union(name, _) | 
-            SkyeType::Bitfield(name, _) => name.to_string(),
+            SkyeType::Bitfield(name, _) => name.to_string().replace("_DOT_", "::"),
         }
     }
 
