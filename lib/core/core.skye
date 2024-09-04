@@ -108,21 +108,6 @@ namespace core {
         }
     }
 
-    struct String {
-        const raw: rawstring,
-        const length: usz
-    }
-
-    impl core::String {
-        fn fromSlice(const slice: core::Slice[char]) Self {
-            return Self.{ raw: @cast(rawstring, slice.ptr), length: slice.length };
-        }
-
-        fn asSlice(const self) core::Slice[char] {
-            return core::Slice::new(@cast(*const char, self.raw), self.length);
-        }
-    }
-
     namespace mem {
         fn blockCopy(from: voidptr, to: voidptr, amt: usz) {
             while amt-- {
@@ -138,5 +123,5 @@ namespace core {
     }
 }
 
-use core::String as String;
+use core::Slice[char] as String;
 use core::Slice as Slice;

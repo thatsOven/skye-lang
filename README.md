@@ -88,22 +88,6 @@ let bin = 0b111010;
 let oct = 0o17356;
 let hex = 0x37f8A;
 ```
-
-# Strings
-There are two main types of strings in Skye: raw strings, and strings.
-
-A String is defined by using quotes (") around your text:
-```
-let myString: String = "This is a string";
-let stringLength = myString.length; // 16
-```
-The String type in Skye is not null terminated and stores its length separately.
-
-A raw string is mostly used for C interop. It's like a C string, but not null terminated.
-```
-let myRawString: rawstring = `This is a raw string\0`;
-let rawStringLength = core::utils::cStringLength(myRawString); // 22
-```
 # Arrays
 There are two main types of arrays in Skye: the slice, and the array.
 
@@ -121,6 +105,23 @@ Creating empty slices and arrays with this syntax is not permitted. To create an
 ```
 let myEmptyArray = Array::new[f32]();
 ```
+
+# Strings
+There are two main types of strings in Skye: raw strings, and strings.
+
+A String is defined by using quotes (") around your text:
+```
+let myString: String = "This is a string";
+let stringLength = myString.length; // 16
+```
+The String type in Skye is not null terminated and stores its length separately. Effectively, a Skye string is just a `Slice` of `char`s.
+
+A raw string is mostly used for C interop. It's like a C string, but not null terminated.
+```
+let myRawString: rawstring = `This is a raw string\0`;
+let rawStringLength = core::utils::cStringLength(myRawString); // 22
+```
+
 # Conditionals
 Conditionals in Skye accept any numeric type as their condition, just like in C.
 ## If statements

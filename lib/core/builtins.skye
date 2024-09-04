@@ -1,13 +1,3 @@
-impl core::String {
-    fn __subscript__(const self, idx: usz) *const char {
-        if idx < self.length {
-            return @cast(*char, self.raw) + idx;
-        } else {
-            panic("String: out of bounds access");
-        }
-    }
-}
-
 impl[T] core::Slice[T] {
     fn __subscript__(const self, idx: usz) *const T {
         if idx < self.length {
@@ -56,19 +46,19 @@ impl[T, U] core::Result[T, U] {
 
 namespace core {
     namespace utils {
-        fn cStringToString(const raw: rawstring) core::String {
-            return core::String.{ raw, length: core::utils::cStringLength(raw) };
+        fn cStringToString(const raw: rawstring) String {
+            return String.{ ptr: @cast(*const char, raw), length: core::utils::cStringLength(raw) };
         }
     }
 
     namespace io {
         fn print(const msg: String) {
-            let _ = core::io::stdOut.write(msg.asSlice());
+            let _ = core::io::stdOut.write(msg);
         }
 
         fn println(const msg: String) {
             core::io::print(msg);
-            let _ = core::io::stdOut.write({'\n'});
+            let _ = core::io::stdOut.write("\n");
             let _ = core::io::stdOut.flush();
         }
     }
@@ -425,7 +415,7 @@ namespace core {
 
         fn from(const string: String) Self[U] {
             const mem = core::mem::heapAllocator.alloc[char](string.length);
-            core::mem::typedBlockCopy(@cast(*char, string.raw), mem.ptr, string.length);
+            core::mem::typedBlockCopy(string.ptr, mem.ptr, string.length);
 
             return Self.{ 
                 array: mem,
@@ -437,7 +427,7 @@ namespace core {
 
         fn initFrom(const string: String, const allocator: *U) Self[U] {
             const mem = allocator.alloc[char](string.length);
-            core::mem::typedBlockCopy(@cast(*char, string.raw), mem.ptr, string.length);
+            core::mem::typedBlockCopy(string.ptr, mem.ptr, string.length);
 
             return Self.{ 
                 array: mem,
@@ -589,7 +579,7 @@ namespace core {
         }
 
         fn asString(const self) String {
-            return core::String.{ raw: @cast(rawstring, self.array.ptr), length: self.length };
+            return String.{ ptr: self.array.ptr, length: self.length };
         }
 
         fn clone(const self) Self[U] {
@@ -598,7 +588,7 @@ namespace core {
 
         fn pushString(self, const string: String) {
             for let i = 0usz; i < string.length; i++ {
-                self.push(string.raw[i]);
+                self.push(string.ptr[i]);
             }
         }
 
@@ -614,7 +604,7 @@ namespace core {
                 }
             }
 
-            return Self::initFrom(String::fromSlice(self.slice(0, i + 1)), self.allocator);
+            return Self::initFrom(self.slice(0, i + 1), self.allocator);
         }
 
         fn stripLeft(self) Self[U] {
@@ -631,7 +621,7 @@ namespace core {
                 }
             }
 
-            return Self::initFrom(String::fromSlice(self.slice(i, self.length)), self.allocator);
+            return Self::initFrom(self.slice(i, self.length), self.allocator);
         }
 
         fn strip(self) Self[U] {
@@ -659,7 +649,7 @@ namespace core {
                 }
             }
 
-            return Self::initFrom(String::fromSlice(self.slice(a, b + 1)), self.allocator);
+            return Self::initFrom(self.slice(a, b + 1), self.allocator);
         }
 
         fn split[A = core::mem::HeapAllocator](self, const buf: *core::Array[Self[U], A], const ch: char) {
@@ -810,13 +800,13 @@ fn _SKYE_INIT() {
     _SKYE_PRIMITIVES_INIT();
 }
 
-fn _SKYE_CONVERT_ARGS(const argc: usz, const argv: **char) core::Array[core::String] {
-    let output = core::Array::withCapacity[core::String](argc);
+fn _SKYE_CONVERT_ARGS(const argc: usz, const argv: *rawstring) core::Array[String] {
+    let output = core::Array::withCapacity[String](argc);
 
     for let i = 0usz; i < argc; i++ {
-        output.push(core::String.{ 
-            raw: @cast(rawstring, argv[i]), 
-            length: core::utils::cStringLength(@cast(rawstring, argv[i])) 
+        output.push(String.{ 
+            ptr: @cast(*const char, argv[i]), 
+            length: core::utils::cStringLength(argv[i]) 
         });
     }
 

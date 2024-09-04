@@ -1183,7 +1183,7 @@ impl CodeGen {
                     LiteralKind::String => {
                         if self.string_type.is_none() {
                             if let SkyeType::Type(inner_type) = &self.globals.borrow().get(
-                                &Token::dummy(Rc::from("core_DOT_String"))
+                                &Token::dummy(Rc::from("String"))
                             ).as_ref().expect("No String type is defined yet").type_ 
                             {
                                 self.string_type = Some(*inner_type.clone());
@@ -1195,7 +1195,7 @@ impl CodeGen {
                         if let Some(string_const) = self.strings.get(value) {
                             Ok(SkyeValue::new(
                                 Rc::from(format!(
-                                    "(core_DOT_String) {{ .raw = SKYE_STRING_{}, .length = sizeof(SKYE_STRING_{}) }}", 
+                                    "(String) {{ .ptr = SKYE_STRING_{}, .length = sizeof(SKYE_STRING_{}) }}", 
                                     string_const, string_const
                                 )), 
                                 self.string_type.as_ref().unwrap().clone(), 
@@ -1213,7 +1213,7 @@ impl CodeGen {
 
                             Ok(SkyeValue::new(
                                 Rc::from(format!(
-                                    "(core_DOT_String) {{ .raw = SKYE_STRING_{}, .length = {} }}", 
+                                    "(String) {{ .ptr = SKYE_STRING_{}, .length = {} }}", 
                                     str_index, string_len
                                 )), 
                                 self.string_type.as_ref().unwrap().clone(),

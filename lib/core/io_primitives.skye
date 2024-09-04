@@ -134,7 +134,7 @@ namespace core {
                 let buf = @cast(*char, core::mem::heapAllocator.allocRaw(filename.length + 1));
                 defer core::mem::heapAllocator.freeRaw(@cast(voidptr, buf));
 
-                core::mem::typedBlockCopy(@cast(*const char, filename.raw), buf, filename.length);
+                core::mem::typedBlockCopy(filename.ptr, buf, filename.length);
                 buf[filename.length] = '\0';
 
                 const cFile = fopen(@cast(rawstring, buf), core::io::fileOpenModeToCMode(mode));
@@ -195,9 +195,9 @@ fn _SKYE_PRIMITIVES_INIT() {
 }
 
 fn panic(const msg: String) {
-    let _ = core::io::stdErr.write("Skye program panicked!\n".asSlice());
-    let _ = core::io::stdErr.write(msg.asSlice());
-    let _ = core::io::stdErr.write({'\n'});
+    let _ = core::io::stdErr.write("Skye program panicked!\n");
+    let _ = core::io::stdErr.write(msg);
+    let _ = core::io::stdErr.write("\n");
     let _ = core::io::stdErr.flush();
     exit(1);
 }
