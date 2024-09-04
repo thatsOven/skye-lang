@@ -195,9 +195,9 @@ fn _SKYE_PRIMITIVES_INIT() {
 }
 
 fn panic(const msg: String) {
-    let _ = core::io::stdOut.write("Skye program panicked!\n".asSlice());
-    let _ = core::io::stdOut.write(msg.asSlice());
-    let _ = core::io::stdOut.write({'\n'});
-    let _ = core::io::stdOut.flush();
+    let _ = core::io::stdErr.write("Skye program panicked!\n".asSlice());
+    let _ = core::io::stdErr.write(msg.asSlice());
+    let _ = core::io::stdErr.write({'\n'});
+    let _ = core::io::stdErr.flush();
     exit(1);
 }
