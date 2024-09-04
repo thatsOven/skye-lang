@@ -19,8 +19,8 @@ mod codegen;
 pub const SKYE_PATH_VAR: &str = "SKYE_PATH";
 pub const MAX_PACKAGE_SIZE_BYTES: u128 = 2u128.pow(32); // Max uncompressed package size is 4 GB (basic protection against malicious ZIPs)
 
-pub fn parse(source: &String) -> Option<Vec<Statement>> {
-    let mut scanner = Scanner::new(source);
+pub fn parse(source: &String, filename: Rc<str>) -> Option<Vec<Statement>> {
+    let mut scanner = Scanner::new(source, filename);
     scanner.scan_tokens();
 
     if scanner.had_error {
@@ -37,13 +37,14 @@ pub fn parse(source: &String) -> Option<Vec<Statement>> {
     Some(statements)
 }
 
-pub fn compile(source: &String, path: Option<&Path>, primitives: &String) -> Option<String> {
-    let mut statements = parse(source)?;
+pub fn compile(source: &String, path: Option<&Path>, filename: Rc<str>, primitives: &String) -> Option<String> {
+    let mut statements = parse(source, Rc::clone(&filename))?;
     statements.insert(
         0, 
         Statement::Import(
             Token::new(
                 Rc::from(source.as_ref()),
+                Rc::clone(&filename),
                 TokenType::Identifier,
                 Rc::from("core/core"),
                 0, 0
@@ -57,6 +58,7 @@ pub fn compile(source: &String, path: Option<&Path>, primitives: &String) -> Opt
         Statement::Import(
             Token::new(
                 Rc::from(source.as_ref()),
+                Rc::clone(&filename),
                 TokenType::Identifier,
                 Rc::from(primitives.as_ref()),
                 0, 0
@@ -70,6 +72,7 @@ pub fn compile(source: &String, path: Option<&Path>, primitives: &String) -> Opt
         Statement::Import(
             Token::new(
                 Rc::from(source.as_ref()),
+                filename,
                 TokenType::Identifier,
                 Rc::from("core/builtins"),
                 0, 0
@@ -88,7 +91,7 @@ pub fn parse_file(path: &OsStr) -> Result<Vec<Statement>, Error> {
     let mut input = String::new();
     f.read_to_string(&mut input)?;
 
-    if let Some(statements) = parse(&input) {
+    if let Some(statements) = parse(&input, Rc::from(path.to_str().unwrap())) {
         Ok(statements)
     } else {
         Err(Error::other("Compilation failed"))
@@ -100,7 +103,8 @@ pub fn compile_file(path: &OsStr, primitives: &String) -> Result<String, Error> 
     let mut input = String::new();
     f.read_to_string(&mut input)?;
 
-    compile(&input, PathBuf::from(path).parent(), primitives).ok_or(Error::other("Compilation failed"))
+    compile(&input, PathBuf::from(path).parent(), Rc::from(path.to_str().unwrap()), primitives)
+        .ok_or(Error::other("Compilation failed"))
 }
 
 pub fn compile_file_to_c(input: &OsStr, output: &OsStr, primitives: &String) -> Result<(), Error> {

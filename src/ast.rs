@@ -93,14 +93,15 @@ pub enum Expression {
 
 pub struct AstPos {
     pub source: Rc<str>,
+    pub filename: Rc<str>,
     pub start: usize,
     pub end: usize,
     pub line: usize
 }
 
 impl AstPos {
-    pub fn new(source: Rc<str>, start: usize, end: usize, line: usize) -> Self {
-        AstPos { source, start, end, line }
+    pub fn new(source: Rc<str>, filename: Rc<str>, start: usize, end: usize, line: usize) -> Self {
+        AstPos { source, filename, start, end, line }
     }
 }
 
@@ -109,7 +110,7 @@ impl Expression {
         match self {
             Expression::Grouping(expr) => expr.get_pos(),
             Expression::Literal(_, tok, _) | Expression::Variable(tok) => {
-                AstPos::new(Rc::clone(&tok.source), tok.pos, tok.pos + tok.lexeme.len(), tok.line)
+                AstPos::new(Rc::clone(&tok.source), Rc::clone(&tok.filename), tok.pos, tok.pos + tok.lexeme.len(), tok.line)
             }
             Expression::Binary(left, op, right) => {
                 let left_pos = left.get_pos();
@@ -118,7 +119,7 @@ impl Expression {
                 if left_pos.line != right_pos.line {
                     left_pos
                 } else {
-                    AstPos::new(Rc::clone(&op.source), left_pos.start, right_pos.end, left_pos.line)
+                    AstPos::new(Rc::clone(&op.source), Rc::clone(&op.filename), left_pos.start, right_pos.end, left_pos.line)
                 }
             }
             Expression::Unary(op, expr, is_prefix) => {
@@ -126,15 +127,15 @@ impl Expression {
 
                 if *is_prefix {
                     if op.line != expr_pos.line {
-                        AstPos::new(Rc::clone(&op.source), op.pos, op.pos + op.lexeme.len(), op.line)
+                        AstPos::new(Rc::clone(&op.source), Rc::clone(&op.filename), op.pos, op.pos + op.lexeme.len(), op.line)
                     } else {
-                        AstPos::new(Rc::clone(&op.source), op.pos, expr.get_pos().end, op.line)
+                        AstPos::new(Rc::clone(&op.source), Rc::clone(&op.filename), op.pos, expr.get_pos().end, op.line)
                     }
                 } else {
                     if expr_pos.line != op.line {
                         expr_pos
                     } else {
-                        AstPos::new(Rc::clone(&op.source), expr_pos.start, op.pos + op.lexeme.len(), expr_pos.line)
+                        AstPos::new(Rc::clone(&op.source), Rc::clone(&op.filename), expr_pos.start, op.pos + op.lexeme.len(), expr_pos.line)
                     }
                 }
             }
@@ -145,7 +146,7 @@ impl Expression {
                 if target_pos.line != value_pos.line {
                     target_pos
                 } else {
-                    AstPos::new(Rc::clone(&op.source), target_pos.start, value_pos.end, target_pos.line)
+                    AstPos::new(Rc::clone(&op.source), Rc::clone(&op.filename), target_pos.start, value_pos.end, target_pos.line)
                 }
             }
             Expression::Call(callee, paren, _) => {
@@ -154,16 +155,16 @@ impl Expression {
                 if callee_pos.line != paren.line {
                     callee_pos
                 } else {
-                    AstPos::new(Rc::clone(&paren.source), callee_pos.start, paren.pos + paren.lexeme.len(), callee_pos.line)
+                    AstPos::new(Rc::clone(&paren.source), Rc::clone(&paren.filename), callee_pos.start, paren.pos + paren.lexeme.len(), callee_pos.line)
                 }
             }
             Expression::FnPtr(kw, return_type, _) => {
                 let return_type_pos = return_type.get_pos();
 
                 if kw.line != return_type_pos.line {
-                    AstPos::new(Rc::clone(&kw.source), kw.pos, kw.pos + kw.lexeme.len(), kw.line)
+                    AstPos::new(Rc::clone(&kw.source), Rc::clone(&kw.filename), kw.pos, kw.pos + kw.lexeme.len(), kw.line)
                 } else { 
-                    AstPos::new(Rc::clone(&kw.source), kw.pos, return_type_pos.end, kw.line)
+                    AstPos::new(Rc::clone(&kw.source), Rc::clone(&kw.filename), kw.pos, return_type_pos.end, kw.line)
                 }
             }
             Expression::Ternary(question, cond, _, else_) => {
@@ -173,7 +174,7 @@ impl Expression {
                 if cond_pos.line != else_pos.line {
                     cond_pos
                 } else {
-                    AstPos::new(Rc::clone(&question.source), cond_pos.start, else_pos.end, cond_pos.line)
+                    AstPos::new(Rc::clone(&question.source), Rc::clone(&question.filename), cond_pos.start, else_pos.end, cond_pos.line)
                 }
             }
             Expression::CompoundLiteral(struct_, closing_brace, _) => {
@@ -182,7 +183,7 @@ impl Expression {
                 if struct_pos.line != closing_brace.line {
                     struct_pos
                 } else {
-                    AstPos::new(Rc::clone(&closing_brace.source), struct_pos.start, closing_brace.pos + closing_brace.lexeme.len(), struct_pos.line)
+                    AstPos::new(Rc::clone(&closing_brace.source), Rc::clone(&closing_brace.filename), struct_pos.start, closing_brace.pos + closing_brace.lexeme.len(), struct_pos.line)
                 }
             }
             Expression::Subscript(subscripted, paren, _) => {
@@ -191,7 +192,7 @@ impl Expression {
                 if subscripted_pos.line != paren.line {
                     subscripted_pos
                 } else {
-                    AstPos::new(Rc::clone(&paren.source), subscripted_pos.start, paren.pos + paren.lexeme.len(), subscripted_pos.line)
+                    AstPos::new(Rc::clone(&paren.source), Rc::clone(&paren.filename), subscripted_pos.start, paren.pos + paren.lexeme.len(), subscripted_pos.line)
                 }
             }
             Expression::Get(object, name) | Expression::StaticGet(object, name)=> {
@@ -200,7 +201,7 @@ impl Expression {
                 if object_pos.line != name.line {
                     object_pos
                 } else {
-                    AstPos::new(Rc::clone(&name.source), object_pos.start, name.pos + name.lexeme.len(), object_pos.line)
+                    AstPos::new(Rc::clone(&name.source), Rc::clone(&name.filename), object_pos.start, name.pos + name.lexeme.len(), object_pos.line)
                 }
             },
             Expression::Slice(tok, exprs) => {
@@ -214,7 +215,7 @@ impl Expression {
                         if first_pos.line != last_pos.line {
                             first_pos
                         } else {
-                            AstPos::new(Rc::clone(&tok.source), first_pos.start, last_pos.end, first_pos.line)
+                            AstPos::new(Rc::clone(&tok.source), Rc::clone(&tok.filename), first_pos.start, last_pos.end, first_pos.line)
                         }
                     }
                 }
@@ -362,7 +363,7 @@ pub enum Statement {
 impl Statement {
     pub fn get_pos(&self) -> AstPos {
         match self {
-            Statement::Empty | Statement::Undef(_) => AstPos::new(Rc::from(""), 0, 0, 0),
+            Statement::Empty | Statement::Undef(_) => AstPos::new(Rc::from(""), Rc::from(""), 0, 0, 0),
             Statement::Expression(expr) | 
             Statement::Impl(expr, _) | 
             Statement::Use(expr, _) => expr.get_pos(),
@@ -388,7 +389,7 @@ impl Statement {
             Statement::Bitfield(tok, ..) |
             Statement::Macro(tok, ..) |
             Statement::Foreach(tok, ..) => {
-                AstPos::new(Rc::clone(&tok.source), tok.pos, tok.pos + tok.lexeme.len(), tok.line)
+                AstPos::new(Rc::clone(&tok.source), Rc::clone(&tok.filename), tok.pos, tok.pos + tok.lexeme.len(), tok.line)
             } 
         }
     }

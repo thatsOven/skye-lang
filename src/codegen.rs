@@ -2611,7 +2611,7 @@ impl CodeGen {
                             }
 
                             let final_name = self.get_generics(&name, &generics_names, &self.environment)?;
-                            let search_tok = Token::new(Rc::from(""), TokenType::Identifier, Rc::clone(&final_name), 0, 0);
+                            let search_tok = Token::dummy(Rc::clone(&final_name));
                             
                             let mut env = self.globals.borrow_mut();
                             if let Some(var) = env.get(&search_tok) {
@@ -2834,7 +2834,7 @@ impl CodeGen {
                         }
 
                         let final_name = self.get_generics(&name, &generics_names, &tmp_env)?;
-                        let search_tok = Token::new(Rc::from(""), TokenType::Identifier, Rc::clone(&final_name), 0, 0);
+                        let search_tok = Token::dummy(Rc::clone(&final_name));
 
                         let mut env = self.globals.borrow_mut();
                         if let Some(var) = env.get(&search_tok) {

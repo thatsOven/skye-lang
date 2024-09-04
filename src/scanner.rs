@@ -6,6 +6,7 @@ use crate::utils::{error, is_alpha, is_alphanumeric, is_beginning_digit, is_bin_
 
 pub struct Scanner<'a> {
     source: &'a String,
+    filename: Rc<str>,
     pub tokens: Vec<Token>,
     start_positions: Vec<usize>,
 
@@ -19,7 +20,7 @@ pub struct Scanner<'a> {
 }
 
 impl<'a> Scanner<'a> {
-    pub fn new(source: &'a String) -> Self {
+    pub fn new(source: &'a String, filename: Rc<str>) -> Self {
         let mut keywords = HashMap::new();
         keywords.insert(       "as", TokenType::As);
         keywords.insert(       "do", TokenType::Do);
@@ -69,7 +70,7 @@ impl<'a> Scanner<'a> {
         keywords.insert("SKYE_ENUM_INIT_", TokenType::Reserved);
 
         Scanner {
-            source, tokens: Vec::new(), keywords, start_positions: Vec::new(),
+            source, filename, tokens: Vec::new(), keywords, start_positions: Vec::new(),
             start: 0, curr: 0, line: 0, had_error: false
         }
     }
@@ -86,7 +87,8 @@ impl<'a> Scanner<'a> {
 
     fn add_token(&mut self, type_: TokenType) {
         self.tokens.push(Token::new(
-            Rc::from(self.source.as_ref()), type_, 
+            Rc::from(self.source.as_ref()), 
+            Rc::clone(&self.filename), type_, 
             substring(&self.source, self.start, self.curr).into(), 
             self.start - self.start_positions[self.line], self.line
         ));
@@ -124,6 +126,7 @@ impl<'a> Scanner<'a> {
     fn error(&mut self, msg: &str) {
         error(
             &Rc::from(self.source.as_ref()), msg, 
+            &self.filename,
             self.start - self.start_positions[self.line], 
             self.curr - self.start, self.line
         );
@@ -330,6 +333,7 @@ impl<'a> Scanner<'a> {
                 } else {
                     self.tokens.push(Token::new(
                         Rc::from(self.source.as_ref()),
+                        Rc::clone(&self.filename),
                         TokenType::AnyInt, 
                         Rc::from(lexeme), 
                         self.start - self.start_positions[self.line], self.line
@@ -573,6 +577,11 @@ impl<'a> Scanner<'a> {
             self.scan_token();
         }
 
-        self.tokens.push(Token::new(Rc::from(self.source.as_ref()), TokenType::EOF, Rc::from(""), 0, self.line));
+        self.tokens.push(Token::new(
+            Rc::from(self.source.as_ref()), 
+            Rc::clone(&self.filename), 
+            TokenType::EOF, Rc::from(""), 
+            0, self.line
+        ));
     }
 }

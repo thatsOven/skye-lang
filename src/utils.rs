@@ -22,7 +22,7 @@ pub fn info_color(msg: &str) -> ColoredString {
     msg.bright_green()
 }
 
-pub fn report(source: &Rc<str>, msg: &str, type_: &str, pos: usize, len: usize, line: usize, color: fn(&str) -> ColoredString) {
+pub fn report(source: &Rc<str>, msg: &str, type_: &str, filename: &Rc<str>, pos: usize, len: usize, line: usize, color: fn(&str) -> ColoredString) {
     let lines = source.lines().collect::<Vec<&str>>();
     let iter_range = {
         if line <= 2 {
@@ -36,7 +36,7 @@ pub fn report(source: &Rc<str>, msg: &str, type_: &str, pos: usize, len: usize, 
 
     let linelen = (iter_range.end as f64).log10().ceil() as usize;
 
-    println!("{} (line {}, pos {}): {}", color(type_), line + 1, pos, msg);
+    println!("{} ({}: line {}, pos {}): {}", color(type_), filename, line + 1, pos, msg);
 
     for l in iter_range {
         println!("{:linelen$} | {}", l + 1, lines[l].trim_end());
@@ -47,27 +47,27 @@ pub fn report(source: &Rc<str>, msg: &str, type_: &str, pos: usize, len: usize, 
     }
 }
 
-pub fn error(source: &Rc<str>, msg: &str, pos: usize, len: usize, line: usize) {
-    report(source, msg, "error", pos, len, line, error_color);
+pub fn error(source: &Rc<str>, msg: &str, filename: &Rc<str>, pos: usize, len: usize, line: usize) {
+    report(source, msg, "error", filename, pos, len, line, error_color);
 }
 
-pub fn warning(source: &Rc<str>, msg: &str, pos: usize, len: usize, line: usize) {
-    report(source, msg, "warning", pos, len, line, warning_color);
+pub fn warning(source: &Rc<str>, msg: &str, filename: &Rc<str>, pos: usize, len: usize, line: usize) {
+    report(source, msg, "warning", filename, pos, len, line, warning_color);
 }
 
-pub fn note(source: &Rc<str>, msg: &str, pos: usize, len: usize, line: usize) {
-    report(source, msg, "note", pos, len, line, note_color);
+pub fn note(source: &Rc<str>, msg: &str, filename: &Rc<str>, pos: usize, len: usize, line: usize) {
+    report(source, msg, "note", filename, pos, len, line, note_color);
 }
 
-pub fn info(source: &Rc<str>, msg: &str, pos: usize, len: usize, line: usize) {
-    report(source, msg, "info", pos, len, line, info_color);
+pub fn info(source: &Rc<str>, msg: &str, filename: &Rc<str>, pos: usize, len: usize, line: usize) {
+    report(source, msg, "info", filename, pos, len, line, info_color);
 }
 
 #[macro_export]
 macro_rules! token_error {
     ($slf: expr, $token: expr, $msg: expr) => {
         {
-            crate::utils::error(&$token.source, $msg, $token.pos, $token.lexeme.len(), $token.line);
+            crate::utils::error(&$token.source, $msg, &$token.filename, $token.pos, $token.lexeme.len(), $token.line);
             $slf.had_error = true;
         }
     };
@@ -76,14 +76,14 @@ macro_rules! token_error {
 #[macro_export]
 macro_rules! token_warning {
     ($token: expr, $msg: expr) => {
-        crate::utils::warning(&$token.source, $msg, $token.pos, $token.lexeme.len(), $token.line);
+        crate::utils::warning(&$token.source, $msg, &$token.filename, $token.pos, $token.lexeme.len(), $token.line);
     };
 }
 
 #[macro_export]
 macro_rules! token_note {
     ($token: expr, $msg: expr) => {
-        crate::utils::note(&$token.source, $msg, $token.pos, $token.lexeme.len(), $token.line);
+        crate::utils::note(&$token.source, $msg, &$token.filename, $token.pos, $token.lexeme.len(), $token.line);
     };
 }
 
@@ -92,7 +92,7 @@ macro_rules! ast_error {
     ($slf: expr, $e: expr, $msg: expr) => {
         {
             let pos: crate::ast::AstPos = $e.get_pos();
-            crate::utils::error(&pos.source, $msg, pos.start, pos.end - pos.start, pos.line);
+            crate::utils::error(&pos.source, $msg, &pos.filename, pos.start, pos.end - pos.start, pos.line);
             $slf.had_error = true;
         }
     };
@@ -103,7 +103,7 @@ macro_rules! ast_warning {
     ($s: expr, $msg: expr) => {
         {
             let pos: crate::ast::AstPos = $s.get_pos();
-            crate::utils::warning(&pos.source, $msg, pos.start, pos.end - pos.start, pos.line);
+            crate::utils::warning(&pos.source, $msg, &pos.filename, pos.start, pos.end - pos.start, pos.line);
         }
     };
 }
@@ -113,7 +113,7 @@ macro_rules! ast_note {
     ($e: expr, $msg: expr) => {
         {
             let pos: crate::ast::AstPos = $e.get_pos();
-            crate::utils::note(&pos.source, $msg, pos.start, pos.end - pos.start, pos.line);
+            crate::utils::note(&pos.source, $msg, &pos.filename, pos.start, pos.end - pos.start, pos.line);
         }
     };
 }
@@ -123,7 +123,7 @@ macro_rules! ast_info {
     ($e: expr, $msg: expr) => {
         {
             let pos: crate::ast::AstPos = $e.get_pos();
-            crate::utils::info(&pos.source, $msg, pos.start, pos.end - pos.start, pos.line);
+            crate::utils::info(&pos.source, $msg, &pos.filename, pos.start, pos.end - pos.start, pos.line);
         }
     };
 }
