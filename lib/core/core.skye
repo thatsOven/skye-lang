@@ -37,6 +37,14 @@ namespace core {
                 return value;
             }
         }
+
+        fn isSome(const self) u8 {
+            return self.kind == core::Option::Kind::Some;
+        }
+
+        fn isNone(const self) u8 {
+            return self.kind == core::Option::Kind::None;
+        }
     }
 
     enum Result[T, U] {
@@ -51,6 +59,14 @@ namespace core {
             } else {
                 return value;
             }
+        }
+
+        fn isOk(const self) u8 {
+            return self.kind == core::Result::Kind::Ok;
+        }
+
+        fn isError(const self) u8 {
+            return self.kind == core::Result::Kind::Error;
         }
     }
 

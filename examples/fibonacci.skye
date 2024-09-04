@@ -14,7 +14,7 @@ fn getInt(const buf: *core::MutableString[]) u8 {
         
         const parsed = buf.parseInt[u64]();
 
-        if parsed.kind == Option::Kind::Some && parsed.some > 0 && parsed.some <= @MAX_TERMS {
+        if parsed.isSome() && parsed.some > 0 && parsed.some <= @MAX_TERMS {
             return @cast(u8, parsed.some);
         } else {
             println("Invalid input. Please retry");
