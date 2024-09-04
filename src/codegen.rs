@@ -192,9 +192,9 @@ impl CodeGen {
 
         let cloned = Rc::clone(&globals);
         let mut globals_ref = cloned.borrow_mut();
-        globals_ref.define(Rc::from("u8"),  SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::U8)), true, None));
-        globals_ref.define(Rc::from("i8"),  SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::I8)), true, None));
-        globals_ref.define(Rc::from("u16"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::U16)),true, None));
+        globals_ref.define(Rc::from("u8"),  SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::U8)),  true, None));
+        globals_ref.define(Rc::from("i8"),  SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::I8)),  true, None));
+        globals_ref.define(Rc::from("u16"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::U16)), true, None));
         globals_ref.define(Rc::from("i16"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::I16)), true, None));
         globals_ref.define(Rc::from("u32"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::U32)), true, None));
         globals_ref.define(Rc::from("i32"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::I32)), true, None));
@@ -2775,15 +2775,15 @@ impl CodeGen {
                            }
                         }
                     }
-                    SkyeType::Template(name, definition, generics, generics_names, curr_name, read_env) => {
-                        let mut needed_cnt = 0;
-                        for generic in &generics {
-                            if generic.default.is_none() {
-                                needed_cnt += 1;
-                            }
-                        }
-                        
+                    SkyeType::Template(name, definition, generics, generics_names, curr_name, read_env) => {    
                         if arguments.len() != generics.len() {
+                            let mut needed_cnt = 0;
+                            for generic in &generics {
+                                if generic.default.is_none() {
+                                    needed_cnt += 1;
+                                }
+                            }
+
                             if arguments.len() < needed_cnt || arguments.len() > generics.len() {
                                 ast_error!(
                                     self, expr, 
@@ -2802,12 +2802,8 @@ impl CodeGen {
                         ));
 
                         let offs = {
-                            if generics.len() > 1 {
-                                if generics.first().unwrap().default.is_some() && generics.last().unwrap().default.is_none() {
-                                    generics.len() - arguments.len()
-                                } else {
-                                    0
-                                }
+                            if generics.len() > 1 && generics.first().unwrap().default.is_some() && generics.last().unwrap().default.is_none() {
+                                generics.len() - arguments.len()
                             } else {
                                 0
                             }

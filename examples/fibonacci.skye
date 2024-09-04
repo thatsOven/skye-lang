@@ -1,19 +1,37 @@
 import "std/fmt";
-use core::io as io;
 
-fn main() !void {
-    let a = 0;
-    let b = 1;
+use core::io as io;
+use core::Option as Option;
+
+macro MAX_TERMS 94;
+
+fn getInt(const buf: *core::MutableString[]) u8 {
+    while true {
+        print("Insert amount of terms\n> ");
+
+        io::stdIn.readLine(buf);
+        defer buf.clear();        
+        
+        const parsed = buf.parseInt[u64]();
+
+        if parsed.kind == Option::Kind::Some && parsed.some > 0 && parsed.some <= @MAX_TERMS {
+            return @cast(u8, parsed.some);
+        } else {
+            println("Invalid input. Please retry");
+        }
+    }
+}
+
+fn main() {
+    let a: u64 = 0;
+    let b: u64 = 1;
 
     let stringBuffer = core::MutableString::new();
     defer stringBuffer.free();
 
-    println("Insert amount of terms");
-    io::stdIn.readLine(&stringBuffer);
-    const n = stringBuffer.parseInt[u64]().expect("Invalid number");
-    stringBuffer.clear();
+    let n = getInt(&stringBuffer);
 
-    for let i = 0; i < n; i++ {
+    while n-- {
         std::fmt::intToString(&stringBuffer, a);
         defer stringBuffer.clear();
 
@@ -23,7 +41,4 @@ fn main() !void {
         a = b;
         b = c;
     }
-
-    return (!void)::Ok;
 }
-
