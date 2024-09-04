@@ -217,8 +217,10 @@ impl SkyeType {
             SkyeType::I64 => String::from("i64"),
             SkyeType::F64 => String::from("f64"),
             SkyeType::Usz => String::from("usz"),
-            SkyeType::I32 | SkyeType::AnyInt   => String::from("i32"),
-            SkyeType::F32 | SkyeType::AnyFloat => String::from("f32"),
+            SkyeType::I32 => String::from("i32"),
+            SkyeType::F32 => String::from("f32"),
+            SkyeType::AnyInt   => String::from("AnyInt"),
+            SkyeType::AnyFloat => String::from("AnyFloat"),
             
             SkyeType::Char      => String::from("char"),
             SkyeType::RawString => String::from("rawstring"),
