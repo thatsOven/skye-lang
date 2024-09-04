@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashMap, fmt::Debug, rc::Rc};
 
 use crate::{skye_type::SkyeType, tokens::Token};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SkyeVariable {
     pub type_: SkyeType,
     pub is_const: bool,
@@ -15,7 +15,7 @@ impl SkyeVariable {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Environment {
     types: HashMap<Rc<str>, SkyeVariable>,
     pub enclosing: Option<Rc<RefCell<Environment>>>

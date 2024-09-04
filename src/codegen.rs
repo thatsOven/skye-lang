@@ -919,7 +919,7 @@ impl CodeGen {
         op_type: Operator, op: &Token, index: usize, allow_unknown: bool
     ) -> Result<SkyeValue, ExecutionInterrupt> {
         match inner.type_.implements_op(op_type) {
-            ImplementsHow::Native => Ok(SkyeValue::new(Rc::from(format!("{}{}", op_stringified, inner.value)), inner.type_, false)),
+            ImplementsHow::Native(_) => Ok(SkyeValue::new(Rc::from(format!("{}{}", op_stringified, inner.value)), inner.type_, false)),
             ImplementsHow::ThirdParty => {
                 let search_tok = Token::dummy(Rc::from(op_method));
                 if let Some(value) = self.get_method(&inner, &search_tok, true) {
@@ -957,10 +957,13 @@ impl CodeGen {
         index: usize, allow_unknown: bool
     ) -> Result<SkyeValue, ExecutionInterrupt> {
         match left.type_.implements_op(op_type) {
-            ImplementsHow::Native => {
+            ImplementsHow::Native(compatible_types) => {
                 let right = self.evaluate(right_expr, index, allow_unknown)?;
 
-                if left.type_.equals(&right.type_, EqualsLevel::Typewise) {
+                if matches!(left.type_, SkyeType::Unknown(_)) || 
+                   left.type_.equals(&right.type_, EqualsLevel::Typewise) || 
+                   compatible_types.contains(&right.type_) 
+                {
                     Ok(SkyeValue::new(Rc::from(format!("{} {} {}", left.value, op_stringified, right.value)), return_type, false))
                 } else {
                     ast_error!(
@@ -1004,47 +1007,6 @@ impl CodeGen {
         }
     }
 
-    fn binary_operator_no_check(
-        &mut self, left: SkyeValue, return_type: SkyeType, 
-        left_expr: &Expression, right_expr: &Expression, expr: &Expression, 
-        op_stringified: &str, op_method: &str, op_type: Operator, 
-        index: usize, allow_unknown: bool
-    ) -> Result<SkyeValue, ExecutionInterrupt> {
-        match left.type_.implements_op(op_type) {
-            ImplementsHow::Native => {
-                let right = self.evaluate(right_expr, index, allow_unknown)?;
-                Ok(SkyeValue::new(Rc::from(format!("{} {} {}", left.value, op_stringified, right.value)), return_type, false))
-            }
-            ImplementsHow::ThirdParty => {
-                let search_tok = Token::dummy(Rc::from(op_method));
-                if let Some(value) = self.get_method(&left, &search_tok, true) {
-                    self.call(&value, expr, left_expr, &vec![right_expr.clone()], index, allow_unknown)
-                } else {
-                    ast_error!(
-                        self, left_expr, 
-                        format!(
-                            "This operator is not implemented for type {}",
-                            left.type_.stringify_native()
-                        ).as_ref()
-                    );
-
-                    Err(ExecutionInterrupt::Error)
-                }
-            }
-            ImplementsHow::No => {
-                ast_error!(
-                    self, left_expr, 
-                    format!(
-                        "Type {} cannot use this operator",
-                        left.type_.stringify_native()
-                    ).as_ref()
-                );
-                
-                Err(ExecutionInterrupt::Error)
-            }
-        }
-    }
-
     fn binary_operator_int_on_right(
         &mut self, left: SkyeValue, return_type: SkyeType, 
         left_expr: &Expression, right_expr: &Expression, expr: &Expression, 
@@ -1052,7 +1014,7 @@ impl CodeGen {
         index: usize, allow_unknown: bool
     ) -> Result<SkyeValue, ExecutionInterrupt> {
         match left.type_.implements_op(op_type) {
-            ImplementsHow::Native => {
+            ImplementsHow::Native(_) => {
                 let right = self.evaluate(right_expr, index, allow_unknown)?;
 
                 if right.type_.equals(&SkyeType::AnyInt, EqualsLevel::Typewise) {
@@ -1101,7 +1063,7 @@ impl CodeGen {
 
     fn suffix_unary_native_only(&mut self, inner: SkyeValue, op_stringified: &str, op_type: Operator, op: &Token) -> Result<SkyeValue, ExecutionInterrupt> {
         match inner.type_.implements_op(op_type) {
-            ImplementsHow::Native => Ok(SkyeValue::new(Rc::from(format!("{}{}", inner.value, op_stringified)), inner.type_, false)),
+            ImplementsHow::Native(_) => Ok(SkyeValue::new(Rc::from(format!("{}{}", inner.value, op_stringified)), inner.type_, false)),
             ImplementsHow::No | ImplementsHow::ThirdParty => {
                 token_error!(
                     self, op, 
@@ -1364,7 +1326,7 @@ impl CodeGen {
                         }
                         TokenType::BitwiseAnd => {
                             match inner.type_.implements_op(Operator::Ref) {
-                                ImplementsHow::Native | ImplementsHow::ThirdParty => {
+                                ImplementsHow::Native(_) | ImplementsHow::ThirdParty => {
                                     let value = {
                                         if inner_expr.is_valid_assignment_target() {
                                             inner.value
@@ -1400,7 +1362,7 @@ impl CodeGen {
                         }
                         TokenType::RefConst => {
                             match inner.type_.implements_op(Operator::ConstRef) {
-                                ImplementsHow::Native | ImplementsHow::ThirdParty => {
+                                ImplementsHow::Native(_) | ImplementsHow::ThirdParty => {
                                     let value = {
                                         if inner_expr.is_valid_assignment_target() {
                                             inner.value
@@ -1456,7 +1418,7 @@ impl CodeGen {
                                 }
                                 _ => {
                                     match inner.type_.implements_op(Operator::Deref) {
-                                        ImplementsHow::Native => {
+                                        ImplementsHow::Native(_) => {
                                             return Ok(SkyeValue::new(Rc::from(format!("*{}", inner.value)), inner.type_, false));
                                         }
                                         ImplementsHow::ThirdParty => {
@@ -1469,7 +1431,7 @@ impl CodeGen {
                                     }
 
                                     match inner.type_.implements_op(Operator::AsPtr) {
-                                        ImplementsHow::Native => unreachable!(),
+                                        ImplementsHow::Native(_) => unreachable!(),
                                         ImplementsHow::ThirdParty => {
                                             let search_tok = Token::dummy(Rc::from("__asptr__"));
                                             if let Some(value) = self.get_method(&inner, &search_tok, true) {
@@ -1811,14 +1773,14 @@ impl CodeGen {
 
                 match op.type_ {
                     TokenType::Plus => {
-                        self.binary_operator_no_check(
+                        self.binary_operator(
                             left, left_type, &left_expr, &right_expr, 
                             expr, "+", "__add__", Operator::Add, 
                             index, allow_unknown
                         )
                     }
                     TokenType::Minus => {
-                        self.binary_operator_no_check(
+                        self.binary_operator(
                             left, left_type, &left_expr, &right_expr, 
                             expr, "-", "__sub__", Operator::Sub, 
                             index, allow_unknown
@@ -1861,7 +1823,7 @@ impl CodeGen {
                     }
                     TokenType::LogicOr => {
                         match left.type_.implements_op(Operator::Or) {
-                            ImplementsHow::Native => {
+                            ImplementsHow::Native(compatible_types) => {
                                 // needed so short circuiting can work
                                 let tmp_var = self.get_temporary_var();
 
@@ -1887,7 +1849,11 @@ impl CodeGen {
 
                                 let right = self.evaluate(right_expr, index, allow_unknown)?;
 
-                                if !left.type_.equals(&right.type_, EqualsLevel::Typewise) {
+                                if !(
+                                    matches!(left.type_, SkyeType::Unknown(_)) || 
+                                    left.type_.equals(&right.type_, EqualsLevel::Typewise) || 
+                                    compatible_types.contains(&right.type_) 
+                                ) {
                                     ast_error!(
                                         self, right_expr, 
                                         format!(
@@ -1942,7 +1908,7 @@ impl CodeGen {
                     }
                     TokenType::LogicAnd => {
                         match left.type_.implements_op(Operator::And) {
-                            ImplementsHow::Native => {
+                            ImplementsHow::Native(compatible_types) => {
                                 // needed so short circuiting can work
                                 let tmp_var = self.get_temporary_var();
 
@@ -1959,7 +1925,11 @@ impl CodeGen {
 
                                 let right = self.evaluate(right_expr, index, allow_unknown)?;
 
-                                if !left.type_.equals(&right.type_, EqualsLevel::Typewise) {
+                                if !(
+                                    matches!(left.type_, SkyeType::Unknown(_)) || 
+                                    left.type_.equals(&right.type_, EqualsLevel::Typewise) || 
+                                    compatible_types.contains(&right.type_) 
+                                ) {
                                     ast_error!(
                                         self, right_expr, 
                                         format!(
@@ -2061,42 +2031,42 @@ impl CodeGen {
                         )
                     }
                     TokenType::Greater => {
-                        self.binary_operator_no_check(
+                        self.binary_operator(
                             left, SkyeType::U8, &left_expr, &right_expr, 
                             expr, ">", "__gt__", Operator::Gt, 
                             index, allow_unknown
                         )
                     }
                     TokenType::GreaterEqual => {
-                        self.binary_operator_no_check(
+                        self.binary_operator(
                             left, SkyeType::U8, &left_expr, &right_expr, 
                             expr, ">=", "__ge__", Operator::Ge, 
                             index, allow_unknown
                         )
                     }
                     TokenType::Less => {
-                        self.binary_operator_no_check(
+                        self.binary_operator(
                             left, SkyeType::U8, &left_expr, &right_expr, 
                             expr, "<", "__lt__", Operator::Lt, 
                             index, allow_unknown
                         )
                     }
                     TokenType::LessEqual => {
-                        self.binary_operator_no_check(
+                        self.binary_operator(
                             left, SkyeType::U8, &left_expr, &right_expr, 
                             expr, "<=", "__le__", Operator::Le, 
                             index, allow_unknown
                         )
                     }
                     TokenType::EqualEqual => {
-                        self.binary_operator_no_check(
+                        self.binary_operator(
                             left, SkyeType::U8, &left_expr, &right_expr, 
                             expr, "==", "__eq__", Operator::Eq, 
                             index, allow_unknown
                         )
                     }
                     TokenType::BangEqual => {
-                        self.binary_operator_no_check(
+                        self.binary_operator(
                             left, SkyeType::U8, &left_expr, &right_expr, 
                             expr, "!=", "__ne__", Operator::Ne, 
                             index, allow_unknown
@@ -2930,7 +2900,7 @@ impl CodeGen {
                     }
                     _ => {
                         match subscripted.type_.implements_op(Operator::Subscript) {
-                            ImplementsHow::Native => unreachable!(),
+                            ImplementsHow::Native(_) => unreachable!(),
                             ImplementsHow::ThirdParty => {
                                 let search_tok = Token::dummy(Rc::from("__subscript__"));
                                 if let Some(value) = self.get_method(&subscripted, &search_tok, true) {

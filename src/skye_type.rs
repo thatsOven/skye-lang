@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{ast::{Expression, Statement}, environment::Environment, tokens::Token};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SkyeFunctionParam {
     pub type_: SkyeType,
     pub is_const: bool
@@ -22,7 +22,7 @@ pub enum GetResult {
     Undefined
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SkyeEnumVariant {
     pub name: Token,
     pub type_: SkyeType
@@ -34,7 +34,7 @@ impl SkyeEnumVariant {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SkyeGeneric {
     pub name: Token,
     pub bounds: Option<SkyeType>,
@@ -91,7 +91,7 @@ pub enum Operator {
 }
 
 pub enum ImplementsHow {
-    Native,
+    Native(Vec<SkyeType>),
     ThirdParty,
     No
 }
@@ -103,7 +103,12 @@ pub enum EqualsLevel {
     Permissive
 }
 
-#[derive(Clone)]
+const ALL_INTS: &[SkyeType] = &[
+    SkyeType::U8, SkyeType::U16, SkyeType::U32, SkyeType::U64, SkyeType::Usz,
+    SkyeType::I8, SkyeType::I16, SkyeType::I32, SkyeType::I64, SkyeType::AnyInt
+];
+
+#[derive(Clone, PartialEq)]
 pub enum SkyeType {
     U8, U16, U32, U64, Usz,
     I8, I16, I32, I64, AnyInt,
@@ -731,7 +736,14 @@ impl SkyeType {
 
     pub fn implements_op(&self, op: Operator) -> ImplementsHow {
         match self {
-            SkyeType::Unknown(_) | SkyeType::Pointer(..) => ImplementsHow::Native,
+            SkyeType::Unknown(_) => ImplementsHow::Native(Vec::new()),
+            SkyeType::Pointer(..) => {
+                match op {
+                    Operator::Add | Operator::Sub | Operator::Div | Operator::Mul | Operator::Mod |
+                    Operator::Eq  | Operator::Ne => ImplementsHow::Native(ALL_INTS.into()),
+                    _ => ImplementsHow::Native(Vec::new())
+                }
+            }
 
             // at this stage, the compiler can't know whether the operator is implemented or not, 
             // so it assumes it is, that way it can try to find the relative function
@@ -740,7 +752,7 @@ impl SkyeType {
             SkyeType::Enum(_, variants, _) => {
                 if variants.is_none() {
                     if matches!(op, Operator::Eq | Operator::Ne) {
-                        ImplementsHow::Native
+                        ImplementsHow::Native(ALL_INTS.into())
                     } else {
                         ImplementsHow::No
                     }
@@ -756,7 +768,7 @@ impl SkyeType {
 
             SkyeType::Union(..) | SkyeType::Function(..) | SkyeType::Bitfield(..) => {
                 if matches!(op, Operator::Ref | Operator::ConstRef) {
-                    ImplementsHow::Native
+                    ImplementsHow::Native(Vec::new())
                 } else {
                     ImplementsHow::No
                 }
@@ -764,17 +776,30 @@ impl SkyeType {
 
             SkyeType::U8  | SkyeType::I8  | SkyeType::U16 | SkyeType::I16 |
             SkyeType::U32 | SkyeType::I32 | SkyeType::U64 | SkyeType::I64 | 
-            SkyeType::Usz | SkyeType::F32 | SkyeType::F64 | SkyeType::AnyInt |
-            SkyeType::AnyFloat | SkyeType::Char => {
+            SkyeType::Usz | SkyeType::AnyInt => {
                 match op {
                     Operator::Subscript | Operator::Deref | Operator::ConstDeref | Operator::AsPtr => ImplementsHow::No,
-                    _ => ImplementsHow::Native
+                    _ => ImplementsHow::Native(vec![SkyeType::Char])
+                }
+            }
+
+            SkyeType::F32 | SkyeType::F64 | SkyeType::AnyFloat => {
+                match op {
+                    Operator::Subscript | Operator::Deref | Operator::ConstDeref | Operator::AsPtr => ImplementsHow::No,
+                    _ => ImplementsHow::Native(Vec::new())
+                }
+            }
+
+            SkyeType::Char => {
+                match op {
+                    Operator::Subscript | Operator::Deref | Operator::ConstDeref | Operator::AsPtr => ImplementsHow::No,
+                    _ => ImplementsHow::Native(vec![SkyeType::AnyInt, SkyeType::U8, SkyeType::I8])
                 }
             }
 
             SkyeType::RawString => {
                 match op {
-                    Operator::Ref | Operator::Subscript | Operator::ConstRef => ImplementsHow::Native,
+                    Operator::Ref | Operator::Subscript | Operator::ConstRef => ImplementsHow::Native(Vec::new()),
                     _ => ImplementsHow::No
                 }
             }
