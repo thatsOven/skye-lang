@@ -2,7 +2,7 @@ import "std/os";
 
 namespace build {
     fn compileSkye(const input: String, const output: String) !void {
-        let buf = core::MutableString::from("skye compile ");
+        let buf = core::Array::from("skye compile ");
         defer buf.free();
 
         buf.pushString(input);
@@ -19,7 +19,7 @@ namespace build {
     }
 
     fn compileCDefault(const input: String, const output: String) !void {
-        let buf = core::MutableString::new(); 
+        let buf = core::Array::new[char](); 
         defer buf.free();
 
         if @UNIX_LIKE {

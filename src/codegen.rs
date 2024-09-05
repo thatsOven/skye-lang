@@ -812,7 +812,10 @@ impl CodeGen {
                     drop(env);
                     
                     let old_had_error = self.had_error;
-                    let type_ = self.execute(&definition, 0)?.expect("wrong type was generic-subscripted");
+                    let type_ = self.execute(&definition, 0)?.unwrap_or_else(|| {
+                        ast_error!(self, expr, "Could not process template generation for this expression");
+                        SkyeType::Void
+                    });
 
                     if self.had_error && !old_had_error {
                         ast_note!(expr, "This error is a result of template generation originating from this call");
@@ -2732,7 +2735,10 @@ impl CodeGen {
                             let previous_name = self.curr_name.clone();
                             self.curr_name = curr_name.clone();
                             
-                            let type_ = self.execute(&definition, 0)?.expect("wrong type was generic-subscripted");
+                            let type_ = self.execute(&definition, 0)?.unwrap_or_else(|| {
+                                ast_error!(self, expr, "Could not process template generation for this expression");
+                                SkyeType::Void
+                            });
     
                             self.curr_name   = previous_name;
                             self.environment = previous;
@@ -2968,7 +2974,10 @@ impl CodeGen {
                         let previous_name = self.curr_name.clone();
                         self.curr_name = curr_name;
 
-                        let type_ = self.execute(&definition, 0)?.expect("wrong type was generic-subscripted");
+                        let type_ = self.execute(&definition, 0)?.unwrap_or_else(|| {
+                            ast_error!(self, expr, "Could not process template generation for this expression");
+                            SkyeType::Void
+                        });
 
                         self.curr_name   = previous_name;
                         self.environment = previous;
