@@ -11,6 +11,8 @@ macro cast(T, E) -> T;
 
 macro nullptr 0;
 
+macro panic(msg) __panicHandler(PANIC_POS, msg);
+
 macro returnNone {
     try (?void)::None // trick that uses the way the try operator works to let the compiler infer the return type
 }

@@ -3,7 +3,7 @@ impl[T] core::Slice[T] {
         if idx < self.length {
             return self.ptr + idx;
         } else {
-            panic("Slice: out of bounds access");
+            @panic("Slice: out of bounds access");
         }
     }
 }
@@ -13,7 +13,7 @@ impl[T] core::Option[T] {
         if self.kind == core::Option::Kind::Some {
             return self.some;
         } else {
-            panic("Option: unwrap on a None value");
+            @panic("Option: unwrap on a None value");
         }
     }
 
@@ -21,7 +21,7 @@ impl[T] core::Option[T] {
         if self.kind == core::Option::Kind::Some {
             return self.some;
         } else {
-            panic(msg);
+            @panic(msg);
         }
     }
 }
@@ -31,7 +31,7 @@ impl[T, U] core::Result[T, U] {
         if self.kind == core::Result::Kind::Ok {
             return self.ok;
         } else {
-            panic("Result: unwrap on an Error value");
+            @panic("Result: unwrap on an Error value");
         }
     }
 
@@ -39,7 +39,7 @@ impl[T, U] core::Result[T, U] {
         if self.kind == core::Result::Kind::Ok {
             return self.ok;
         } else {
-            panic(msg);
+            @panic(msg);
         }
     }
 }
@@ -111,7 +111,7 @@ namespace core {
             if self.min <= r && r <= self.max {
                 return r;
             } else {
-                panic("Ptr: out of bounds access");
+                @panic("Ptr: out of bounds access");
             }
         }
 
@@ -346,9 +346,9 @@ namespace core {
 
         fn __subscript__(self, const idx: usz) *T {
             if idx < self.length {
-                return self.array[idx];
+                return &self.array[idx];
             } else {
-                panic("Array: out of bounds access");
+                @panic("Array: out of bounds access");
             }
         }
 
@@ -356,7 +356,7 @@ namespace core {
             if a < self.length && b <= self.length {
                 return core::Slice::new(self.array.ptr + a, b - a);
             } else {
-                panic("Array: out of bounds slicing");
+                @panic("Array: out of bounds slicing");
             }
         }
 

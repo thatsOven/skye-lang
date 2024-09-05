@@ -23,7 +23,7 @@ macro stdout -> *CFile;
 macro stderr -> *CFile;
 macro stdin  -> *CFile;
 
-fn panic(const msg: String);
+fn __panicHandler(const at: String, const msg: String);
 
 namespace core {
     namespace mem {
@@ -38,7 +38,7 @@ namespace core {
                 const ptr = malloc(amt);
 
                 if ptr == @nullptr {
-                    panic("Could not allocate requested memory");
+                    @panic("Could not allocate requested memory");
                 }
 
                 return ptr;
@@ -48,7 +48,7 @@ namespace core {
                 const newptr = realloc(ptr, size);
 
                 if newptr == @nullptr {
-                    panic("Could not allocate requested memory");
+                    @panic("Could not allocate requested memory");
                 }
 
                 return newptr;
@@ -194,8 +194,10 @@ fn _SKYE_PRIMITIVES_INIT() {
     core::io::stdIn  = core::io::File::fromCFile(@stdin);
 }
 
-fn panic(const msg: String) {
-    let _ = core::io::stdErr.write("Skye program panicked!\n");
+fn __panicHandler(const at: String, const msg: String) {
+    let _ = core::io::stdErr.write("Skye program panicked at ");
+    let _ = core::io::stdErr.write(at);
+    let _ = core::io::stdErr.write("\n");
     let _ = core::io::stdErr.write(msg);
     let _ = core::io::stdErr.write("\n");
     let _ = core::io::stdErr.flush();

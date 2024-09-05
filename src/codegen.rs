@@ -183,11 +183,12 @@ pub struct CodeGen {
     curr_name:     String,
     curr_loop:     Option<(Rc<str>, Rc<str>)>,
 
-    had_error: bool
+    had_error: bool,
+    debug: bool
 }
 
 impl CodeGen {
-    pub fn new(path: Option<&Path>) -> Self {
+    pub fn new(path: Option<&Path>, debug: bool) -> Self {
         let globals = Rc::new(RefCell::new(Environment::new()));
 
         let cloned = Rc::clone(&globals);
@@ -233,7 +234,7 @@ impl CodeGen {
             curr_function: CurrentFn::None, 
             string_type: None, tmp_var_cnt: 0,
             curr_loop: None, had_error: false, 
-            globals, source_path: {
+            debug, globals, source_path: {
                 if let Some(real_path) = path {
                     Some(Box::new(PathBuf::from(real_path)))
                 } else {
@@ -861,7 +862,7 @@ impl CodeGen {
                     return Err(ExecutionInterrupt::Error);
                 }
             }
-            SkyeType::Macro(_, params_opt, return_expr_opt, return_type) => {
+            SkyeType::Macro(macro_name, params_opt, return_expr_opt, return_type) => {
                 if let Some(params) = params_opt {
                     if params.len() != arguments_len {
                         ast_error!(
@@ -877,12 +878,60 @@ impl CodeGen {
 
                     if let Some(return_expr) = return_expr_opt {
                         // native macro call
+
                         let mut curr_expr = return_expr.clone();
                         for i in 0 .. arguments_len {
                             curr_expr = curr_expr.replace_variable(&params[i].lexeme, &arguments[i]);
                         }
 
-                        self.evaluate(&curr_expr, index, allow_unknown)
+                        if macro_name.as_ref() == "panic" {
+                            // panic also includes position information
+
+                            let panic_pos = callee_expr.get_pos();
+                            let var_name = Rc::from("PANIC_POS");
+
+                            let mut statements = {
+                                if self.debug {
+                                    vec![
+                                        Statement::Use(
+                                            Expression::Literal(
+                                                Rc::from(format!(
+                                                    "{}: line {}, pos {}", 
+                                                    panic_pos.filename, panic_pos.line + 1, panic_pos.start
+                                                )), 
+                                                Token::dummy(Rc::from("")),
+                                                LiteralKind::String
+                                            ),
+                                            Token::dummy(Rc::clone(&var_name))
+                                        )
+                                    ]
+                                } else {
+                                    vec![
+                                        Statement::Use(
+                                            Expression::Literal(
+                                                Rc::from(""), 
+                                                Token::dummy(Rc::from("")),
+                                                LiteralKind::String
+                                            ),
+                                            Token::dummy(Rc::clone(&var_name))
+                                        )
+                                    ]
+                                }
+                            };
+
+                            statements.push(Statement::Expression(curr_expr));
+
+                            let _ = self.execute_block(
+                                &statements, Rc::new(RefCell::new(
+                                    Environment::with_enclosing(Rc::clone(&self.environment))
+                                )), 
+                                index, false
+                            );
+
+                            Ok(SkyeValue::special(SkyeType::Void))
+                        } else {
+                            self.evaluate(&curr_expr, index, allow_unknown)
+                        }
                     } else {
                         // C macro binding call
                         let tmp_env = Rc::new(RefCell::new(Environment::with_enclosing(Rc::clone(&self.environment))));

@@ -57,6 +57,10 @@ enum CompilerCommand {
         /// Whether to emit C source code instead of an executable
         emit_c: bool,
 
+        #[arg(long, default_value_t = true)]
+        /// Whether to keep debug information in the compiled program
+        debug: bool,
+
         #[arg(short, long, default_value_t = String::from(""))]
         /// Output filename
         output: String
@@ -114,7 +118,7 @@ fn main() -> Result<(), Error> {
     let args = Args::parse();
 
     match args.command {
-        CompilerCommand::Compile { file, emit_c, output } => {
+        CompilerCommand::Compile { file, emit_c, debug, output } => {
             if emit_c {
                 let output_file = OsString::from({
                     if output.len() == 0 {
@@ -124,7 +128,7 @@ fn main() -> Result<(), Error> {
                     }
                 });
         
-                compile_file_to_c(&file, &output_file, &args.primitives)?;
+                compile_file_to_c(&file, &output_file, debug, &args.primitives)?;
             } else {
                 let output_file = OsString::from({
                     if output.len() == 0 {
@@ -134,7 +138,7 @@ fn main() -> Result<(), Error> {
                     }
                 });
         
-                compile_file_to_exec(&file, &output_file, &args.primitives)?;
+                compile_file_to_exec(&file, &output_file, debug, &args.primitives)?;
             }
         }
         CompilerCommand::Run { file } => run_skye(file, &args.primitives)?,
