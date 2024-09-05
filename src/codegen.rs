@@ -498,8 +498,17 @@ impl CodeGen {
                     
                     if !params[i].type_.equals(&arg.type_, EqualsLevel::Strict) {
                         if i == 0 && arguments_mod == 1 {
-                            // the only way self info is wrong is if constness is not respected
-                            ast_error!(self, callee_expr, "This method cannot be called from a const source");
+                            if let Some((_, self_type)) = &callee.self_info {
+                                ast_error!(
+                                    self, callee_expr, 
+                                    format!(
+                                        "This method cannot be called from {}",
+                                        self_type.stringify_native()
+                                    ).as_ref()
+                                );
+                            } else {
+                                unreachable!()
+                            }
                         } else {
                             ast_error!(
                                 self, arguments[i - arguments_mod], 
