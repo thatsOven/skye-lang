@@ -464,10 +464,10 @@ let result = @A_C_MACRO(1, 1);
 # Main operators
 | name | syntax | additional notes |
 | ---- | ------ | ----------- |
-| Prefix increment | `++x` | Increments `x` before it's used [1](#additional-information) |
-| Suffix increment | `x++` | Increments `x` after it's used [1](#additional-information) |
-| Prefix decrement | `--x` | Decrements `x` before it's used [1](#additional-information) |
-| Suffix decrement | `x--` | Decrements `x` after it's used [1](#additional-information) |
+| Prefix increment | `++x` | Increments `x` before it's used [*1](#additional-information) |
+| Suffix increment | `x++` | Increments `x` after it's used [*1](#additional-information) |
+| Prefix decrement | `--x` | Decrements `x` before it's used [*1](#additional-information) |
+| Suffix decrement | `x--` | Decrements `x` after it's used [*1](#additional-information) |
 | Unary plus | `+x` | Same behavior as C |
 | Negation | `-x` | ... |
 | Boolean not | `!x` | Can also define a `Result` type with `Ok = void` |
