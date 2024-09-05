@@ -622,8 +622,10 @@ impl SkyeType {
         self.get_self_internal(from, is_source_const, 0)
     }
 
-    fn infer_type_from_similar_internal(&self, other: &SkyeType, data: Rc<RefCell<HashMap<Rc<str>, SkyeType>>>) {
-        assert!(self.equals(other, EqualsLevel::Permissive));
+    fn infer_type_from_similar_internal(&self, other: &SkyeType, data: Rc<RefCell<HashMap<Rc<str>, SkyeType>>>) -> Option<()> {
+        if !self.equals(other, EqualsLevel::Permissive) {
+            return None;
+        }
 
         match self {
             SkyeType::U8  | SkyeType::I8  | SkyeType::U16 | SkyeType::I16 |
@@ -646,7 +648,7 @@ impl SkyeType {
                 match other {
                     SkyeType::Pointer(other_inner_type, _) | 
                     SkyeType::Type(other_inner_type) => {
-                        self_inner_type.infer_type_from_similar_internal(other_inner_type, data);
+                        self_inner_type.infer_type_from_similar_internal(other_inner_type, data)?;
                     }
                     _ => unreachable!()
                 }
@@ -655,10 +657,10 @@ impl SkyeType {
             SkyeType::Function(self_params, self_return, _) => {
                 if let SkyeType::Function(other_params, other_return, _) = other {
                     for i in 0 .. self_params.len() {
-                        self_params[i].type_.infer_type_from_similar_internal(&other_params[i].type_, Rc::clone(&data));
+                        self_params[i].type_.infer_type_from_similar_internal(&other_params[i].type_, Rc::clone(&data))?;
                     }
 
-                    self_return.infer_type_from_similar_internal(&other_return, data);
+                    self_return.infer_type_from_similar_internal(&other_return, data)?;
                 } else {
                     unreachable!()
                 }
@@ -670,7 +672,7 @@ impl SkyeType {
                         if let Some(real_other_fields) = other_fields {
                             for (key, (value, _)) in real_self_fields {
                                 if let Some((field, _)) = real_other_fields.get(key) {
-                                    value.infer_type_from_similar_internal(field, Rc::clone(&data))
+                                    value.infer_type_from_similar_internal(field, Rc::clone(&data))?;
                                 }
                             }
                         }
@@ -688,7 +690,7 @@ impl SkyeType {
                             if let Some(real_other_fields) = other_fields {
                                 for (key, value) in real_self_fields {
                                     if let Some(field) = real_other_fields.get(key) {
-                                        value.infer_type_from_similar_internal(field, Rc::clone(&data))
+                                        value.infer_type_from_similar_internal(field, Rc::clone(&data))?;
                                     }
                                 }
                             }
@@ -705,18 +707,18 @@ impl SkyeType {
                                 if real_self_fields.len() >= real_other_fields.len() {
                                     for (key, value) in real_self_fields {
                                         if let Some(field) = real_other_fields.get(key) {
-                                            value.infer_type_from_similar_internal(field, Rc::clone(&data))
+                                            value.infer_type_from_similar_internal(field, Rc::clone(&data))?;
                                         } else {
                                             // if variant is not there in enum and they are equal, it means that the variant type is void
-                                            value.infer_type_from_similar_internal(&SkyeType::Void, Rc::clone(&data));
+                                            value.infer_type_from_similar_internal(&SkyeType::Void, Rc::clone(&data))?;
                                         }
                                     }
                                 } else {
                                     for (key, value) in real_other_fields {
                                         if let Some(field) = real_self_fields.get(key) {
-                                            value.infer_type_from_similar_internal(field, Rc::clone(&data))
+                                            value.infer_type_from_similar_internal(field, Rc::clone(&data))?;
                                         } else {
-                                            value.infer_type_from_similar_internal(&SkyeType::Void, Rc::clone(&data));
+                                            value.infer_type_from_similar_internal(&SkyeType::Void, Rc::clone(&data))?;
                                         }
                                     }
                                 }
@@ -727,13 +729,15 @@ impl SkyeType {
                 }
             }
         }
+
+        Some(())
     }
 
-    pub fn infer_type_from_similar(&self, other: &SkyeType) -> HashMap<Rc<str>, SkyeType> {
+    pub fn infer_type_from_similar(&self, other: &SkyeType) -> Option<HashMap<Rc<str>, SkyeType>> {
         let data = Rc::new(RefCell::new(HashMap::new()));
-        self.infer_type_from_similar_internal(other, Rc::clone(&data));
+        self.infer_type_from_similar_internal(other, Rc::clone(&data))?;
         let result = data.borrow().clone();
-        result
+        Some(result)
     }
 
     pub fn implements_op(&self, op: Operator) -> ImplementsHow {

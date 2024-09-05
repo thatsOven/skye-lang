@@ -614,33 +614,60 @@ impl CodeGen {
                         
                         if let SkyeType::Type(inner_type) = &def_type {
                             if inner_type.equals(&call_evaluated.type_, EqualsLevel::Permissive) {
-                                for (generic_name, generic_type) in inner_type.infer_type_from_similar(&call_evaluated.type_) {
-                                    if generics_to_find.get(&generic_name).unwrap().is_none() {
-                                        let wrapped = SkyeType::Type(Box::new(generic_type));
-                                        let mapped_generic = generics_map.get(&generic_name).unwrap();
-
-                                        if let Some(bounds) = &mapped_generic.bounds {
-                                            if !bounds.is_respected_by(&wrapped) {
-                                                if i != 0 || arguments_mod != 1 {
-                                                    ast_error!(
-                                                        self, arguments[i - arguments_mod], 
-                                                        format!(
-                                                            "Generic bound is not respected by this type (expecting {} but got {})",
-                                                            bounds.stringify_native(), wrapped.stringify_native()
-                                                        ).as_ref()
-                                                    );
-
-                                                    token_note!(mapped_generic.name, "Generic defined here");
-                                                }   
+                                if let Some(inferred) = inner_type.infer_type_from_similar(&call_evaluated.type_) {
+                                    for (generic_name, generic_type) in inferred {
+                                        if generics_to_find.get(&generic_name).unwrap().is_none() {
+                                            let wrapped = SkyeType::Type(Box::new(generic_type));
+                                            let mapped_generic = generics_map.get(&generic_name).unwrap();
+    
+                                            if let Some(bounds) = &mapped_generic.bounds {
+                                                if !bounds.is_respected_by(&wrapped) {
+                                                    if i != 0 || arguments_mod != 1 {
+                                                        ast_error!(
+                                                            self, arguments[i - arguments_mod], 
+                                                            format!(
+                                                                "Generic bound is not respected by this type (expecting {} but got {})",
+                                                                bounds.stringify_native(), wrapped.stringify_native()
+                                                            ).as_ref()
+                                                        );
+    
+                                                        token_note!(mapped_generic.name, "Generic defined here");
+                                                    }   
+                                                }
                                             }
+    
+                                            generics_to_find.insert(generic_name, Some(wrapped));
                                         }
-
-                                        generics_to_find.insert(generic_name, Some(wrapped));
+                                    }
+                                } else {
+                                    if i == 0 && arguments_mod == 1 {
+                                        // the only way self info makes inference error is if method is not available for type
+                                        if let Some((_, self_type)) = &callee.self_info {
+                                            ast_error!(
+                                                self, callee_expr, 
+                                                format!(
+                                                    "This method cannot be called from {}",
+                                                    self_type.stringify_native()
+                                                ).as_ref()
+                                            );
+                                        } else {
+                                            unreachable!()
+                                        }
+                                    } else {
+                                        ast_error!(
+                                            self, arguments[i - arguments_mod], 
+                                            format!(
+                                                "Argument type does not match parameter type (expecting {} but got {})",
+                                                inner_type.stringify_native(), call_evaluated.type_.stringify_native()
+                                            ).as_ref()
+                                        );
+    
+                                        ast_note!(params[i].type_, "Parameter type defined here");
                                     }
                                 }
                             } else {    
                                 if i == 0 && arguments_mod == 1 {
-                                    // the only way self info is wrong is if constness is not respected
+                                    // the only way self info is not equal to parameter type is if constness is not respected
                                     ast_error!(self, callee_expr, "This method cannot be called from a const source");
                                 } else {
                                     ast_error!(
@@ -2584,27 +2611,37 @@ impl CodeGen {
 
                                     if let SkyeType::Type(inner_type) = &def_type {
                                         if inner_type.equals(&literal_evaluated.type_, EqualsLevel::Permissive) {
-                                            for (generic_name, generic_type) in inner_type.infer_type_from_similar(&literal_evaluated.type_) {
-                                                if generics_to_find.get(&generic_name).unwrap().is_none() {
-                                                    let wrapped = SkyeType::Type(Box::new(generic_type));
-                                                    let mapped_generic = generics_map.get(&generic_name).unwrap();
+                                            if let Some(inferred) = inner_type.infer_type_from_similar(&literal_evaluated.type_) {
+                                                for (generic_name, generic_type) in inferred {
+                                                    if generics_to_find.get(&generic_name).unwrap().is_none() {
+                                                        let wrapped = SkyeType::Type(Box::new(generic_type));
+                                                        let mapped_generic = generics_map.get(&generic_name).unwrap();
+        
+                                                        if let Some(bounds) = &mapped_generic.bounds {
+                                                            if !bounds.is_respected_by(&wrapped) {
+                                                                ast_error!(
+                                                                    self, field.expr, 
+                                                                    format!(
+                                                                        "Generic bound is not respected by this type (expecting {} but got {})",
+                                                                        bounds.stringify_native(), wrapped.stringify_native()
+                                                                    ).as_ref()
+                                                                );
     
-                                                    if let Some(bounds) = &mapped_generic.bounds {
-                                                        if !bounds.is_respected_by(&wrapped) {
-                                                            ast_error!(
-                                                                self, field.expr, 
-                                                                format!(
-                                                                    "Generic bound is not respected by this type (expecting {} but got {})",
-                                                                    bounds.stringify_native(), wrapped.stringify_native()
-                                                                ).as_ref()
-                                                            );
-
-                                                            token_note!(mapped_generic.name, "Generic defined here");
+                                                                token_note!(mapped_generic.name, "Generic defined here");
+                                                            }
                                                         }
+        
+                                                        generics_to_find.insert(generic_name, Some(wrapped));
                                                     }
-    
-                                                    generics_to_find.insert(generic_name, Some(wrapped));
                                                 }
+                                            } else {
+                                                ast_error!(
+                                                    self, field.expr, 
+                                                    format!(
+                                                        "Field type does not match definition field type (expecting {} but got {})",
+                                                        inner_type.stringify_native(), literal_evaluated.type_.stringify_native()
+                                                    ).as_ref()
+                                                );
                                             }
                                         } else {
                                             ast_error!(
