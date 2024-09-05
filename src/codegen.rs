@@ -2274,20 +2274,76 @@ impl CodeGen {
                     }
                 }
 
-                let then_branch = self.evaluate(&then_branch_expr, index, allow_unknown)?;
-                let else_branch = self.evaluate(&else_branch_expr, index, allow_unknown)?;
+                let tmp_var = self.get_temporary_var();
+
+                let tmp_index = self.definitions.len();
+                self.definitions.push(CodeOutput::new());
+
+                let indent = self.definitions[index].indent;
+                self.definitions[tmp_index].set_indent(indent);
+                self.definitions[tmp_index].push_indent();
+                self.definitions[tmp_index].push("if ");
+
+                let not_grouping = !matches!(**cond_expr, Expression::Grouping(_));
+
+                if not_grouping {
+                    self.definitions[tmp_index].push("(");
+                }
+
+                self.definitions[tmp_index].push(&cond.value);
+
+                if not_grouping {
+                    self.definitions[tmp_index].push(")");
+                }
+
+                self.definitions[tmp_index].push(" {\n");
+                self.definitions[tmp_index].inc_indent();
+
+                let then_branch = self.evaluate(&then_branch_expr, tmp_index, allow_unknown)?;
+
+                self.definitions[tmp_index].push_indent();
+                self.definitions[tmp_index].push(&tmp_var);
+                self.definitions[tmp_index].push(" = ");
+                self.definitions[tmp_index].push(&then_branch.value);
+                self.definitions[tmp_index].push(";\n");
+                self.definitions[tmp_index].dec_indent();
+
+                self.definitions[tmp_index].push_indent();
+                self.definitions[tmp_index].push("} else {\n");
+                self.definitions[tmp_index].inc_indent();
+
+                let else_branch = self.evaluate(&else_branch_expr, tmp_index, allow_unknown)?;
+
+                self.definitions[tmp_index].push_indent();
+                self.definitions[tmp_index].push(&tmp_var);
+                self.definitions[tmp_index].push(" = ");
+                self.definitions[tmp_index].push(&else_branch.value);
+                self.definitions[tmp_index].push(";\n");
+                self.definitions[tmp_index].dec_indent();
+
+                self.definitions[tmp_index].push_indent();
+                self.definitions[tmp_index].push("}\n");
 
                 if !then_branch.type_.equals(&else_branch.type_, EqualsLevel::Typewise) {
                     ast_error!(
                         self, else_branch_expr, 
                         format!(
-                            "Ternary operator else branch type ({}) does not match then branch type ({})",
-                            else_branch.type_.stringify_native(), then_branch.type_.stringify_native()
+                            "Ternary operator then branch type ({}) does not match else branch type ({})",
+                            then_branch.type_.stringify_native(), else_branch.type_.stringify_native()
                         ).as_ref()
                     );
                 }
 
-                Ok(SkyeValue::new(Rc::from(format!("{} ? {} : {}", cond.value, then_branch.value, else_branch.value)), then_branch.type_, true))
+                self.definitions[index].push_indent();
+                self.definitions[index].push(&then_branch.type_.stringify());
+                self.definitions[index].push(" ");
+                self.definitions[index].push(&tmp_var);
+                self.definitions[index].push(";\n");
+
+                let tmp_code = self.definitions.pop().unwrap();
+                self.definitions[index].push(&tmp_code.code);
+
+                Ok(SkyeValue::new(Rc::from(tmp_var), then_branch.type_, true))
             }
             Expression::CompoundLiteral(identifier_expr, _, fields) => {
                 let identifier_type = self.evaluate(&identifier_expr, index, allow_unknown)?;
