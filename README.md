@@ -464,10 +464,10 @@ let result = @A_C_MACRO(1, 1);
 # Main operators
 | name | syntax | additional notes |
 | ---- | ------ | ----------- |
-| Prefix increment | `++x` | Increments `x` before it's used |
-| Suffix increment | `x++` | Increments `x` after it's used |
-| Prefix decrement | `--x` | Decrements `x` before it's used |
-| Suffix decrement | `x--` | Decrements `x` after it's used |
+| Prefix increment | `++x` | Increments `x` before it's used [1](#additional-information) |
+| Suffix increment | `x++` | Increments `x` after it's used [1](#additional-information) |
+| Prefix decrement | `--x` | Decrements `x` before it's used [1](#additional-information) |
+| Suffix decrement | `x--` | Decrements `x` after it's used [1](#additional-information) |
 | Unary plus | `+x` | Same behavior as C |
 | Negation | `-x` | ... |
 | Boolean not | `!x` | Can also define a `Result` type with `Ok = void` |
@@ -516,44 +516,47 @@ impl Vector {
 
 Here is a list of operators that can be overloaded
 
-| operator | method | n. of arguments (except self) |
-| -------- | ------ | --------- |
-| `++{}` or `{}++` | `__inc__` | 0 |
-| `--{}` or `{}--` | `__dec__` | 0 |
-| `+{}` | `__pos__` | 0 |
-| `-{}` | `__neg__` | 0 |
-| `!{}` | `__not__` | 0 |
-| `~{}` | `__inv__` | 0 |
-| `*{}` | `__deref__` | 0 |
-| `*const {}` | `__constderef__` | 0 |
-| `{} + {}` | `__add__` | 1 |
-| `{} - {}` | `__sub__` | 1 |
-| `{} / {}` | `__div__` | 1 |
-| `{} * {}` | `__mul__` | 1 |
-| `{} % {}` | `__mod__` | 1 |
-| `{} << {}` | `__shl__` | 1 |
-| `{} >> {}` | `__shr__` | 1 |
-| <code>{} &#124;&#124; {}</code> | `__or__` | 1 |
-| `{} && {}` | `__and__` | 1 |
-| `{} ^ {}` | `__xor__` | 1 |
-| <code>{} &#124; {}</code> | `__bitor__` | 1 |
-| `{} & {}` | `__bitand__` | 1 |
-| `{} > {}` | `__gt__` | 1 |
-| `{} >= {}` | `__ge__` | 1 |
-| `{} < {}` | `__lt__` | 1 |
-| `{} <= {}` | `__le__` | 1 |
-| `{} == {}` | `__eq__` | 1 |
-| `{} != {}` | `__ne__` | 1 |
-| `{} += {}` | `__setadd__` | 1 |
-| `{} -= {}` | `__setsub__` | 1 |
-| `{} /= {}` | `__setdiv__` | 1 |
-| `{} *= {}` | `__setmul__` | 1 |
-| `{} %= {}` | `__setmod__` | 1 |
-| `{} <<= {}` | `__setshl__` | 1 |
-| `{} >>= {}` | `__setshr__` | 1 |
-| `{} ^= {}` | `__setxor__` | 1 |
-| <code>{} &#124;= {}</code> | `__setor__` | 1 |
-| `{} &= {}` | `__setand__` | 1 |
-| `{}[{}]` | `__subscript__` | any |
+| operator | method | n. of arguments (except self) | return type |
+| -------- | ------ | ----------------------------- | ----------- |
+| `++{}` or `{}++` | `__inc__` | 0 | void |
+| `--{}` or `{}--` | `__dec__` | 0 | void |
+| `+{}` | `__pos__` | 0 | any |
+| `-{}` | `__neg__` | 0 | any |
+| `!{}` | `__not__` | 0 | any |
+| `~{}` | `__inv__` | 0 | any |
+| `*{}` | `__deref__` | 0 | any |
+| `*const {}` | `__constderef__` | 0 | any |
+| `{} + {}` | `__add__` | 1 | any |
+| `{} - {}` | `__sub__` | 1 | any |
+| `{} / {}` | `__div__` | 1 | any |
+| `{} * {}` | `__mul__` | 1 | any |
+| `{} % {}` | `__mod__` | 1 | any |
+| `{} << {}` | `__shl__` | 1 | any |
+| `{} >> {}` | `__shr__` | 1 | any |
+| <code>{} &#124;&#124; {}</code> | `__or__` | 1 | any |
+| `{} && {}` | `__and__` | 1 | any |
+| `{} ^ {}` | `__xor__` | 1 | any |
+| <code>{} &#124; {}</code> | `__bitor__` | 1 | any |
+| `{} & {}` | `__bitand__` | 1 | any |
+| `{} > {}` | `__gt__` | 1 | any |
+| `{} >= {}` | `__ge__` | 1 | any |
+| `{} < {}` | `__lt__` | 1 | any |
+| `{} <= {}` | `__le__` | 1 | any |
+| `{} == {}` | `__eq__` | 1 | any |
+| `{} != {}` | `__ne__` | 1 | any |
+| `{} += {}` | `__setadd__` | 1 | any |
+| `{} -= {}` | `__setsub__` | 1 | any |
+| `{} /= {}` | `__setdiv__` | 1 | any |
+| `{} *= {}` | `__setmul__` | 1 | any |
+| `{} %= {}` | `__setmod__` | 1 | any |
+| `{} <<= {}` | `__setshl__` | 1 | any |
+| `{} >>= {}` | `__setshr__` | 1 | any |
+| `{} ^= {}` | `__setxor__` | 1 | any |
+| <code>{} &#124;= {}</code> | `__setor__` | 1 | any |
+| `{} &= {}` | `__setand__` | 1 | any |
+| `{}[{}]` | `__subscript__` | any | any |
 
 Additionally, Skye offers you copy constructors and destructors, mostly used for special types like smart pointers. They are respectively the `__copy__` method and the `__destruct__` method. The Skye compiler will warn you when it inserts calls to those methods inside the code, so that eventual debugging is easier.
+
+### Additional information
+1) Prefix and suffix increments and decrements are handled by the Skye compiler, and thus prevent undefined behavior for cases where multiple increments are used in the same expression or statement. Every expression is evaluated from left to right, and the outcome is always predictable.

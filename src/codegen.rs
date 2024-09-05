@@ -181,7 +181,7 @@ pub struct CodeGen {
     deferred:      Rc<RefCell<Vec<Vec<Statement>>>>,
     curr_function: CurrentFn,
     curr_name:     String,
-    curr_loop:     Option<Rc<str>>,
+    curr_loop:     Option<(Rc<str>, Rc<str>)>,
 
     had_error: bool
 }
@@ -952,6 +952,112 @@ impl CodeGen {
         }
     }
 
+    fn pre_eval_unary_operator(
+        &mut self, inner: SkyeValue, inner_expr: &Expression, 
+        expr: &Expression, op_stringified: &str, op_method: &str, 
+        op_type: Operator, op: &Token, index: usize, allow_unknown: bool
+    ) -> Result<SkyeValue, ExecutionInterrupt> {
+        match inner.type_.implements_op(op_type) {
+            ImplementsHow::Native(_) => { 
+                let tmp_var = self.get_temporary_var();
+                
+                self.definitions[index].push_indent();
+                self.definitions[index].push(&inner.type_.stringify());
+                self.definitions[index].push(" ");
+                self.definitions[index].push(&tmp_var);
+                self.definitions[index].push(" = ");
+                self.definitions[index].push(op_stringified);
+                self.definitions[index].push(&inner.value);
+                self.definitions[index].push(";\n");
+
+                Ok(SkyeValue::new(Rc::from(tmp_var), inner.type_, false))
+            }
+            ImplementsHow::ThirdParty => {
+                let search_tok = Token::dummy(Rc::from(op_method));
+                if let Some(value) = self.get_method(&inner, &search_tok, true) {
+                    let _ = self.call(&value, expr, inner_expr, &Vec::new(), index, allow_unknown);
+                    Ok(inner)
+                } else {
+                    token_error!(
+                        self, op, 
+                        format!(
+                            "This operator is not implemented for type {}",
+                            inner.type_.stringify_native()
+                        ).as_ref()
+                    );
+
+                    Err(ExecutionInterrupt::Error)
+                }
+            }
+            ImplementsHow::No => {
+                token_error!(
+                    self, op, 
+                    format!(
+                        "Type {} cannot use this operator",
+                        inner.type_.stringify_native()
+                    ).as_ref()
+                );
+                
+                Err(ExecutionInterrupt::Error)
+            }
+        }
+    }
+
+    fn post_eval_unary_operator(
+        &mut self, inner: SkyeValue, inner_expr: &Expression, 
+        expr: &Expression, op_stringified: &str, op_method: &str, 
+        op_type: Operator, op: &Token, index: usize, allow_unknown: bool
+    ) -> Result<SkyeValue, ExecutionInterrupt> {
+        let tmp_var = self.get_temporary_var();
+                
+        self.definitions[index].push_indent();
+        self.definitions[index].push(&inner.type_.stringify());
+        self.definitions[index].push(" ");
+        self.definitions[index].push(&tmp_var);
+        self.definitions[index].push(" = ");
+        self.definitions[index].push(&inner.value);
+        self.definitions[index].push(";\n");
+
+        match inner.type_.implements_op(op_type) {
+            ImplementsHow::Native(_) => { 
+                self.definitions[index].push_indent();
+                self.definitions[index].push(&inner.value);
+                self.definitions[index].push(op_stringified);
+                self.definitions[index].push(";\n");
+
+                Ok(SkyeValue::new(Rc::from(tmp_var), inner.type_, false))
+            }
+            ImplementsHow::ThirdParty => {
+                let search_tok = Token::dummy(Rc::from(op_method));
+                if let Some(value) = self.get_method(&inner, &search_tok, true) {
+                    let _ = self.call(&value, expr, inner_expr, &Vec::new(), index, allow_unknown)?;
+                    Ok(SkyeValue::new(Rc::from(tmp_var), inner.type_, false))
+                } else {
+                    token_error!(
+                        self, op, 
+                        format!(
+                            "This operator is not implemented for type {}",
+                            inner.type_.stringify_native()
+                        ).as_ref()
+                    );
+
+                    Err(ExecutionInterrupt::Error)
+                }
+            }
+            ImplementsHow::No => {
+                token_error!(
+                    self, op, 
+                    format!(
+                        "Type {} cannot use this operator",
+                        inner.type_.stringify_native()
+                    ).as_ref()
+                );
+                
+                Err(ExecutionInterrupt::Error)
+            }
+        }
+    }
+
     fn unary_operator(
         &mut self, inner: SkyeValue, inner_expr: &Expression, 
         expr: &Expression, op_stringified: &str, op_method: &str, 
@@ -1092,23 +1198,6 @@ impl CodeGen {
                     format!(
                         "Type {} cannot use this operator",
                         left.type_.stringify_native()
-                    ).as_ref()
-                );
-
-                Err(ExecutionInterrupt::Error)
-            }
-        }
-    }
-
-    fn suffix_unary_native_only(&mut self, inner: SkyeValue, op_stringified: &str, op_type: Operator, op: &Token) -> Result<SkyeValue, ExecutionInterrupt> {
-        match inner.type_.implements_op(op_type) {
-            ImplementsHow::Native(_) => Ok(SkyeValue::new(Rc::from(format!("{}{}", inner.value, op_stringified)), inner.type_, false)),
-            ImplementsHow::No | ImplementsHow::ThirdParty => {
-                token_error!(
-                    self, op, 
-                    format!(
-                        "Type {} cannot use this operator",
-                        inner.type_.stringify_native()
                     ).as_ref()
                 );
 
@@ -1272,7 +1361,7 @@ impl CodeGen {
                                 ast_error!(self, inner_expr, "Cannot apply '++' operator on const value");
                                 Err(ExecutionInterrupt::Error)
                             } else {
-                                self.unary_operator(
+                                self.pre_eval_unary_operator(
                                     inner, inner_expr, expr, "++", 
                                     "__inc__", Operator::Inc, op, index, allow_unknown
                                 )
@@ -1283,11 +1372,11 @@ impl CodeGen {
                                 ast_error!(self, inner_expr, "Cannot apply '--' operator on const value");
                                 Err(ExecutionInterrupt::Error)
                             } else {
-                                self.unary_operator(
+                                self.pre_eval_unary_operator(
                                     inner, inner_expr, expr, "--", 
                                     "__dec__", Operator::Dec, op, index, allow_unknown
                                 )
-                            }  
+                            }
                         }
                         TokenType::Plus => {
                             self.unary_operator(inner, inner_expr, expr, "+", "__pos__", Operator::Pos, op, index, allow_unknown)
@@ -1791,7 +1880,10 @@ impl CodeGen {
                                 ast_error!(self, inner_expr, "Cannot apply '++' operator on const value");
                                 Err(ExecutionInterrupt::Error)
                             } else {
-                                self.suffix_unary_native_only(inner, "++", Operator::Inc, op)
+                                self.post_eval_unary_operator(
+                                    inner, inner_expr, expr, "++", 
+                                    "__inc__", Operator::Inc, op, index, allow_unknown
+                                )
                             }
                         }
                         TokenType::MinusMinus => {
@@ -1799,7 +1891,10 @@ impl CodeGen {
                                 ast_error!(self, inner_expr, "Cannot apply '--' operator on const value");
                                 Err(ExecutionInterrupt::Error)
                             } else {
-                                self.suffix_unary_native_only(inner, "--", Operator::Inc, op)
+                                self.post_eval_unary_operator(
+                                    inner, inner_expr, expr, "--", 
+                                    "__dec__", Operator::Dec, op, index, allow_unknown
+                                )
                             }
                         }
                         _ => unreachable!()
@@ -3802,10 +3897,11 @@ impl CodeGen {
 
                 self.definitions[index].push(") break;\n");
 
-                let break_label = self.get_temporary_var();
-
+                let continue_label = Rc::from(self.get_temporary_var());
+                let break_label = Rc::from(self.get_temporary_var());
+                
                 let previous_loop = self.curr_loop.clone();
-                self.curr_loop = Some(Rc::from(break_label.clone()));
+                self.curr_loop = Some((Rc::clone(&break_label), Rc::clone(&continue_label)));
 
                 if not_block {
                     self.execute_block(
@@ -3820,6 +3916,10 @@ impl CodeGen {
                 }
                 
                 self.curr_loop = previous_loop;
+
+                self.definitions[index].push_indent();
+                self.definitions[index].push(&continue_label);
+                self.definitions[index].push(":;\n");
 
                 self.definitions[index].dec_indent();
                 self.definitions[index].push_indent();
@@ -3843,15 +3943,7 @@ impl CodeGen {
                 }
 
                 self.definitions[index].push_indent();
-                self.definitions[index].push("for (;; ");
-
-                if let Some(inc_expr) = increment {
-                    let inc = self.evaluate(inc_expr, index, false)?;
-
-                    self.definitions[index].push(&inc.value);
-                }
-
-                self.definitions[index].push(") {\n");
+                self.definitions[index].push("while (1) {\n");
                 self.definitions[index].inc_indent();
 
                 let cond = self.evaluate(cond_expr, index, false)?;
@@ -3886,10 +3978,11 @@ impl CodeGen {
 
                 self.definitions[index].push(") break;\n");
 
-                let break_label = self.get_temporary_var();
+                let continue_label = Rc::from(self.get_temporary_var());
+                let break_label = Rc::from(self.get_temporary_var());
 
                 let previous_loop = self.curr_loop.clone();
-                self.curr_loop = Some(Rc::from(break_label.clone()));
+                self.curr_loop = Some((Rc::clone(&break_label), Rc::clone(&continue_label)));
 
                 if not_block {
                     self.execute_block(
@@ -3904,6 +3997,14 @@ impl CodeGen {
                 }
 
                 self.curr_loop = previous_loop;
+                
+                self.definitions[index].push_indent();
+                self.definitions[index].push(&continue_label);
+                self.definitions[index].push(":;\n");
+
+                if let Some(inc) = increment {
+                    let _ = self.execute(&Statement::Expression(inc.clone()), index);
+                }
 
                 self.definitions[index].dec_indent();
                 self.definitions[index].push_indent();
@@ -3926,10 +4027,11 @@ impl CodeGen {
                 self.definitions[index].push("while (1) {\n");
                 self.definitions[index].inc_indent();
 
-                let break_label = self.get_temporary_var();
+                let continue_label = Rc::from(self.get_temporary_var());
+                let break_label = Rc::from(self.get_temporary_var());
 
                 let previous_loop = self.curr_loop.clone();
-                self.curr_loop = Some(Rc::from(break_label.clone()));
+                self.curr_loop = Some((Rc::clone(&break_label), Rc::clone(&continue_label)));
 
                 if not_block {
                     self.execute_block(
@@ -3961,6 +4063,10 @@ impl CodeGen {
                         );
                     }
                 }
+
+                self.definitions[index].push_indent();
+                self.definitions[index].push(&continue_label);
+                self.definitions[index].push(":;\n");
 
                 self.definitions[index].push_indent();
                 self.definitions[index].push("if (!");
@@ -5025,15 +5131,15 @@ impl CodeGen {
                 );
             }
             Statement::Break(kw) => {
-                if let Some(label) = &self.curr_loop {                    
-                    return Err(ExecutionInterrupt::Interrupt(Rc::from(format!("goto {};\n", label))));
+                if let Some((break_label, _)) = &self.curr_loop {                    
+                    return Err(ExecutionInterrupt::Interrupt(Rc::from(format!("goto {};\n", break_label))));
                 } else {
                     token_error!(self, kw, "Can only use break inside loops");
                 }
             }
             Statement::Continue(kw) => {
-                if self.curr_loop.is_some() {
-                    return Err(ExecutionInterrupt::Interrupt(Rc::from("continue;\n")));
+                if let Some((_, continue_label)) = &self.curr_loop {
+                    return Err(ExecutionInterrupt::Interrupt(Rc::from(format!("goto {};\n", continue_label))));
                 } else {
                     token_error!(self, kw, "Can only use continue inside loops");
                 }
@@ -5496,19 +5602,10 @@ impl CodeGen {
                                 return Err(ExecutionInterrupt::Error);
                             }
 
-                            let tmp_var_name = self.get_temporary_var();
-                            let iterator_val = SkyeValue::new(Rc::from(tmp_var_name.as_ref()), iterator_call.type_, false);
+                            let iterator_val = SkyeValue::new(Rc::clone(&iterator_call.value), iterator_call.type_, false);
 
                             search_tok.set_lexeme("next");
                             if let Some(final_method) = self.get_method(&iterator_val, &search_tok, false) {
-                                self.definitions[index].push_indent();
-                                self.definitions[index].push(&iterator_type_stringified);
-                                self.definitions[index].push(" ");
-                                self.definitions[index].push(&tmp_var_name);
-                                self.definitions[index].push(" = ");
-                                self.definitions[index].push(&iterator_call.value);
-                                self.definitions[index].push(";\n");
-
                                 final_method
                             } else {
                                 ast_error!(
@@ -5534,6 +5631,13 @@ impl CodeGen {
                         }
                     }
                 };
+
+                let previous = Rc::clone(&self.environment);
+                self.environment = Rc::new(RefCell::new(Environment::with_enclosing(Rc::clone(&self.environment))));
+            
+                self.definitions[index].push_indent();
+                self.definitions[index].push("while (1) {\n");
+                self.definitions[index].inc_indent();
 
                 let next_call = self.call(
                     &method, iterator_expr, iterator_expr, 
@@ -5581,9 +5685,6 @@ impl CodeGen {
                     return Err(ExecutionInterrupt::Error);
                 }
 
-                let previous = Rc::clone(&self.environment);
-                self.environment = Rc::new(RefCell::new(Environment::with_enclosing(Rc::clone(&self.environment))));
-
                 let mut env = self.environment.borrow_mut();
                 env.define(
                     Rc::clone(&var_name.lexeme),
@@ -5595,34 +5696,24 @@ impl CodeGen {
                 );
                 drop(env);
 
-                let tmp_item_var_name = self.get_temporary_var();
-                
                 self.definitions[index].push_indent();
-                self.definitions[index].push(&next_call.type_.stringify());
-                self.definitions[index].push(" ");
-                self.definitions[index].push(&tmp_item_var_name);
-                self.definitions[index].push(";\n");
-
-                self.definitions[index].push_indent();
-                self.definitions[index].push("while ((");
-                self.definitions[index].push(&tmp_item_var_name);
-                self.definitions[index].push(" = ");
+                self.definitions[index].push("if (");
                 self.definitions[index].push(&next_call.value);
-                self.definitions[index].push(").kind == core_DOT_Option_DOT_Kind_DOT_Some) {\n");
-                self.definitions[index].inc_indent();
+                self.definitions[index].push(".kind != core_DOT_Option_DOT_Kind_DOT_Some) break;\n");
 
                 self.definitions[index].push_indent();
                 self.definitions[index].push(&item_type_stringified);
                 self.definitions[index].push(" ");
                 self.definitions[index].push(&var_name.lexeme);
                 self.definitions[index].push(" = ");
-                self.definitions[index].push(&tmp_item_var_name);
+                self.definitions[index].push(&next_call.value);
                 self.definitions[index].push(".some;\n");
 
-                let break_label = self.get_temporary_var();
-
+                let continue_label = Rc::from(self.get_temporary_var());
+                let break_label = Rc::from(self.get_temporary_var());
+                
                 let previous_loop = self.curr_loop.clone();
-                self.curr_loop = Some(Rc::from(break_label.clone()));
+                self.curr_loop = Some((Rc::clone(&break_label), Rc::clone(&continue_label)));
 
                 if matches!(**body, Statement::Block(..)) {
                     self.execute_block(
@@ -5638,6 +5729,10 @@ impl CodeGen {
                 
                 self.curr_loop = previous_loop;
                 self.environment = previous;
+
+                self.definitions[index].push_indent();
+                self.definitions[index].push(&continue_label);
+                self.definitions[index].push(":;\n");
 
                 self.definitions[index].dec_indent();
                 self.definitions[index].push_indent();
