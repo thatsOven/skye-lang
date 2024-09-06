@@ -184,7 +184,7 @@ pub struct CodeGen {
     curr_loop:     Option<(Rc<str>, Rc<str>)>,
 
     had_error: bool,
-    debug: bool
+    debug:     bool
 }
 
 impl CodeGen {
@@ -497,19 +497,33 @@ impl CodeGen {
                         self.evaluate(&arguments[i - arguments_mod], index, allow_unknown)?
                     };
                     
-                    if !params[i].type_.equals(&arg.type_, EqualsLevel::Strict) {
-                        if i == 0 && arguments_mod == 1 {
-                            if let Some((_, self_type)) = &callee.self_info {
+                    if params[i].type_.equals(&arg.type_, EqualsLevel::Permissive) {
+                        if !params[i].type_.equals(&arg.type_, EqualsLevel::Strict) {
+                            if i == 0 && arguments_mod == 1 {
+                                if let Some((_, self_type)) = &callee.self_info {
+                                    ast_error!(
+                                        self, callee_expr, 
+                                        format!(
+                                            "This method cannot be called from type {}",
+                                            self_type.stringify_native()
+                                        ).as_ref()
+                                    );
+                                } else {
+                                    unreachable!()
+                                }
+                            } else {
                                 ast_error!(
-                                    self, callee_expr, 
+                                    self, arguments[i - arguments_mod], 
                                     format!(
-                                        "This method cannot be called from {}",
-                                        self_type.stringify_native()
+                                        "Argument type does not match parameter type (expecting {} but got {})",
+                                        params[i].type_.stringify_native(), arg.type_.stringify_native()
                                     ).as_ref()
                                 );
-                            } else {
-                                unreachable!()
                             }
+                        }
+                    } else {
+                        if i == 0 && arguments_mod == 1 {
+                            ast_error!(self, callee_expr, "This method cannot be called from a const source");
                         } else {
                             ast_error!(
                                 self, arguments[i - arguments_mod], 
@@ -656,7 +670,7 @@ impl CodeGen {
                                             ast_error!(
                                                 self, callee_expr, 
                                                 format!(
-                                                    "This method cannot be called from {}",
+                                                    "This method cannot be called from type {}",
                                                     self_type.stringify_native()
                                                 ).as_ref()
                                             );
