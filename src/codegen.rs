@@ -612,6 +612,7 @@ impl CodeGen {
                                 self.curr_name   = previous_name;
                                 self.environment = previous;
 
+                                // TODO does this even happen anymore?
                                 ast_error!(self, callee_expr, "Skye cannot infer the generic types for this function");
                                 ast_note!(callee_expr, "Manually specify the generic types");
                                 ast_note!(params[i].type_, "This type is too complex for Skye to be able to infer types");
@@ -761,9 +762,12 @@ impl CodeGen {
                                 )
                             );
                         } else {
-                            ast_error!(self, callee_expr, "Skye cannot infer the generic types for this function");
-                            ast_note!(callee_expr, "This expression is a template and requires generic typing");
-                            ast_note!(callee_expr, "Manually specify the generic types");
+                            if !self.had_error { // avoids having inference errors caused by other errors
+                                ast_error!(self, callee_expr, "Skye cannot infer the generic types for this function");
+                                ast_note!(callee_expr, "This expression is a template and requires generic typing");
+                                ast_note!(callee_expr, "Manually specify the generic types");
+                            }
+                            
                             return Err(ExecutionInterrupt::Error);
                         }
                     }
@@ -2866,9 +2870,12 @@ impl CodeGen {
                                         )
                                     );
                                 } else {
-                                    ast_error!(self, identifier_expr, "Skye cannot infer the generic types for this struct literal");
-                                    ast_note!(identifier_expr, "This expression is a template and requires generic typing");
-                                    ast_note!(identifier_expr, "Manually specify the generic types");
+                                    if !self.had_error { // avoids having inference errors caused by other errors
+                                        ast_error!(self, identifier_expr, "Skye cannot infer the generic types for this struct literal");
+                                        ast_note!(identifier_expr, "This expression is a template and requires generic typing");
+                                        ast_note!(identifier_expr, "Manually specify the generic types");
+                                    }
+                                    
                                     return Err(ExecutionInterrupt::Error);
                                 }
                             }
