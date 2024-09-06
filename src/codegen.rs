@@ -816,7 +816,6 @@ impl CodeGen {
                         if let SkyeType::Function(.., has_body) = existing.type_ {
                             if has_body {
                                 env = tmp_env.borrow_mut();
-
                                 for generic in generics {
                                     env.undef(Rc::clone(&generic.name.lexeme));
                                 }

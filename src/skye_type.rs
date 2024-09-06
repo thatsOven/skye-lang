@@ -48,44 +48,19 @@ impl SkyeGeneric {
 }
 
 pub enum Operator {
-    Inc,
-    Dec,
-    Pos,
-    Neg,
-    Not,
-    Inv,
-    Ref,
-    ConstRef,
-    Deref,
-    ConstDeref,
-    Add,
-    Sub,
-    Div,
-    Mul,
-    Mod,
-    Shl,
-    Shr,
-    Or,
-    And,
-    BitOr,
-    BitAnd,
-    Xor,
-    Gt,
-    Ge,
-    Lt,
-    Le,
-    Eq,
-    Ne,
-    SetAdd,
-    SetSub,
-    SetMul,
-    SetDiv,
-    SetMod,
-    SetShl,
-    SetShr,
-    SetAnd,
-    SetXor,
-    SetOr,
+    Inc, Dec,
+    Pos, Neg,
+    Not, Inv,
+    Ref, ConstRef,
+    Deref, ConstDeref,
+    Add, Sub, Div, Mul, Mod,
+    Shl, Shr,
+    Or, And,
+    BitOr, BitAnd, Xor,
+    Gt, Ge, Lt, Le, Eq, Ne,
+    SetAdd, SetSub, SetMul, SetDiv, SetMod,
+    SetShl, SetShr,
+    SetAnd, SetXor, SetOr,
     Subscript,
     AsPtr
 }
@@ -473,7 +448,7 @@ impl SkyeType {
     }
 
     pub fn is_type(&self) -> bool {
-        matches!(self, SkyeType::Type(_)) || matches!(self, SkyeType::Group(..))
+        matches!(self, SkyeType::Type(_) | SkyeType::Group(..))
     }
 
     pub fn finalize(&self) -> SkyeType {
@@ -631,7 +606,7 @@ impl SkyeType {
             SkyeType::U8  | SkyeType::I8  | SkyeType::U16 | SkyeType::I16 |
             SkyeType::U32 | SkyeType::I32 | SkyeType::U64 | SkyeType::I64 |
             SkyeType::Usz | SkyeType::F32 | SkyeType::F64 | SkyeType::AnyInt |
-            SkyeType::AnyFloat | SkyeType::Char | SkyeType::RawString  | 
+            SkyeType::AnyFloat | SkyeType::Char | SkyeType::RawString | 
             SkyeType::Void | SkyeType::Group(..) | SkyeType::Namespace(_) | 
             SkyeType::Template(..) | SkyeType::Macro(..) => (),
 
