@@ -46,8 +46,8 @@ impl[T, U] core::Result[T, U] {
 
 namespace core {
     namespace utils {
-        fn cStringToString(const raw: rawstring) String {
-            return String.{ ptr: @cast(*const char, raw), length: core::utils::cStringLength(raw) };
+        fn cStringToString(const ptr: *const char) String {
+            return String.{ ptr, length: core::utils::cStringLength(ptr) };
         }
     }
 
@@ -606,12 +606,12 @@ fn _SKYE_INIT() {
     _SKYE_PRIMITIVES_INIT();
 }
 
-fn _SKYE_CONVERT_ARGS(const argc: usz, const argv: *rawstring) core::Array[String] {
+fn _SKYE_CONVERT_ARGS(const argc: usz, const argv: **const char) core::Array[String] {
     let output = core::Array::withCapacity[String](argc);
 
     for let i = 0usz; i < argc; i++ {
         output.push(String.{ 
-            ptr: @cast(*const char, argv[i]), 
+            ptr: argv[i], 
             length: core::utils::cStringLength(argv[i]) 
         });
     }

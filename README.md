@@ -67,7 +67,6 @@ f32 f64
 Other:
 char 
 voidptr (void*, mostly for C interop)
-rawstring
 ```
 No implicit casting is performed, every cast must be performed explictly using the `@cast` macro.
 ```
@@ -118,7 +117,7 @@ The String type in Skye is not null terminated and stores its length separately.
 
 A raw string is mostly used for C interop. It's like a C string, but not null terminated.
 ```
-let myRawString: rawstring = `This is a raw string\0`;
+let myRawString: *const char = `This is a raw string\0`;
 let rawStringLength = core::utils::cStringLength(myRawString); // 22
 ```
 

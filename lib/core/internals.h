@@ -17,7 +17,6 @@ typedef uint64_t u64;
 typedef int64_t i64;
 typedef double f64;
 typedef size_t usz;
-typedef const char* rawstring;
 
 #if __WORDSIZE == 64
     #define SIZE_T_C(c)	c ## ULL

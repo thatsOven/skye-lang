@@ -88,7 +88,7 @@ pub enum SkyeType {
     U8, U16, U32, U64, Usz,
     I8, I16, I32, I64, AnyInt,
     F32, F64, AnyFloat,
-    Char, RawString,
+    Char,
 
     Void,
     Unknown(Rc<str>), // used for type inference
@@ -123,7 +123,6 @@ impl std::fmt::Debug for SkyeType {
             Self::F64 => write!(f, "F64"),
             Self::AnyFloat => write!(f, "AnyFloat"),
             Self::Char => write!(f, "Char"),
-            Self::RawString => write!(f, "RawString"),
             Self::Void => write!(f, "Void"),
             Self::Unknown(arg0) => f.debug_tuple("Unknown").field(arg0).finish(),
             Self::Pointer(arg0, arg1) => f.debug_tuple("Pointer").field(arg0).field(arg1).finish(),
@@ -156,8 +155,7 @@ impl SkyeType {
             SkyeType::I32 | SkyeType::AnyInt   => String::from("i32"),
             SkyeType::F32 | SkyeType::AnyFloat => String::from("f32"),
             
-            SkyeType::Char      => String::from("char"),
-            SkyeType::RawString => String::from("rawstring"),
+            SkyeType::Char => String::from("char"),
 
             SkyeType::Void       => String::from("void"),
             SkyeType::Unknown(_) => String::from("void*"),
@@ -197,9 +195,8 @@ impl SkyeType {
             SkyeType::AnyInt   => String::from("AnyInt"),
             SkyeType::AnyFloat => String::from("AnyFloat"),
             
-            SkyeType::Char      => String::from("char"),
-            SkyeType::RawString => String::from("rawstring"),
-            SkyeType::Void      => String::from("void"),
+            SkyeType::Char => String::from("char"),
+            SkyeType::Void => String::from("void"),
 
             SkyeType::Unknown(name) => format!("unknown \"{}\"", name),
             SkyeType::Group(left, right) => format!("{} | {}", left.stringify_native(), right.stringify_native()),
@@ -270,7 +267,6 @@ impl SkyeType {
             SkyeType::F32 | SkyeType::AnyFloat => String::from("f32"),
             
             SkyeType::Char       => String::from("char"),
-            SkyeType::RawString  => String::from("rawstring"),
             SkyeType::Void       => String::from("void"),
             SkyeType::Unknown(_) => String::from("_UNKNOWN_"),
 
@@ -335,9 +331,7 @@ impl SkyeType {
             SkyeType::AnyInt   => matches!(other, SkyeType::AnyInt)   || other.equals(self, level),
             SkyeType::AnyFloat => matches!(other, SkyeType::AnyFloat) || other.equals(self, level),
 
-            SkyeType::Char      => matches!(other, SkyeType::Char),
-            SkyeType::RawString => matches!(other, SkyeType::RawString),
-
+            SkyeType::Char => matches!(other, SkyeType::Char),
             SkyeType::Void => matches!(other, SkyeType::Void),
 
             SkyeType::Group(..) | 
@@ -606,9 +600,9 @@ impl SkyeType {
             SkyeType::U8  | SkyeType::I8  | SkyeType::U16 | SkyeType::I16 |
             SkyeType::U32 | SkyeType::I32 | SkyeType::U64 | SkyeType::I64 |
             SkyeType::Usz | SkyeType::F32 | SkyeType::F64 | SkyeType::AnyInt |
-            SkyeType::AnyFloat | SkyeType::Char | SkyeType::RawString | 
-            SkyeType::Void | SkyeType::Group(..) | SkyeType::Namespace(_) | 
-            SkyeType::Template(..) | SkyeType::Macro(..) => (),
+            SkyeType::AnyFloat | SkyeType::Char | SkyeType::Void | 
+            SkyeType::Group(..) | SkyeType::Namespace(_) | SkyeType::Template(..) | 
+            SkyeType::Macro(..) => (),
 
             SkyeType::Unknown(name) => {
                 if let SkyeType::Pointer(inner_type, _) = other {
@@ -777,13 +771,6 @@ impl SkyeType {
                     _ => ImplementsHow::Native(vec![SkyeType::AnyInt, SkyeType::U8, SkyeType::I8])
                 }
             }
-
-            SkyeType::RawString => {
-                match op {
-                    Operator::Ref | Operator::Subscript | Operator::ConstRef => ImplementsHow::Native(Vec::new()),
-                    _ => ImplementsHow::No
-                }
-            }
         }
     }
 
@@ -794,7 +781,7 @@ impl SkyeType {
             SkyeType::U8  | SkyeType::U16 | SkyeType::U32 | SkyeType::U64 | SkyeType::Usz |
             SkyeType::I8  | SkyeType::I16 | SkyeType::I32 | SkyeType::I64 | SkyeType::AnyInt |
             SkyeType::F32 | SkyeType::F64 | SkyeType::AnyFloat |
-            SkyeType::Char | SkyeType::RawString | SkyeType::Void | SkyeType::Unknown(_) | 
+            SkyeType::Char | SkyeType::Void | SkyeType::Unknown(_) | 
             SkyeType::Pointer(..) | SkyeType::Function(..) | SkyeType::Enum(..) => true,
 
             SkyeType::Group(..) | SkyeType::Namespace(_) | SkyeType::Template(..) |

@@ -8,11 +8,11 @@ import <"math.h">;
 #bind fn malloc(size: usz) voidptr;
 #bind fn realloc(ptr: voidptr, size: usz) voidptr;
 #bind fn free(ptr: voidptr);
-#bind fn strlen(const str: rawstring) usz;
+#bind fn strlen(const str: *const char) usz;
 #bind fn exit(code: i32);
 
 #typedef struct CFile: FILE;
-#bind fn fopen(filename: rawstring, mode: rawstring) *CFile;
+#bind fn fopen(filename: *const char, mode: *const char) *CFile;
 #bind fn fclose(file: *CFile) i32;
 #bind fn fwrite(ptr: voidptr, size: usz, nmemb: usz, file: *CFile) usz;
 #bind fn fflush(file: *CFile) i32;
@@ -78,7 +78,7 @@ namespace core {
             ReadAppendBin
         }
 
-        fn fileOpenModeToCMode(const mode: core::io::FileOpenMode) rawstring {
+        fn fileOpenModeToCMode(const mode: core::io::FileOpenMode) *const char {
             return {
                  `r\0`,   `w\0`,   `a\0`,  `r+\0`, 
                 `w+\0`,  `a+\0`,  `rb\0`,  `wb\0`, 
@@ -102,7 +102,7 @@ namespace core {
                 core::mem::typedBlockCopy(filename.ptr, buf, filename.length);
                 buf[filename.length] = '\0';
 
-                const cFile = fopen(@cast(rawstring, buf), core::io::fileOpenModeToCMode(mode));
+                const cFile = fopen(buf, core::io::fileOpenModeToCMode(mode));
                 
                 if cFile == @nullptr {
                     return (Self!void)::Error;
@@ -147,7 +147,7 @@ namespace core {
     }
 
     namespace utils {
-        fn cStringLength(const str: rawstring) usz {
+        fn cStringLength(const str: *const char) usz {
             return strlen(str);
         }
     }

@@ -205,8 +205,7 @@ impl CodeGen {
         globals_ref.define(Rc::from("f64"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::F64)), true, None));
         globals_ref.define(Rc::from("usz"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::Usz)), true, None));
         
-        globals_ref.define(Rc::from("char"),      SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::Char)),      true, None));
-        globals_ref.define(Rc::from("rawstring"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::RawString)), true, None));
+        globals_ref.define(Rc::from("char"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::Char)),      true, None));
 
         globals_ref.define(
             Rc::from("voidptr"), 
@@ -1313,8 +1312,21 @@ impl CodeGen {
                 let mut slice_tok = opening_brace.clone();
                 slice_tok.set_lexeme("core_DOT_Slice");
 
+                let tmp_var = Rc::from(self.get_temporary_var());
+
                 let mut type_tok = opening_brace.clone();
-                type_tok.set_lexeme(&first_item.type_.mangle());
+                type_tok.set_lexeme(&tmp_var);
+
+                let mut env = self.environment.borrow_mut();
+                env.define(
+                    Rc::clone(&tmp_var),
+                    SkyeVariable::new(
+                        SkyeType::Type(Box::new(first_item.type_.clone())),
+                        true,
+                        Some(Box::new(type_tok.clone()))
+                    )
+                );
+                drop(env);
                 
                 let return_type = self.evaluate(
                     &Expression::Subscript(
@@ -1323,6 +1335,9 @@ impl CodeGen {
                         vec![Expression::Variable(type_tok)]
                     ), index, allow_unknown
                 )?;
+
+                let mut env = self.environment.borrow_mut();
+                env.undef(tmp_var);
 
                 if let SkyeType::Type(inner_type) = return_type.type_ {
                     Ok(SkyeValue::new(
@@ -1362,7 +1377,7 @@ impl CodeGen {
                     LiteralKind::Char => Ok(SkyeValue::new(Rc::from(format!("'{}'", value)), SkyeType::Char, true)),
                     LiteralKind::RawString => {
                         if let Some(string_const) = self.strings.get(value) {
-                            Ok(SkyeValue::new(Rc::from(format!("SKYE_STRING_{}", string_const)), SkyeType::RawString, true))
+                            Ok(SkyeValue::new(Rc::from(format!("SKYE_STRING_{}", string_const)), SkyeType::Pointer(Box::new(SkyeType::Char), true), true))
                         } else {
                             let str_index = self.strings.len();
                             self.strings_code.push(format!(
@@ -1371,7 +1386,7 @@ impl CodeGen {
                             ).as_ref());
 
                             self.strings.insert(Rc::clone(value), str_index);
-                            Ok(SkyeValue::new(Rc::from(format!("SKYE_STRING_{}", str_index)), SkyeType::RawString, true))
+                            Ok(SkyeValue::new(Rc::from(format!("SKYE_STRING_{}", str_index)), SkyeType::Pointer(Box::new(SkyeType::Char), true), true))
                         }
                     }
                     LiteralKind::String => {
@@ -2338,7 +2353,14 @@ impl CodeGen {
                 } else if allow_unknown {
                     Ok(SkyeValue::special(SkyeType::Unknown(Rc::clone(&name.lexeme))))
                 } else {
-                    token_error!(self, &name, "Cannot reference undefined symbol");
+                    token_error!(
+                        self, name, 
+                        format!(
+                            "Cannot reference undefined symbol \"{}\"",
+                            name.lexeme
+                        ).as_ref()
+                    );
+
                     Err(ExecutionInterrupt::Error)
                 }
             }
@@ -2978,33 +3000,6 @@ impl CodeGen {
                             }
                             _ => {
                                 ast_error!(
-                                    self, &arguments[0], 
-                                    format!(
-                                        "Expecting integer for subscripting operation (got {})",
-                                        arg.type_.stringify_native()
-                                    ).as_ref()
-                                );
-
-                                Err(ExecutionInterrupt::Error)
-                           }
-                        }
-                    }
-                    SkyeType::RawString => {
-                        if arguments.len() != 1 {
-                            token_error!(self, paren, "Expecting one subscript argument for string offset");
-                            return Err(ExecutionInterrupt::Error);
-                        }
-
-                        let arg = self.evaluate(&arguments[0], index, allow_unknown)?;
-
-                        match arg.type_ {
-                            SkyeType::U8  | SkyeType::I8  | SkyeType::U16 | SkyeType::I16 |
-                            SkyeType::U32 | SkyeType::I32 | SkyeType::U64 | SkyeType::I64 |
-                            SkyeType::Usz | SkyeType::AnyInt => {
-                                Ok(SkyeValue::new(Rc::from(format!("{}[{}]", subscripted.value, arg.value)), SkyeType::Char, true))
-                            }
-                            _ => {
-                                 ast_error!(
                                     self, &arguments[0], 
                                     format!(
                                         "Expecting integer for subscripting operation (got {})",
