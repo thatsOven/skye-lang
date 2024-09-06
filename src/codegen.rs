@@ -2956,7 +2956,6 @@ impl CodeGen {
 
                         Err(ExecutionInterrupt::Error)
                     }
-                    
                 }
             }
             Expression::Subscript(subscripted_expr, paren, arguments) => {
@@ -3406,7 +3405,7 @@ impl CodeGen {
                     }
                 }
 
-                if value.value.as_ref() != "" { // can happen with try operator returning void
+                if value.value.as_ref() != "" { // can happen with expressions returning void
                     self.definitions[index].push_indent();
                     self.definitions[index].push(&value.value);
                     self.definitions[index].push(";\n");

@@ -63,7 +63,7 @@ namespace core {
     }
 
     namespace io {
-        enum FileOpenMode {
+        enum FileOpenMode as u8 {
             Read,
             Write,
             Append,
@@ -79,46 +79,11 @@ namespace core {
         }
 
         fn fileOpenModeToCMode(const mode: core::io::FileOpenMode) rawstring {
-            use core::io::FileOpenMode as f;
-
-            switch mode {
-                f::Read {
-                    return `r\0`;
-                }
-                f::Write {
-                    return `w\0`;
-                }
-                f::Append {
-                    return `a\0`;
-                }
-                f::ExistingRW {
-                    return `r+\0`;
-                }
-                f::ReadWrite {
-                    return `w+\0`;
-                }
-                f::ReadAppend {
-                    return `a+\0`;
-                }
-                f::ReadBin {
-                    return `rb\0`;
-                }
-                f::WriteBin {
-                    return `wb\0`;
-                }
-                f::AppendBin {
-                    return `ab\0`;
-                }
-                f::ExistingRWBin {
-                    return `rb+\0`;
-                }
-                f::ReadWriteBin {
-                    return `wb+\0`;
-                }
-                f::ReadAppendBin {
-                    return `ab+\0`;
-                }
-            }
+            return {
+                 `r\0`,   `w\0`,   `a\0`,  `r+\0`, 
+                `w+\0`,  `a+\0`,  `rb\0`,  `wb\0`, 
+                `ab\0`, `rb+\0`, `wb+\0`, `ab+\0`
+            }.ptr[@cast(u8, mode)];
         }
 
         struct File {
