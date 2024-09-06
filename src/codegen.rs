@@ -1451,7 +1451,7 @@ impl CodeGen {
                             self.unary_operator(inner, inner_expr, expr, "-", "__neg__", Operator::Neg, op, index, allow_unknown)
                         }
                         TokenType::Bang => {
-                            if matches!(inner.type_, SkyeType::Type(_)) | matches!(inner.type_, SkyeType::Void) | matches!(inner.type_, SkyeType::Unknown(_)) {
+                            if matches!(inner.type_, SkyeType::Type(_) | SkyeType::Void | SkyeType::Unknown(_)) {
                                 // !type syntax for void!type (result operator)
                                 
                                 if !inner.type_.check_completeness() {
@@ -1483,7 +1483,7 @@ impl CodeGen {
                             }
                         }
                         TokenType::Question => {
-                            if matches!(inner.type_, SkyeType::Type(_)) | matches!(inner.type_, SkyeType::Void) | matches!(inner.type_, SkyeType::Unknown(_)) {
+                            if matches!(inner.type_, SkyeType::Type(_) | SkyeType::Void | SkyeType::Unknown(_)) {
                                 // option operator
 
                                 if !inner.type_.check_completeness() {
@@ -2273,7 +2273,7 @@ impl CodeGen {
                         )
                     }
                     TokenType::Bang => {
-                        let left_ok = matches!(left.type_, SkyeType::Type(_)) | matches!(left.type_, SkyeType::Void) | matches!(left.type_, SkyeType::Unknown(_));
+                        let left_ok = matches!(left.type_, SkyeType::Type(_) | SkyeType::Void | SkyeType::Unknown(_));
                         if left_ok {
                             if !left.type_.check_completeness() {
                                 ast_error!(self, left_expr, "Cannot use incomplete type directly");
@@ -2283,7 +2283,7 @@ impl CodeGen {
 
                             let right = self.evaluate(&right_expr, index, allow_unknown)?;
                             
-                            if matches!(right.type_, SkyeType::Type(_)) | matches!(right.type_, SkyeType::Void) | matches!(right.type_, SkyeType::Unknown(_)) {
+                            if matches!(right.type_, SkyeType::Type(_) | SkyeType::Void | SkyeType::Unknown(_)) {
                                 // result operator
 
                                 if !right.type_.check_completeness() {
@@ -4004,7 +4004,7 @@ impl CodeGen {
                     token_note!(kw, "Place this for loop inside a function");
                 }
 
-                let not_block = !matches!(**body, Statement::Block(..));
+                let not_block    = !matches!(**body, Statement::Block(..));
                 let not_grouping = !matches!(cond_expr, Expression::Grouping(_));
 
                 if let Some(init) = initializer {
@@ -5157,7 +5157,7 @@ impl CodeGen {
                         if let Some(default) = &generic.default {
                             let evaluated = self.evaluate(default, index, false)?;
     
-                            if matches!(evaluated.type_, SkyeType::Type(_)) || matches!(evaluated.type_, SkyeType::Void) {
+                            if matches!(evaluated.type_, SkyeType::Type(_) | SkyeType::Void) {
                                 if evaluated.type_.check_completeness() {
                                     Some(evaluated.type_)
                                 } else {
