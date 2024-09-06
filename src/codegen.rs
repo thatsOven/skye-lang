@@ -1441,6 +1441,9 @@ impl CodeGen {
                             if inner.is_const {
                                 ast_error!(self, inner_expr, "Cannot apply '++' operator on const value");
                                 Err(ExecutionInterrupt::Error)
+                            } else if !inner_expr.is_valid_assignment_target() {
+                                ast_error!(self, inner_expr, "Can only apply '++' operator on valid assignment targets");
+                                Err(ExecutionInterrupt::Error)
                             } else {
                                 self.pre_eval_unary_operator(
                                     inner, inner_expr, expr, "++", 
@@ -1451,6 +1454,9 @@ impl CodeGen {
                         TokenType::MinusMinus => {
                             if inner.is_const {
                                 ast_error!(self, inner_expr, "Cannot apply '--' operator on const value");
+                                Err(ExecutionInterrupt::Error)
+                            } else if !inner_expr.is_valid_assignment_target() {
+                                ast_error!(self, inner_expr, "Can only apply '--' operator on valid assignment targets");
                                 Err(ExecutionInterrupt::Error)
                             } else {
                                 self.pre_eval_unary_operator(
@@ -1960,6 +1966,9 @@ impl CodeGen {
                             if inner.is_const {
                                 ast_error!(self, inner_expr, "Cannot apply '++' operator on const value");
                                 Err(ExecutionInterrupt::Error)
+                            } else if !inner_expr.is_valid_assignment_target() {
+                                ast_error!(self, inner_expr, "Can only apply '++' operator on valid assignment targets");
+                                Err(ExecutionInterrupt::Error)
                             } else {
                                 self.post_eval_unary_operator(
                                     inner, inner_expr, expr, "++", 
@@ -1970,6 +1979,9 @@ impl CodeGen {
                         TokenType::MinusMinus => {
                             if inner.is_const {
                                 ast_error!(self, inner_expr, "Cannot apply '--' operator on const value");
+                                Err(ExecutionInterrupt::Error)
+                            } else if !inner_expr.is_valid_assignment_target() {
+                                ast_error!(self, inner_expr, "Can only apply '--' operator on valid assignment targets");
                                 Err(ExecutionInterrupt::Error)
                             } else {
                                 self.post_eval_unary_operator(
