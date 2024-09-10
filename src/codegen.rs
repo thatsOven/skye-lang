@@ -430,12 +430,15 @@ impl CodeGen {
     pub fn split_interpolated_string(&mut self, str: &Rc<str>, ref_token: &Token) -> Result<Vec<(String, bool)>, ExecutionInterrupt> {
         let mut result: Vec<(String, bool)> = Vec::new();
     
-        let mut chars = str.chars();
         let mut interpolated = 0usize;
         let mut escaped = false;
-        for (i, ch) in chars.clone().enumerate() {
+        for (i, ch) in str.chars().enumerate() {
             if ch == '{' {
                 if escaped {
+                    if result.len() == 0 {
+                        result.push((String::new(), false));
+                    }
+
                     escaped = false;
                     result.last_mut().unwrap().0.push(ch);
                     continue;
@@ -449,7 +452,7 @@ impl CodeGen {
                         );
     
                         return Err(ExecutionInterrupt::Error);
-                    } else if chars.nth(i + 1).unwrap() == '{' {
+                    } else if str.chars().nth(i + 1).unwrap() == '{' {
                         escaped = true;
                     } else {
                         if interpolated == 0 {
@@ -461,11 +464,15 @@ impl CodeGen {
                 }
             } else if ch == '}' {
                 if escaped {
+                    if result.len() == 0 {
+                        result.push((String::new(), false));
+                    }
+
                     escaped = false;
                     result.last_mut().unwrap().0.push(ch);
                     continue;
                 } else {
-                    if i != str.len() - 1 && chars.nth(i + 1).unwrap() == '}' {
+                    if interpolated == 0 && i != str.len() - 1 && str.chars().nth(i + 1).unwrap() == '}' {
                         escaped = true;
                     } else {
                         if interpolated == 0 {
