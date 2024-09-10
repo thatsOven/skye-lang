@@ -25,7 +25,7 @@ const BUILD_FILE_INIT: &[u8] = concat!(
 
 const MAIN_FILE_INIT: &[u8] = concat!(
     "fn main() {\n",
-    "    println(\"Hello, World!\");\n",
+    "    @println(\"Hello, World!\");\n",
     "}"
 ).as_bytes();
 
