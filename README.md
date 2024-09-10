@@ -208,7 +208,7 @@ You can create function bindings for existing C functions by using the `#bind` q
 ```
 #bind fn malloc(size: usz) voidptr;
 ```
-Overloading is not allowed.
+Overloading is not allowed, however it's possible to bind different behaviors to the same function called with different types through [generics](#generics).
 
 It's possible to create function pointers either by referencing an existing function or using the function pointer type.
 ```
@@ -415,6 +415,21 @@ enum Result[T, U = i32] {
 let myStruct = MyStruct::new(1i32, 2i32); // Skye can infer generic types...
 let result = add[i32](2, 2); // ...but you can also specify types manually
 ```
+
+You can use generics in combination with the `@typeOf` macro to give the function different behaviors depending on types.
+
+```
+fn which32[T: u32 | i32 | f32](x: T) {
+    if @typeOf(T) == u32 {
+        @println("got a u32");
+    } else if @typeOf(T) == i32 {
+        @println("got a i32");
+    } else {
+        @println("got a f32");
+    }
+}
+```
+
 # Results and Options
 Skye avoids the usage of `null` types and propagates errors by value.
 ```

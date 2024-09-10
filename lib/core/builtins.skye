@@ -684,7 +684,7 @@ impl core::io::File {
     }
 }
 
-// defined in the compiler
+// compiler built-ins
 macro format(buf, string) void; 
 macro fprint(file, string) void;
 macro fprintln(file, string) void;

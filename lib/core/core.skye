@@ -1,5 +1,20 @@
 import <<"core/internals.h">>;
 
+macro typeOf(T) void; // compiler built-in
+
+use @typeOf(0u8)  as u8;
+use @typeOf(0i8)  as i8;
+use @typeOf(0u16) as u16;
+use @typeOf(0i16) as i16;
+use @typeOf(0u32) as u32;
+use @typeOf(0i32) as i32;
+use @typeOf(0f32) as f32;
+use @typeOf(0u64) as u64;
+use @typeOf(0i64) as i64;
+use @typeOf(0f64) as f64;
+use @typeOf(0usz) as usz;
+use @typeOf('\0') as char;
+
 macro WINDOWS -> u8;
 macro LINUX -> u8;
 macro MAC_OS -> u8;

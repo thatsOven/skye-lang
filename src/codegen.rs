@@ -190,24 +190,8 @@ pub struct CodeGen {
 impl CodeGen {
     pub fn new(path: Option<&Path>, debug: bool) -> Self {
         let globals = Rc::new(RefCell::new(Environment::new()));
-
-        let cloned = Rc::clone(&globals);
-        let mut globals_ref = cloned.borrow_mut();
-        globals_ref.define(Rc::from("u8"),  SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::U8)),  true, None));
-        globals_ref.define(Rc::from("i8"),  SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::I8)),  true, None));
-        globals_ref.define(Rc::from("u16"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::U16)), true, None));
-        globals_ref.define(Rc::from("i16"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::I16)), true, None));
-        globals_ref.define(Rc::from("u32"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::U32)), true, None));
-        globals_ref.define(Rc::from("i32"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::I32)), true, None));
-        globals_ref.define(Rc::from("f32"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::F32)), true, None));
-        globals_ref.define(Rc::from("u64"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::U64)), true, None));
-        globals_ref.define(Rc::from("i64"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::I64)), true, None));
-        globals_ref.define(Rc::from("f64"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::F64)), true, None));
-        globals_ref.define(Rc::from("usz"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::Usz)), true, None));
-
-        globals_ref.define(Rc::from("char"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::Char)), true, None));
-
-        globals_ref.define(
+        
+        globals.borrow_mut().define(
             Rc::from("voidptr"),
             SkyeVariable::new(
                 SkyeType::Type(
@@ -504,10 +488,11 @@ impl CodeGen {
         Ok(result)
     }
 
-    async fn handle_format_macros(&mut self, macro_name: &Rc<str>, arguments: &Vec<Expression>, index: usize, allow_unknown: bool, ctx: &mut reblessive::Stk) -> Result<bool, ExecutionInterrupt> {
+    async fn handle_builtin_macros(&mut self, macro_name: &Rc<str>, arguments: &Vec<Expression>, index: usize, allow_unknown: bool, ctx: &mut reblessive::Stk) -> Result<Option<SkyeValue>, ExecutionInterrupt> {
         let is_format   = macro_name.as_ref() == "format";
         let is_fprint   = macro_name.as_ref() == "fprint";
         let is_fprintln = macro_name.as_ref() == "fprintln";
+        let is_typeof   = macro_name.as_ref() == "typeOf";
 
         if is_format | is_fprint | is_fprintln {
             let first = ctx.run(|ctx| self.evaluate(&arguments[0], index, allow_unknown, ctx)).await?;
@@ -730,9 +715,18 @@ impl CodeGen {
 
             let stmts = Statement::Block(tok.clone(), statements);
             let _ = ctx.run(|ctx| self.execute(&stmts, index, ctx)).await;
-            Ok(true)
+            Ok(Some(SkyeValue::special(SkyeType::Void)))
+        } else if is_typeof {
+            let inner = ctx.run(|ctx| self.evaluate(&arguments[0], index, allow_unknown, ctx)).await?;
+
+            if let SkyeType::Type(_) = &inner.type_ {
+                ast_error!(self, arguments[0], "Cannot get type of type");
+                Ok(Some(SkyeValue::special(inner.type_)))
+            } else {
+                Ok(Some(SkyeValue::special(SkyeType::Type(Box::new(inner.type_)))))
+            }
         } else {
-            Ok(false)
+            Ok(None)
         }
     }
 
@@ -1207,8 +1201,8 @@ impl CodeGen {
                     if let Some(return_expr) = return_expr_opt {
                         // native macro call
 
-                        if ctx.run(|ctx| self.handle_format_macros(macro_name, arguments, index, allow_unknown, ctx)).await? {
-                            return Ok(SkyeValue::special(SkyeType::Void));
+                        if let Some(result) = ctx.run(|ctx| self.handle_builtin_macros(macro_name, arguments, index, allow_unknown, ctx)).await? {
+                            return Ok(result);
                         }
 
                         let mut curr_expr = return_expr.clone();
@@ -1574,6 +1568,28 @@ impl CodeGen {
 
                 Err(ExecutionInterrupt::Error)
             }
+        }
+    }
+
+    async fn get_type_equality(&mut self, inner_left: &SkyeType, right_expr: &Expression, index: usize, allow_unknown: bool, reversed: bool, ctx: &mut reblessive::Stk) -> Result<SkyeValue, ExecutionInterrupt> {
+        let right = ctx.run(|ctx| self.evaluate(&right_expr, index, allow_unknown, ctx)).await?;
+
+        if let SkyeType::Type(inner_right) = right.type_ {
+            if reversed ^ inner_left.equals(&inner_right, EqualsLevel::Typewise) {
+                Ok(SkyeValue::new(Rc::from("UINT8_C(1)"), SkyeType::U8, true))
+            } else {
+                Ok(SkyeValue::new(Rc::from("UINT8_C(0)"), SkyeType::U8, true))
+            }
+        } else {
+            ast_error!(
+                self, right_expr,
+                format!(
+                    "Left operand type does not match right operand type (expecting type on right operand but got {})",
+                    right.type_.stringify_native()
+                ).as_ref()
+            );
+                                
+            Err(ExecutionInterrupt::Error)
         }
     }
 
@@ -2604,18 +2620,30 @@ impl CodeGen {
                         )).await
                     }
                     TokenType::EqualEqual => {
-                        ctx.run(|ctx| self.binary_operator(
-                            left, SkyeType::U8, &left_expr, &right_expr,
-                            expr, "==", "__eq__", Operator::Eq,
-                            index, allow_unknown, ctx
-                        )).await
+                        if let SkyeType::Type(inner_left) = left.type_ {
+                            ctx.run(|ctx| self.get_type_equality(
+                                &*inner_left, right_expr, index, allow_unknown, false, ctx
+                            )).await
+                        } else {
+                            ctx.run(|ctx| self.binary_operator(
+                                left, SkyeType::U8, &left_expr, &right_expr,
+                                expr, "==", "__eq__", Operator::Eq,
+                                index, allow_unknown, ctx
+                            )).await
+                        }
                     }
                     TokenType::BangEqual => {
-                        ctx.run(|ctx| self.binary_operator(
-                            left, SkyeType::U8, &left_expr, &right_expr,
-                            expr, "!=", "__ne__", Operator::Ne,
-                            index, allow_unknown, ctx
-                        )).await
+                        if let SkyeType::Type(inner_left) = left.type_ {
+                            ctx.run(|ctx| self.get_type_equality(
+                                &*inner_left, right_expr, index, allow_unknown, true, ctx
+                            )).await
+                        } else {
+                            ctx.run(|ctx| self.binary_operator(
+                                left, SkyeType::U8, &left_expr, &right_expr,
+                                expr, "!=", "__ne__", Operator::Ne,
+                                index, allow_unknown, ctx
+                            )).await
+                        }
                     }
                     TokenType::Bang => {
                         let left_ok = matches!(left.type_, SkyeType::Type(_) | SkyeType::Void | SkyeType::Unknown(_));
