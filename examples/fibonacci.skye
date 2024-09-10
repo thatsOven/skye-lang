@@ -1,13 +1,15 @@
-import "std/fmt";
 use core::io as io;
 
 macro MAX_TERMS 94;
 
-fn getInt(const buf: *Array[char]) u8 {
-    while true {
-        print("Insert amount of terms\n> ");
+fn getInt() u8 {
+    let buf = Array::new[char]();
+    defer buf.free();
 
-        io::stdIn.readLine(buf);
+    while true {
+        @print("Insert amount of terms\n> ");
+
+        io::stdIn.readLine(&buf);
         defer buf.clear();        
         
         const parsed = buf.parseInt[u64]();
@@ -15,7 +17,7 @@ fn getInt(const buf: *Array[char]) u8 {
         if parsed.isSome() && parsed.some > 0 && parsed.some <= @MAX_TERMS {
             return @cast(u8, parsed.some);
         } else {
-            println("Invalid input. Please retry");
+            @println("Invalid input. Please retry");
         }
     }
 }
@@ -24,16 +26,10 @@ fn main() {
     let a: u64 = 0;
     let b: u64 = 1;
 
-    let stringBuffer = Array::new[char]();
-    defer stringBuffer.free();
-
-    let n = getInt(&stringBuffer);
+    let n = getInt();
 
     while n-- {
-        std::fmt::intToString(&stringBuffer, a);
-        defer stringBuffer.clear();
-
-        println(stringBuffer.asString());
+        @println("{a}");
         
         const c = a + b;
         a = b;

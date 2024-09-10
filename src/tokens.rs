@@ -54,7 +54,7 @@ pub struct Token {
 
 impl std::fmt::Debug for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Token").field("filename", &self.filename).field("type_", &self.type_).field("lexeme", &self.lexeme).field("pos", &self.pos).field("line", &self.line).finish()
+        f.debug_struct("Token").field("type_", &self.type_).field("lexeme", &self.lexeme).field("pos", &self.pos).field("line", &self.line).finish()
     }
 }
 

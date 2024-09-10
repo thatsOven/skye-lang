@@ -24,6 +24,12 @@ impl[T] core::Option[T] {
             @panic(msg);
         }
     }
+
+    fn panicOnNone(const self, msg: String) {
+        if self.kind == core::Option::Kind::None {
+            @panic(msg);
+        }
+    }
 }
 
 impl[T, U] core::Result[T, U] {
@@ -42,24 +48,18 @@ impl[T, U] core::Result[T, U] {
             @panic(msg);
         }
     }
+
+    fn panicOnError(const self, msg: String) {
+        if self.kind == core::Result::Kind::Error {
+            @panic(msg);
+        }
+    }
 }
 
 namespace core {
     namespace utils {
         fn cStringToString(const ptr: *const char) String {
             return String.{ ptr, length: core::utils::cStringLength(ptr) };
-        }
-    }
-
-    namespace io {
-        fn print(const msg: String) {
-            let _ = core::io::stdOut.write(msg);
-        }
-
-        fn println(const msg: String) {
-            core::io::print(msg);
-            let _ = core::io::stdOut.write("\n");
-            let _ = core::io::stdOut.flush();
         }
     }
 
@@ -121,9 +121,7 @@ namespace core {
     }
 }
 
-use core::Ptr         as Ptr;
-use core::io::print   as print;
-use core::io::println as println;
+use core::Ptr as Ptr;
 
 macro MIN_ARRAY_CAPACITY 8;
 
@@ -548,6 +546,91 @@ namespace core {
             }   
         }
     }
+
+    namespace fmt {
+        fn __reversedIntToString[T: AnyInt, U](const buf: *core::Array[char, U], value: T) {
+            const neg = value < 0;
+            if (neg) value = -value;
+
+            do {
+                buf.push(@cast(char, 48 + value % 10));
+                value /= 10;
+            } while value;
+
+            if (neg) buf.push('-');
+        }
+
+        fn intToString[T: AnyInt, U](const buf: *core::Array[char, U], const value: T) {
+            core::fmt::__reversedIntToString(buf, value);
+            buf.reverse();
+        }
+
+        fn allocIntToString[T: AnyInt, U](const allocator: *U, const value: T) core::Array[char, U] {
+            let buf = core::Array::init[char, U](allocator);
+            core::fmt::intToString(&buf, value);
+            return buf;
+        }
+
+        fn floatToString[T: AnyFloat, U](const buf: *core::Array[char, U], const value: T, const decPrecision: usz) {
+            if decPrecision < 0 {
+                @panic("core::fmt::floatToString: Negative precision");
+            }
+
+            const intPart = @cast(i64, value);
+            const decPart = value - @cast(T, intPart);
+
+            core::fmt::intToString(buf, intPart);
+
+            if decPrecision != 0 {
+                buf.push('.');
+
+                decPart *= @cast(T, pow(10f64, @cast(f64, decPrecision)));
+
+                let tmpBuf = core::Array::new[char, U]();
+                defer tmpBuf.free();
+                core::fmt::__reversedIntToString(&tmpBuf, decPart);
+                tmpBuf.reverse();
+                
+                while tmpBuf.length < decPrecision {
+                    tmpBuf.push('0');
+                }
+
+                buf.pushString(tmpBuf.asString());
+            }
+        }
+
+        fn allocFloatToString[T: AnyFloat, U](const allocator: *U, const value: T, const decPrecision: usz) core::Array[char, U] {
+            let buf = core::Array::init[char, U](allocator);
+            core::fmt::floatToString(&buf, value, decPrecision);
+            return buf;
+        }
+
+        fn intToBuf[T: AnyInt, U](const buf: *U, const value: T) {
+            const string = core::fmt::allocIntToString(&core::mem::heapAllocator, value);
+            defer string.free();
+            buf.pushString(string.asString());
+        }
+
+        fn floatToBuf[T: AnyFloat, U](const buf: *U, const value: T) {
+            const string = core::fmt::allocFloatToString(&core::mem::heapAllocator, value);
+            defer string.free();
+            buf.pushString(string.asString());
+        }
+
+        fn __intToFile[T: AnyInt](const file: *core::io::File, const value: T) {
+            let string = core::fmt::allocIntToString(&core::mem::heapAllocator, value);
+            const r = file.write(string.asString());
+            string.free();
+            r.panicOnError("String interpolation failed writing to file");
+        }
+
+        fn __floatToFile[T: AnyFloat](const file: *core::io::File, const value: T) {
+            let string = core::fmt::allocFloatToString(&core::mem::heapAllocator, value);
+            const r = file.write(string.asString());
+            string.free();
+            r.panicOnError("String interpolation failed writing to file");
+        }
+    }
 }
 
 use core::Rc as Rc;
@@ -600,6 +683,16 @@ impl core::io::File {
         return buf;
     }
 }
+
+// defined in the compiler
+macro format(buf, string) void; 
+macro fprint(file, string) void;
+macro fprintln(file, string) void;
+
+macro print(string)    @fprint(&core::io::stdOut, string);
+macro eprint(string)   @fprint(&core::io::stdErr, string);
+macro println(string)  @fprintln(&core::io::stdOut, string);
+macro eprintln(string) @fprintln(&core::io::stdErr, string);
 
 fn _SKYE_INIT() {
     core::mem::heapAllocator = core::mem::HeapAllocator::new();

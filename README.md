@@ -21,7 +21,7 @@ NOTE: Windows is not supported yet, sorry! I will work on it<3
 # Hello, World!
 ```
 fn main() {
-    println("Hello, World!");
+    @println("Hello, World!");
 }
 ```
 
@@ -127,19 +127,19 @@ Conditionals in Skye accept any numeric type as their condition, just like in C.
 ```
 if 2 + 2 == 4 {
 	const a = true;	
-	if (a) println("True!");
+	if (a) @println("True!");
 }
 ```
 ## While loops
 ```
 let a = 2;
 while a-- {
-    println("Looping");
+    @println("Looping");
 }
 
 a = 3;
 do {
-    println("Looping yet again");
+    @println("Looping yet again");
 } while a--;
 ```
 ## For loops
@@ -147,14 +147,14 @@ There are two types of for loops in Skye.
 ### C-like for
 ```
 for let i = 0; i < 10; i++ {
-    println("This will be printed 10 times");
+    @println("This will be printed 10 times");
 }
 ```
 ### Foreach
 ```
 const mySlice = {1, 2, 3};
 for element; mySlice {
-    println("This will go through all the elements of the slice");
+    @println("This will go through all the elements of the slice");
 }
 ```
 Foreach loops can iterate any type that either contains a `next` method returning an `Option`, or an `iter` method that returns a valid type containing a `next` method;
@@ -165,16 +165,16 @@ All loops can use `continue` and `break` statements.
 let a: u8 = 2;
 switch a {
     0 {
-        println("Nope!");
+        @println("Nope!");
     }
     2 {
-        println("Here!");
+        @println("Here!");
     }
     3 | 4 | 5 {
-        println("Still nope");
+        @println("Still nope");
     }
     default {
-        println("Something else");
+        @println("Something else");
     }
 }
 ```
@@ -186,7 +186,7 @@ fn add(a: i32, b: i32) i32 {
 }
 
 fn sayHello() {
-    println("Hello!");
+    @println("Hello!");
 }
 ```
 
@@ -350,7 +350,7 @@ impl MyStruct {
     }
 
     fn staticMethod() {
-        println("This method does not depend on the instance");
+        @println("This method does not depend on the instance");
     }
 }
 ```
@@ -366,7 +366,7 @@ Namespaces can be created to avoid name conflicts and organize code. The can be 
 ```
 namespace myNamespace {
     fn test() {
-        println("test!");
+        @println("test!");
     }
 }
 
@@ -446,7 +446,7 @@ It's possible to create macros in Skye, and unlike in C, they are based on the A
 ```
 macro constantNumber 32;
 macro saySomething(something) {
-    println(something)
+    @println(something)
 }
 
 // C macro bindings

@@ -1,2 +1,2 @@
-import "std/fmt";
 import "std/os";
+import "std/math";

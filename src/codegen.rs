@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, env, ffi::OsString, path::{Path, PathBuf}, rc::Rc};
 
 use crate::{
-    ast::{Expression, FunctionParam, ImportType, LiteralKind, Statement}, ast_error, ast_info, ast_note, ast_warning, environment::{Environment, SkyeVariable}, parse_file, skye_type::{EqualsLevel, GetResult, ImplementsHow, Operator, SkyeEnumVariant, SkyeFunctionParam, SkyeGeneric, SkyeType}, token_error, token_note, token_warning, tokens::{Token, TokenType}, utils::{fix_raw_string, get_real_string_length}, SKYE_PATH_VAR
+    ast::{Expression, FunctionParam, ImportType, LiteralKind, Statement}, ast_error, ast_info, ast_note, ast_warning, environment::{Environment, SkyeVariable}, parse_file, parser::Parser, scanner::Scanner, skye_type::{EqualsLevel, GetResult, ImplementsHow, Operator, SkyeEnumVariant, SkyeFunctionParam, SkyeGeneric, SkyeType}, token_error, token_note, token_warning, tokens::{Token, TokenType}, utils::{fix_raw_string, get_real_string_length, note}, SKYE_PATH_VAR
 };
 
 const OUTPUT_INDENT_SPACES: usize = 4;
@@ -205,7 +205,7 @@ impl CodeGen {
         globals_ref.define(Rc::from("f64"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::F64)), true, None));
         globals_ref.define(Rc::from("usz"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::Usz)), true, None));
 
-        globals_ref.define(Rc::from("char"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::Char)),      true, None));
+        globals_ref.define(Rc::from("char"), SkyeVariable::new(SkyeType::Type(Box::new(SkyeType::Char)), true, None));
 
         globals_ref.define(
             Rc::from("voidptr"),
@@ -281,8 +281,8 @@ impl CodeGen {
         }
     }
 
-    fn get_return_type(&mut self, return_type_expr: &Expression, index: usize, allow_unknown: bool) -> Result<SkyeType, ExecutionInterrupt> {
-        let val = self.evaluate(return_type_expr, index, allow_unknown)?;
+    async fn get_return_type(&mut self, return_type_expr: &Expression, index: usize, allow_unknown: bool, ctx: &mut reblessive::Stk) -> Result<SkyeType, ExecutionInterrupt> {
+        let val = ctx.run(|ctx| self.evaluate(&return_type_expr, index, allow_unknown, ctx)).await?;
 
         match val.type_ {
             SkyeType::Type(inner_type) => {
@@ -302,12 +302,12 @@ impl CodeGen {
         }
     }
 
-    fn get_params(&mut self, params: &Vec<FunctionParam>, existing: Option<SkyeVariable>, has_decl: bool, index: usize, allow_unknown: bool) -> Result<(String, Vec<SkyeFunctionParam>), ExecutionInterrupt> {
+    async fn get_params(&mut self, params: &Vec<FunctionParam>, existing: Option<SkyeVariable>, has_decl: bool, index: usize, allow_unknown: bool, ctx: &mut reblessive::Stk) -> Result<(String, Vec<SkyeFunctionParam>), ExecutionInterrupt> {
         let mut params_string = String::new();
         let mut params_output = Vec::new();
         for i in 0 .. params.len() {
             let param_type: SkyeType = {
-                let inner_param_type = self.evaluate(&params[i].type_, index, allow_unknown)?.type_;
+                let inner_param_type = ctx.run(|ctx| self.evaluate(&params[i].type_, index, allow_unknown, ctx)).await?.type_;
                 if inner_param_type.check_completeness() {
                     if let SkyeType::Type(inner_type) = inner_param_type {
                         if has_decl {
@@ -427,6 +427,308 @@ impl CodeGen {
         }
     }
 
+    pub fn split_interpolated_string(&mut self, str: &Rc<str>, ref_token: &Token) -> Result<Vec<(String, bool)>, ExecutionInterrupt> {
+        let mut result: Vec<(String, bool)> = Vec::new();
+    
+        let mut chars = str.chars();
+        let mut interpolated = 0usize;
+        let mut escaped = false;
+        for (i, ch) in chars.clone().enumerate() {
+            if ch == '{' {
+                if escaped {
+                    escaped = false;
+                    result.last_mut().unwrap().0.push(ch);
+                    continue;
+                } else {
+                    if i == str.len() - 1 {
+                        token_error!(self, ref_token, "Invalid interpolated string");
+                        note(
+                            &ref_token.source, "Brackets must be matched '{{'", 
+                            &ref_token.filename, ref_token.pos + i, 1, 
+                            ref_token.line
+                        );
+    
+                        return Err(ExecutionInterrupt::Error);
+                    } else if chars.nth(i + 1).unwrap() == '{' {
+                        escaped = true;
+                    } else {
+                        if interpolated == 0 {
+                            result.push((String::new(), true));
+                        }
+
+                        interpolated += 1;
+                    }
+                }
+            } else if ch == '}' {
+                if escaped {
+                    escaped = false;
+                    result.last_mut().unwrap().0.push(ch);
+                    continue;
+                } else {
+                    if i != str.len() - 1 && chars.nth(i + 1).unwrap() == '}' {
+                        escaped = true;
+                    } else {
+                        if interpolated == 0 {
+                            token_error!(self, ref_token, "Invalid interpolated string");
+                            note(
+                                &ref_token.source, "Unbalanced brackets", 
+                                &ref_token.filename, ref_token.pos + i, 1, 
+                                ref_token.line
+                            );
+
+                            return Err(ExecutionInterrupt::Error);
+                        }
+
+                        interpolated -= 1;
+                        if interpolated == 0 {
+                            result.push((String::new(), false));
+                        }
+                    }
+                }
+            } else {
+                if result.len() == 0 {
+                    result.push((String::new(), false));
+                }
+
+                result.last_mut().unwrap().0.push(ch);
+            }
+        }
+    
+        Ok(result)
+    }
+
+    async fn handle_format_macros(&mut self, macro_name: &Rc<str>, arguments: &Vec<Expression>, index: usize, allow_unknown: bool, ctx: &mut reblessive::Stk) -> Result<bool, ExecutionInterrupt> {
+        let is_format   = macro_name.as_ref() == "format";
+        let is_fprint   = macro_name.as_ref() == "fprint";
+        let is_fprintln = macro_name.as_ref() == "fprintln";
+
+        if is_format | is_fprint | is_fprintln {
+            let first = ctx.run(|ctx| self.evaluate(&arguments[0], index, allow_unknown, ctx)).await?;
+
+            let (real_fmt_string, tok) = {
+                if let Expression::Literal(value, string_tok, kind) = &arguments[1] {
+                    if matches!(kind, LiteralKind::String) {
+                        (value, string_tok)
+                    } else {
+                        ast_error!(self, arguments[1], "Format string must be a string");
+                        return Err(ExecutionInterrupt::Error);
+                    }
+                } else {
+                    ast_error!(self, arguments[1], "Format string must be a literal");
+                    ast_note!(arguments[1], "The format string must be known at compile time for the compiler to generate the necessary code");
+                    return Err(ExecutionInterrupt::Error);
+                }
+            };
+
+            let mut splitted = self.split_interpolated_string(real_fmt_string, tok)?;
+
+            if is_fprintln {
+                splitted.push((String::from("\\n"), false));
+            }
+
+            let mut statements = Vec::new();
+            for (portion, mut interpolated) in &splitted {
+                if portion == "" {
+                    continue;
+                }
+
+                let portion_expr = {
+                    if interpolated {
+                        let mut scanner = Scanner::new(&portion, Rc::clone(&tok.filename));
+                        scanner.scan_tokens();
+
+                        if scanner.had_error {
+                            self.had_error = true;
+                            token_note!(tok, "This error occurred while lexing this interpolated string");
+                            continue;
+                        }
+
+                        let mut parser = Parser::new(scanner.tokens);
+                        if let Some(result) = parser.expression() {
+                            if let Expression::Literal(.., kind) = &result {
+                                if matches!(kind, LiteralKind::String) {
+                                    interpolated = false;
+                                }
+                            }
+
+                            result
+                        } else {
+                            self.had_error = true;
+                            token_note!(tok, "This error occurred while parsing this interpolated string");
+                            continue;
+                        }
+                    } else {
+                        Expression::Literal(
+                            Rc::from(portion.as_ref()), 
+                            tok.clone(),
+                            LiteralKind::String
+                        )
+                    }
+                };
+
+                let evaluated = ctx.run(|ctx| self.evaluate(&portion_expr, index, allow_unknown, ctx)).await?;
+                let mut do_write = true;
+                let interpolated_expr = 'interpolated_expr_blk: {
+                    if interpolated {
+                        if SkyeType::AnyInt.is_respected_by(&evaluated.type_) {
+                            do_write = false;
+
+                            if is_format {
+                                break 'interpolated_expr_blk Expression::Call(
+                                    Box::new(Expression::Variable(Token::dummy(Rc::from("core_DOT_fmt_DOT_intToBuf")))),
+                                    tok.clone(),
+                                    vec![arguments[0].clone(), portion_expr]
+                                );
+                            } else {
+                                break 'interpolated_expr_blk Expression::Call(
+                                    Box::new(Expression::Variable(Token::dummy(Rc::from("core_DOT_fmt_DOT___intToFile")))),
+                                    tok.clone(),
+                                    vec![arguments[0].clone(), portion_expr]
+                                );
+                            }
+                        }
+
+                        if SkyeType::AnyFloat.is_respected_by(&evaluated.type_) {
+                            do_write = false;
+
+                            if is_format {
+                                break 'interpolated_expr_blk Expression::Call(
+                                    Box::new(Expression::Variable(Token::dummy(Rc::from("core_DOT_fmt_DOT_floatToBuf")))),
+                                    tok.clone(),
+                                    vec![arguments[0].clone(), portion_expr]
+                                );
+                            } else {
+                                break 'interpolated_expr_blk Expression::Call(
+                                    Box::new(Expression::Variable(Token::dummy(Rc::from("core_DOT_fmt_DOT___floatToFile")))),
+                                    tok.clone(),
+                                    vec![arguments[0].clone(), portion_expr]
+                                );
+                            }
+                        }
+
+                        if let SkyeType::Struct(full_name, ..) = &evaluated.type_ {
+                            if full_name.as_ref() == "core_DOT_Slice_GENOF_char_GENEND_" {
+                                break 'interpolated_expr_blk portion_expr;
+                            }
+                        }
+
+                        let mut search_tok = Token::dummy(Rc::from("asString"));
+                        if self.get_method(&evaluated, &search_tok, false).is_some() {
+                            Expression::Call(
+                                Box::new(Expression::Get(
+                                    Box::new(portion_expr.clone()), search_tok
+                                )),
+                                tok.clone(), 
+                                Vec::new()
+                            )
+                        } else {
+                            search_tok = Token::dummy(Rc::from("toString"));
+                            if self.get_method(&evaluated, &search_tok, false).is_some() {
+                                Expression::Call(
+                                    Box::new(Expression::Get(
+                                        Box::new(portion_expr.clone()), search_tok
+                                    )),
+                                    tok.clone(), 
+                                    Vec::new()
+                                )
+                            } else {
+                                ast_error!(
+                                    self, portion_expr, 
+                                    format!(
+                                        "Type {} is not printable",
+                                        evaluated.type_.stringify_native()
+                                    ).as_ref()
+                                );
+
+                                ast_note!(portion_expr, "Implement a \"asString\" or \"toString\" method to be able to print this type");
+                                token_note!(tok, "This error occurred while evaluating this interpolated string");
+                                Expression::Literal(Rc::from(""), tok.clone(), LiteralKind::Void)
+                            }
+                        }
+                    } else {
+                        portion_expr
+                    }
+                };
+
+                if is_format {
+                    let search_tok = Token::dummy(Rc::from("pushString"));
+                    if self.get_method(&first, &search_tok, false).is_some() {
+                        if do_write {
+                            statements.push(Statement::Expression(
+                                Expression::Call(
+                                    Box::new(Expression::Get(
+                                        Box::new(arguments[0].clone()),
+                                        search_tok
+                                    )),
+                                    tok.clone(),
+                                    vec![interpolated_expr]
+                                )
+                            ));
+                        } else {
+                            statements.push(Statement::Expression(interpolated_expr));
+                        }
+                    } else {
+                        ast_error!(
+                            self, arguments[0], 
+                            format!(
+                                "Type {} is not a valid string buffer",
+                                evaluated.type_.stringify_native()
+                            ).as_ref()
+                        );
+
+                        ast_note!(arguments[0], "This type does not implement a \"pushString\" method");
+                    }
+                } else {
+                    let search_tok = Token::dummy(Rc::from("write"));
+                    if self.get_method(&first, &search_tok, false).is_some() {
+                        if do_write {
+                            // TODO check if `write` returns a result
+                            statements.push(Statement::Expression(
+                                Expression::Call(
+                                    Box::new(Expression::Get(
+                                        Box::new(Expression::Call(
+                                            Box::new(Expression::Get(
+                                                Box::new(arguments[0].clone()),
+                                                search_tok
+                                            )),
+                                            tok.clone(),
+                                            vec![interpolated_expr]
+                                        )),
+                                        Token::dummy(Rc::from("panicOnError"))
+                                    )),
+                                    tok.clone(),
+                                    vec![Expression::Literal(
+                                        Rc::from("String interpolation failed writing to file"),
+                                        tok.clone(),
+                                        LiteralKind::String
+                                    )]
+                                )
+                            ));
+                        } else {
+                            statements.push(Statement::Expression(interpolated_expr));
+                        }
+                    } else {
+                        ast_error!(
+                            self, arguments[0], 
+                            format!(
+                                "Type {} is not a valid writable object",
+                                evaluated.type_.stringify_native()
+                            ).as_ref()
+                        );
+
+                        ast_note!(arguments[0], "This type does not implement a \"write\" method");
+                    }
+                }
+            }
+
+            let stmts = Statement::Block(tok.clone(), statements);
+            let _ = ctx.run(|ctx| self.execute(&stmts, index, ctx)).await;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
     fn output_call(&mut self, return_type: &SkyeType, callee_value: &str, args: &str, index: usize) -> String {
         self.definitions[index].push_indent();
 
@@ -453,7 +755,7 @@ impl CodeGen {
         tmp_var_name
     }
 
-    fn call(&mut self, callee: &SkyeValue, expr: &Expression, callee_expr: &Expression, arguments: &Vec<Expression>, index: usize, allow_unknown: bool) -> Result<SkyeValue, ExecutionInterrupt>  {
+    async fn call(&mut self, callee: &SkyeValue, expr: &Expression, callee_expr: &Expression, arguments: &Vec<Expression>, index: usize, allow_unknown: bool, ctx: &mut reblessive::Stk) -> Result<SkyeValue, ExecutionInterrupt>  {
         let (arguments_len, arguments_mod) = {
             if callee.self_info.is_some() {
                 (arguments.len() + 1, 1 as usize)
@@ -493,7 +795,7 @@ impl CodeGen {
                             }
                         }
 
-                        self.evaluate(&arguments[i - arguments_mod], index, allow_unknown)?
+                        ctx.run(|ctx| self.evaluate(&arguments[i - arguments_mod], index, allow_unknown, ctx)).await?
                     };
 
                     if params[i].type_.equals(&arg.type_, EqualsLevel::Permissive) {
@@ -536,7 +838,8 @@ impl CodeGen {
 
                     let search_tok = Token::dummy(Rc::from("__copy__"));
                     if let Some(value) = self.get_method(&arg, &search_tok, true) {
-                        let copy_constructor = self.call(&value, expr, &arguments[i - arguments_mod], &Vec::new(), index, allow_unknown)?;
+                        let v = Vec::new();
+                        let copy_constructor = ctx.run(|ctx| self.call(&value, expr, &arguments[i - arguments_mod], &v, index, allow_unknown, ctx)).await?;
                         args.push_str(&copy_constructor.value);
 
                         ast_info!(arguments[i - arguments_mod], "Skye inserted a copy constructor call for this expression"); // +I-copies
@@ -594,7 +897,7 @@ impl CodeGen {
                                 }
                             }
 
-                            self.evaluate(&arguments[i - arguments_mod], index, false)?
+                            ctx.run(|ctx| self.evaluate(&arguments[i - arguments_mod], index, false, ctx)).await?
                         };
 
                         // definition type evaluation has to be performed in definition environment
@@ -605,7 +908,7 @@ impl CodeGen {
                         self.curr_name = curr_name.clone();
 
                         let def_evaluated = {
-                            if let Ok(evaluated) = self.evaluate(&params[i].type_, index, true) {
+                            if let Ok(evaluated) = ctx.run(|ctx| self.evaluate(&params[i].type_, index, true, ctx)).await {
                                 evaluated
                             } else {
                                 self.curr_name   = previous_name;
@@ -727,7 +1030,8 @@ impl CodeGen {
                                 }
                             };
 
-                            let copy_constructor = self.call(&value, expr, loc_callee_expr, &Vec::new(), index, allow_unknown)?;
+                            let v = Vec::new();
+                            let copy_constructor = ctx.run(|ctx| self.call(&value, expr, loc_callee_expr, &v, index, allow_unknown, ctx)).await?;
                             args.push_str(&copy_constructor.value);
 
                             ast_info!(loc_callee_expr, "Skye inserted a copy constructor call for this expression"); // +I-copies
@@ -778,7 +1082,7 @@ impl CodeGen {
                     self.curr_name = curr_name.clone();
 
                     let return_evaluated = {
-                        let ret_type = self.evaluate(&return_type_expr, index, false)?.type_;
+                        let ret_type = ctx.run(|ctx| self.evaluate(&return_type_expr, index, false, ctx)).await?.type_;
                         match ret_type {
                             SkyeType::Type(inner_type) => {
                                 if inner_type.check_completeness() {
@@ -838,7 +1142,8 @@ impl CodeGen {
                     drop(env);
 
                     let old_had_error = self.had_error;
-                    let type_ = self.execute(&definition, 0)?.unwrap_or_else(|| {
+                    
+                    let type_ = ctx.run(|ctx| self.execute(&definition, 0, ctx)).await?.unwrap_or_else(|| {
                         ast_error!(self, expr, "Could not process template generation for this expression");
                         SkyeType::Void
                     });
@@ -895,6 +1200,10 @@ impl CodeGen {
                     if let Some(return_expr) = return_expr_opt {
                         // native macro call
 
+                        if ctx.run(|ctx| self.handle_format_macros(macro_name, arguments, index, allow_unknown, ctx)).await? {
+                            return Ok(SkyeValue::special(SkyeType::Void));
+                        }
+
                         let mut curr_expr = return_expr.clone();
                         for i in 0 .. arguments_len {
                             curr_expr = curr_expr.replace_variable(&params[i].lexeme, &arguments[i]);
@@ -929,7 +1238,7 @@ impl CodeGen {
                             }
                         } 
 
-                        self.evaluate(&curr_expr, index, allow_unknown)
+                        ctx.run(|ctx| self.evaluate(&curr_expr, index, allow_unknown, ctx)).await
                     } else {
                         // C macro binding call
                         let tmp_env = Rc::new(RefCell::new(Environment::with_enclosing(Rc::clone(&self.environment))));
@@ -937,7 +1246,7 @@ impl CodeGen {
 
                         let mut args = String::new();
                         for i in 0 .. arguments_len {
-                            let arg = self.evaluate(&arguments[i], index, allow_unknown)?;
+                            let arg = ctx.run(|ctx| self.evaluate(&arguments[i], index, allow_unknown, ctx)).await?;
 
                             if let SkyeType::Type(inner_type) = &arg.type_ {
                                 args.push_str(&inner_type.stringify());
@@ -962,7 +1271,7 @@ impl CodeGen {
                         let previous = Rc::clone(&self.environment);
                         self.environment = tmp_env;
 
-                        let call_return_type = self.evaluate(return_type.as_ref().unwrap(), index, allow_unknown)?;
+                        let call_return_type = ctx.run(|ctx| self.evaluate(&return_type.as_ref().unwrap(), index, allow_unknown, ctx)).await?;
 
                         self.environment = previous;
 
@@ -999,10 +1308,11 @@ impl CodeGen {
         }
     }
 
-    fn pre_eval_unary_operator(
+    async fn pre_eval_unary_operator(
         &mut self, inner: SkyeValue, inner_expr: &Expression,
         expr: &Expression, op_stringified: &str, op_method: &str,
-        op_type: Operator, op: &Token, index: usize, allow_unknown: bool
+        op_type: Operator, op: &Token, index: usize, allow_unknown: bool,
+        ctx: &mut reblessive::Stk
     ) -> Result<SkyeValue, ExecutionInterrupt> {
         match inner.type_.implements_op(op_type) {
             ImplementsHow::Native(_) => {
@@ -1022,7 +1332,8 @@ impl CodeGen {
             ImplementsHow::ThirdParty => {
                 let search_tok = Token::dummy(Rc::from(op_method));
                 if let Some(value) = self.get_method(&inner, &search_tok, true) {
-                    let _ = self.call(&value, expr, inner_expr, &Vec::new(), index, allow_unknown);
+                    let v = Vec::new();
+                    let _ = ctx.run(|ctx| self.call(&value, expr, inner_expr, &v, index, allow_unknown, ctx)).await;
                     Ok(inner)
                 } else {
                     token_error!(
@@ -1050,10 +1361,11 @@ impl CodeGen {
         }
     }
 
-    fn post_eval_unary_operator(
+    async fn post_eval_unary_operator(
         &mut self, inner: SkyeValue, inner_expr: &Expression,
         expr: &Expression, op_stringified: &str, op_method: &str,
-        op_type: Operator, op: &Token, index: usize, allow_unknown: bool
+        op_type: Operator, op: &Token, index: usize, allow_unknown: bool,
+        ctx: &mut reblessive::Stk
     ) -> Result<SkyeValue, ExecutionInterrupt> {
         let tmp_var = self.get_temporary_var();
 
@@ -1077,7 +1389,8 @@ impl CodeGen {
             ImplementsHow::ThirdParty => {
                 let search_tok = Token::dummy(Rc::from(op_method));
                 if let Some(value) = self.get_method(&inner, &search_tok, true) {
-                    let _ = self.call(&value, expr, inner_expr, &Vec::new(), index, allow_unknown)?;
+                    let v = Vec::new();
+                    let _ = ctx.run(|ctx| self.call(&value, expr, inner_expr, &v, index, allow_unknown, ctx)).await?;
                     Ok(SkyeValue::new(Rc::from(tmp_var), inner.type_, false))
                 } else {
                     token_error!(
@@ -1105,17 +1418,19 @@ impl CodeGen {
         }
     }
 
-    fn unary_operator(
+    async fn unary_operator(
         &mut self, inner: SkyeValue, inner_expr: &Expression,
         expr: &Expression, op_stringified: &str, op_method: &str,
-        op_type: Operator, op: &Token, index: usize, allow_unknown: bool
+        op_type: Operator, op: &Token, index: usize, allow_unknown: bool,
+        ctx: &mut reblessive::Stk
     ) -> Result<SkyeValue, ExecutionInterrupt> {
         match inner.type_.implements_op(op_type) {
             ImplementsHow::Native(_) => Ok(SkyeValue::new(Rc::from(format!("{}{}", op_stringified, inner.value)), inner.type_, false)),
             ImplementsHow::ThirdParty => {
                 let search_tok = Token::dummy(Rc::from(op_method));
                 if let Some(value) = self.get_method(&inner, &search_tok, true) {
-                    self.call(&value, expr, inner_expr, &Vec::new(), index, allow_unknown)
+                    let v = Vec::new();
+                    ctx.run(|ctx| self.call(&value, expr, inner_expr, &v, index, allow_unknown, ctx)).await
                 } else {
                     token_error!(
                         self, op,
@@ -1142,15 +1457,15 @@ impl CodeGen {
         }
     }
 
-    fn binary_operator(
+    async fn binary_operator(
         &mut self, left: SkyeValue, return_type: SkyeType,
         left_expr: &Expression, right_expr: &Expression, expr: &Expression,
         op_stringified: &str, op_method: &str, op_type: Operator,
-        index: usize, allow_unknown: bool
+        index: usize, allow_unknown: bool, ctx: &mut reblessive::Stk
     ) -> Result<SkyeValue, ExecutionInterrupt> {
         match left.type_.implements_op(op_type) {
             ImplementsHow::Native(compatible_types) => {
-                let right = self.evaluate(right_expr, index, allow_unknown)?;
+                let right = ctx.run(|ctx| self.evaluate(&right_expr, index, allow_unknown, ctx)).await?;
 
                 if matches!(left.type_, SkyeType::Unknown(_)) ||
                    left.type_.equals(&right.type_, EqualsLevel::Typewise) ||
@@ -1172,7 +1487,8 @@ impl CodeGen {
             ImplementsHow::ThirdParty => {
                 let search_tok = Token::dummy(Rc::from(op_method));
                 if let Some(value) = self.get_method(&left, &search_tok, true) {
-                    self.call(&value, expr, left_expr, &vec![right_expr.clone()], index, allow_unknown)
+                    let args = vec![right_expr.clone()];
+                    ctx.run(|ctx| self.call(&value, expr, left_expr, &args, index, allow_unknown, ctx)).await
                 } else {
                     ast_error!(
                         self, left_expr,
@@ -1199,15 +1515,15 @@ impl CodeGen {
         }
     }
 
-    fn binary_operator_int_on_right(
+    async fn binary_operator_int_on_right(
         &mut self, left: SkyeValue, return_type: SkyeType,
         left_expr: &Expression, right_expr: &Expression, expr: &Expression,
         op_stringified: &str, op_method: &str, op_type: Operator,
-        index: usize, allow_unknown: bool
+        index: usize, allow_unknown: bool, ctx: &mut reblessive::Stk
     ) -> Result<SkyeValue, ExecutionInterrupt> {
         match left.type_.implements_op(op_type) {
             ImplementsHow::Native(_) => {
-                let right = self.evaluate(right_expr, index, allow_unknown)?;
+                let right = ctx.run(|ctx| self.evaluate(&right_expr, index, allow_unknown, ctx)).await?;
 
                 if right.type_.equals(&SkyeType::AnyInt, EqualsLevel::Typewise) {
                     Ok(SkyeValue::new(Rc::from(format!("{} {} {}", left.value, op_stringified, right.value)), return_type, false))
@@ -1226,7 +1542,8 @@ impl CodeGen {
             ImplementsHow::ThirdParty => {
                 let search_tok = Token::dummy(Rc::from(op_method));
                 if let Some(value) = self.get_method(&left, &search_tok, true) {
-                    self.call(&value, expr, left_expr, &vec![right_expr.clone()], index, allow_unknown)
+                    let args = vec![right_expr.clone()];
+                    ctx.run(|ctx| self.call(&value, expr, left_expr, &args, index, allow_unknown, ctx)).await
                 } else {
                     ast_error!(
                         self, left_expr,
@@ -1253,14 +1570,14 @@ impl CodeGen {
         }
     }
 
-    fn evaluate(&mut self, expr: &Expression, index: usize, allow_unknown: bool) -> Result<SkyeValue, ExecutionInterrupt> {
+    async fn evaluate(&mut self, expr: &Expression, index: usize, allow_unknown: bool, ctx: &mut reblessive::Stk) -> Result<SkyeValue, ExecutionInterrupt> {
         match expr {
             Expression::Grouping(inner_expr) => {
-                let inner = self.evaluate(&inner_expr, index, allow_unknown)?;
+                let inner = ctx.run(|ctx| self.evaluate(&inner_expr, index, allow_unknown, ctx)).await?;
                 Ok(SkyeValue::new(Rc::from(format!("({})", inner.value)), inner.type_, inner.is_const))
             }
             Expression::Slice(opening_brace, items) => {
-                let first_item = self.evaluate(&items[0], index, allow_unknown)?;
+                let first_item = ctx.run(|ctx| self.evaluate(&items[0], index, allow_unknown, ctx)).await?;
                 let mut items_stringified = String::from("{");
                 items_stringified.push_str(&first_item.value);
 
@@ -1269,7 +1586,7 @@ impl CodeGen {
                 }
 
                 for i in 1 .. items.len() {
-                    let evaluated = self.evaluate(&items[i], index, allow_unknown)?;
+                    let evaluated = ctx.run(|ctx| self.evaluate(&items[i], index, allow_unknown, ctx)).await?;
 
                     if !evaluated.type_.equals(&first_item.type_, EqualsLevel::Typewise) {
                         ast_error!(
@@ -1310,13 +1627,13 @@ impl CodeGen {
                 );
                 drop(env);
 
-                let return_type = self.evaluate(
-                    &Expression::Subscript(
-                        Box::new(Expression::Variable(slice_tok)),
-                        opening_brace.clone(),
-                        vec![Expression::Variable(type_tok)]
-                    ), index, allow_unknown
-                )?;
+                let subscript_expr = Expression::Subscript(
+                    Box::new(Expression::Variable(slice_tok)),
+                    opening_brace.clone(),
+                    vec![Expression::Variable(type_tok)]
+                );
+
+                let return_type = ctx.run(|ctx| self.evaluate(&subscript_expr, index, allow_unknown, ctx)).await?;
 
                 let mut env = self.environment.borrow_mut();
                 env.undef(tmp_var);
@@ -1415,7 +1732,7 @@ impl CodeGen {
                 }
             }
             Expression::Unary(op, inner_expr, is_prefix) => {
-                let inner = self.evaluate(&inner_expr, index, allow_unknown)?;
+                let inner = ctx.run(|ctx| self.evaluate(&inner_expr, index, allow_unknown, ctx)).await?;
 
                 if *is_prefix {
                     match op.type_ {
@@ -1427,10 +1744,10 @@ impl CodeGen {
                                 ast_error!(self, inner_expr, "Can only apply '++' operator on valid assignment targets");
                                 Err(ExecutionInterrupt::Error)
                             } else {
-                                self.pre_eval_unary_operator(
+                                ctx.run(|ctx| self.pre_eval_unary_operator(
                                     inner, inner_expr, expr, "++",
-                                    "__inc__", Operator::Inc, op, index, allow_unknown
-                                )
+                                    "__inc__", Operator::Inc, op, index, allow_unknown, ctx
+                                )).await
                             }
                         }
                         TokenType::MinusMinus => {
@@ -1441,17 +1758,21 @@ impl CodeGen {
                                 ast_error!(self, inner_expr, "Can only apply '--' operator on valid assignment targets");
                                 Err(ExecutionInterrupt::Error)
                             } else {
-                                self.pre_eval_unary_operator(
+                                ctx.run(|ctx| self.pre_eval_unary_operator(
                                     inner, inner_expr, expr, "--",
-                                    "__dec__", Operator::Dec, op, index, allow_unknown
-                                )
+                                    "__dec__", Operator::Dec, op, index, allow_unknown, ctx
+                                )).await
                             }
                         }
                         TokenType::Plus => {
-                            self.unary_operator(inner, inner_expr, expr, "+", "__pos__", Operator::Pos, op, index, allow_unknown)
+                            ctx.run(|ctx| self.unary_operator(
+                                inner, inner_expr, expr, "+", "__pos__", Operator::Pos, op, index, allow_unknown, ctx
+                            )).await
                         }
                         TokenType::Minus => {
-                            self.unary_operator(inner, inner_expr, expr, "-", "__neg__", Operator::Neg, op, index, allow_unknown)
+                            ctx.run(|ctx| self.unary_operator(
+                                inner, inner_expr, expr, "-", "__neg__", Operator::Neg, op, index, allow_unknown, ctx
+                            )).await
                         }
                         TokenType::Bang => {
                             if matches!(inner.type_, SkyeType::Type(_) | SkyeType::Void | SkyeType::Unknown(_)) {
@@ -1466,23 +1787,24 @@ impl CodeGen {
                                 let mut custom_token = op.clone();
                                 custom_token.set_lexeme("core_DOT_Result");
 
-                                self.evaluate(
-                                    &Expression::Subscript(
-                                        Box::new(Expression::Variable(custom_token)),
-                                        op.clone(),
-                                        vec![
-                                            Expression::Literal(
-                                                Rc::from(""),
-                                                op.clone(),
-                                                LiteralKind::Void
-                                            ),
-                                            *inner_expr.clone()
-                                        ]
-                                    ),
-                                    index, allow_unknown
-                                )
+                                let subscript_expr = Expression::Subscript(
+                                    Box::new(Expression::Variable(custom_token)),
+                                    op.clone(),
+                                    vec![
+                                        Expression::Literal(
+                                            Rc::from(""),
+                                            op.clone(),
+                                            LiteralKind::Void
+                                        ),
+                                        *inner_expr.clone()
+                                    ]
+                                );
+
+                                ctx.run(|ctx| self.evaluate(&subscript_expr, index, allow_unknown, ctx)).await
                             } else {
-                                self.unary_operator(inner, inner_expr, expr, "!", "__not__", Operator::Not, op, index, allow_unknown)
+                                ctx.run(|ctx| self.unary_operator(
+                                    inner, inner_expr, expr, "!", "__not__", Operator::Not, op, index, allow_unknown, ctx
+                                )).await
                             }
                         }
                         TokenType::Question => {
@@ -1498,14 +1820,13 @@ impl CodeGen {
                                 let mut custom_token = op.clone();
                                 custom_token.set_lexeme("core_DOT_Option");
 
-                                self.evaluate(
-                                    &Expression::Subscript(
-                                        Box::new(Expression::Variable(custom_token)),
-                                        op.clone(),
-                                        vec![*inner_expr.clone()]
-                                    ),
-                                    index, allow_unknown
-                                )
+                                let subscript_expr = Expression::Subscript(
+                                    Box::new(Expression::Variable(custom_token)),
+                                    op.clone(),
+                                    vec![*inner_expr.clone()]
+                                );
+
+                                ctx.run(|ctx| self.evaluate(&subscript_expr, index, allow_unknown, ctx)).await
                             } else {
                                 ast_error!(
                                     self, inner_expr,
@@ -1519,7 +1840,9 @@ impl CodeGen {
                             }
                         }
                         TokenType::Tilde => {
-                            self.unary_operator(inner, inner_expr, expr, "~", "__inv__", Operator::Inv, op, index, allow_unknown)
+                            ctx.run(|ctx| self.unary_operator(
+                                inner, inner_expr, expr, "~", "__inv__", Operator::Inv, op, index, allow_unknown, ctx
+                            )).await
                         }
                         TokenType::BitwiseAnd => {
                             match inner.type_.implements_op(Operator::Ref) {
@@ -1621,7 +1944,8 @@ impl CodeGen {
                                         ImplementsHow::ThirdParty => {
                                             let search_tok = Token::dummy(Rc::from("__deref__"));
                                             if let Some(value) = self.get_method(&inner, &search_tok, true) {
-                                                return self.call(&value, expr, inner_expr, &Vec::new(), index, allow_unknown);
+                                                let v = Vec::new();
+                                                return ctx.run(|ctx| self.call(&value, expr, inner_expr, &v, index, allow_unknown, ctx)).await;
                                             }
                                         }
                                         ImplementsHow::No => (),
@@ -1632,7 +1956,8 @@ impl CodeGen {
                                         ImplementsHow::ThirdParty => {
                                             let search_tok = Token::dummy(Rc::from("__asptr__"));
                                             if let Some(value) = self.get_method(&inner, &search_tok, true) {
-                                                let value = self.call(&value, expr, inner_expr, &Vec::new(), index, allow_unknown)?;
+                                                let v = Vec::new();
+                                                let value = ctx.run(|ctx| self.call(&value, expr, inner_expr, &v, index, allow_unknown, ctx)).await?;
 
                                                 let (inner_type, is_const) = {
                                                     if let SkyeType::Pointer(inner, ptr_is_const) = &value.type_ {
@@ -1699,7 +2024,9 @@ impl CodeGen {
                                     Ok(SkyeValue::special(SkyeType::Type(Box::new(SkyeType::Pointer(Box::new(inner.type_), true)))))
                                 }
                                 _ => {
-                                    self.unary_operator(inner, inner_expr, expr, "*", "__constderef__", Operator::ConstDeref, op, index, allow_unknown)
+                                    ctx.run(|ctx| self.unary_operator(
+                                        inner, inner_expr, expr, "*", "__constderef__", Operator::ConstDeref, op, index, allow_unknown, ctx
+                                    )).await
                                 }
                             }
                         }
@@ -1889,9 +2216,9 @@ impl CodeGen {
                                 if let SkyeType::Macro(name, params, return_expr, return_type) = &*inner_type {
                                     if params.is_none() {
                                         if let Some(real_return_expr) = return_expr {
-                                            self.evaluate(real_return_expr, index, allow_unknown)
+                                            ctx.run(|ctx| self.evaluate(&real_return_expr, index, allow_unknown, ctx)).await
                                         } else {
-                                            let ret_type = self.evaluate(return_type.as_ref().unwrap(), index, allow_unknown)?;
+                                            let ret_type = ctx.run(|ctx| self.evaluate(&return_type.as_ref().unwrap(), index, allow_unknown, ctx)).await?;
 
                                             if let SkyeType::Type(inner_type) = ret_type.type_ {
                                                 if !inner_type.check_completeness() {
@@ -1952,10 +2279,10 @@ impl CodeGen {
                                 ast_error!(self, inner_expr, "Can only apply '++' operator on valid assignment targets");
                                 Err(ExecutionInterrupt::Error)
                             } else {
-                                self.post_eval_unary_operator(
+                                ctx.run(|ctx| self.post_eval_unary_operator(
                                     inner, inner_expr, expr, "++",
-                                    "__inc__", Operator::Inc, op, index, allow_unknown
-                                )
+                                    "__inc__", Operator::Inc, op, index, allow_unknown, ctx
+                                )).await
                             }
                         }
                         TokenType::MinusMinus => {
@@ -1966,10 +2293,10 @@ impl CodeGen {
                                 ast_error!(self, inner_expr, "Can only apply '--' operator on valid assignment targets");
                                 Err(ExecutionInterrupt::Error)
                             } else {
-                                self.post_eval_unary_operator(
+                                ctx.run(|ctx| self.post_eval_unary_operator(
                                     inner, inner_expr, expr, "--",
-                                    "__dec__", Operator::Dec, op, index, allow_unknown
-                                )
+                                    "__dec__", Operator::Dec, op, index, allow_unknown, ctx
+                                )).await
                             }
                         }
                         _ => unreachable!()
@@ -1977,58 +2304,58 @@ impl CodeGen {
                 }
             }
             Expression::Binary(left_expr, op, right_expr) => {
-                let left  = self.evaluate(&left_expr, index, allow_unknown)?;
+                let left = ctx.run(|ctx| self.evaluate(&left_expr, index, allow_unknown, ctx)).await?;
                 let left_type = left.type_.clone();
 
                 match op.type_ {
                     TokenType::Plus => {
-                        self.binary_operator(
+                        ctx.run(|ctx| self.binary_operator(
                             left, left_type, &left_expr, &right_expr,
                             expr, "+", "__add__", Operator::Add,
-                            index, allow_unknown
-                        )
+                            index, allow_unknown, ctx
+                        )).await
                     }
                     TokenType::Minus => {
-                        self.binary_operator(
+                        ctx.run(|ctx| self.binary_operator(
                             left, left_type, &left_expr, &right_expr,
                             expr, "-", "__sub__", Operator::Sub,
-                            index, allow_unknown
-                        )
+                            index, allow_unknown, ctx
+                        )).await
                     }
                     TokenType::Slash => {
-                        self.binary_operator(
+                        ctx.run(|ctx| self.binary_operator(
                             left, left_type, &left_expr, &right_expr,
                             expr, "/", "__div__", Operator::Div,
-                            index, allow_unknown
-                        )
+                            index, allow_unknown, ctx
+                        )).await
                     }
                     TokenType::Star => {
-                        self.binary_operator(
+                        ctx.run(|ctx| self.binary_operator(
                             left, left_type, &left_expr, &right_expr,
                             expr, "*", "__mul__", Operator::Mul,
-                            index, allow_unknown
-                        )
+                            index, allow_unknown, ctx
+                        )).await
                     }
                     TokenType::Mod => {
-                        self.binary_operator(
+                        ctx.run(|ctx| self.binary_operator(
                             left, left_type, &left_expr, &right_expr,
                             expr, "%", "__mod__", Operator::Mod,
-                            index, allow_unknown
-                        )
+                            index, allow_unknown, ctx
+                        )).await
                     }
                     TokenType::ShiftLeft => {
-                        self.binary_operator_int_on_right(
+                        ctx.run(|ctx| self.binary_operator_int_on_right(
                             left, left_type, &left_expr, &right_expr,
                             expr, "<<", "__shl__", Operator::Shl,
-                            index, allow_unknown
-                        )
+                            index, allow_unknown, ctx
+                        )).await
                     }
                     TokenType::ShiftRight => {
-                        self.binary_operator_int_on_right(
+                        ctx.run(|ctx| self.binary_operator_int_on_right(
                             left, left_type, &left_expr, &right_expr,
                             expr, ">>", "__shr__", Operator::Shr,
-                            index, allow_unknown
-                        )
+                            index, allow_unknown, ctx
+                        )).await
                     }
                     TokenType::LogicOr => {
                         match left.type_.implements_op(Operator::Or) {
@@ -2056,7 +2383,7 @@ impl CodeGen {
                                 self.definitions[index].push("} else {\n");
                                 self.definitions[index].inc_indent();
 
-                                let right = self.evaluate(right_expr, index, allow_unknown)?;
+                                let right = ctx.run(|ctx| self.evaluate(&right_expr, index, allow_unknown, ctx)).await?;
 
                                 if !(
                                     matches!(left.type_, SkyeType::Unknown(_)) ||
@@ -2089,7 +2416,8 @@ impl CodeGen {
                             ImplementsHow::ThirdParty => {
                                 let search_tok = Token::dummy(Rc::from("__or__"));
                                 if let Some(value) = self.get_method(&left, &search_tok, true) {
-                                    self.call(&value, expr, left_expr, &vec![*right_expr.clone()], index, allow_unknown)
+                                    let args = vec![*right_expr.clone()];
+                                    ctx.run(|ctx| self.call(&value, expr, left_expr, &args, index, allow_unknown, ctx)).await
                                 } else {
                                     ast_error!(
                                         self, left_expr,
@@ -2132,7 +2460,7 @@ impl CodeGen {
                                 self.definitions[index].push(") {\n");
                                 self.definitions[index].inc_indent();
 
-                                let right = self.evaluate(right_expr, index, allow_unknown)?;
+                                let right = ctx.run(|ctx| self.evaluate(&right_expr, index, allow_unknown, ctx)).await?;
 
                                 if !(
                                     matches!(left.type_, SkyeType::Unknown(_)) ||
@@ -2174,7 +2502,8 @@ impl CodeGen {
                             ImplementsHow::ThirdParty => {
                                 let search_tok = Token::dummy(Rc::from("__and__"));
                                 if let Some(value) = self.get_method(&left, &search_tok, true) {
-                                    self.call(&value, expr, left_expr, &vec![*right_expr.clone()], index, allow_unknown)
+                                    let args = vec![*right_expr.clone()];
+                                    ctx.run(|ctx| self.call(&value, expr, left_expr, &args, index, allow_unknown, ctx)).await
                                 } else {
                                     ast_error!(
                                         self, left_expr,
@@ -2201,15 +2530,15 @@ impl CodeGen {
                         }
                     }
                     TokenType::BitwiseXor => {
-                        self.binary_operator(
+                        ctx.run(|ctx| self.binary_operator(
                             left, left_type, &left_expr, &right_expr,
                             expr, "^", "__xor__", Operator::Xor,
-                            index, allow_unknown
-                        )
+                            index, allow_unknown, ctx
+                        )).await
                     }
                     TokenType::BitwiseOr => {
                         if left.type_.is_type() || matches!(left.type_, SkyeType::Void) {
-                            let right = self.evaluate(&right_expr, index, allow_unknown)?;
+                            let right = ctx.run(|ctx| self.evaluate(&right_expr, index, allow_unknown, ctx)).await?;
 
                             if right.type_.is_type() || matches!(right.type_, SkyeType::Void) {
                                 Ok(SkyeValue::special(SkyeType::Group(Box::new(left.type_), Box::new(right.type_))))
@@ -2225,61 +2554,61 @@ impl CodeGen {
                                 Err(ExecutionInterrupt::Error)
                             }
                         } else {
-                            self.binary_operator(
+                            ctx.run(|ctx| self.binary_operator(
                                 left, left_type, &left_expr, &right_expr,
                                 expr, "|", "__bitor__", Operator::BitOr,
-                                index, allow_unknown
-                            )
+                                index, allow_unknown, ctx
+                            )).await
                         }
                     }
                     TokenType::BitwiseAnd => {
-                        self.binary_operator(
+                        ctx.run(|ctx| self.binary_operator(
                             left, left_type, &left_expr, &right_expr,
                             expr, "&", "__bitand__", Operator::BitAnd,
-                            index, allow_unknown
-                        )
+                            index, allow_unknown, ctx
+                        )).await
                     }
                     TokenType::Greater => {
-                        self.binary_operator(
+                        ctx.run(|ctx| self.binary_operator(
                             left, SkyeType::U8, &left_expr, &right_expr,
                             expr, ">", "__gt__", Operator::Gt,
-                            index, allow_unknown
-                        )
+                            index, allow_unknown, ctx
+                        )).await
                     }
                     TokenType::GreaterEqual => {
-                        self.binary_operator(
+                        ctx.run(|ctx| self.binary_operator(
                             left, SkyeType::U8, &left_expr, &right_expr,
                             expr, ">=", "__ge__", Operator::Ge,
-                            index, allow_unknown
-                        )
+                            index, allow_unknown, ctx
+                        )).await
                     }
                     TokenType::Less => {
-                        self.binary_operator(
+                        ctx.run(|ctx| self.binary_operator(
                             left, SkyeType::U8, &left_expr, &right_expr,
                             expr, "<", "__lt__", Operator::Lt,
-                            index, allow_unknown
-                        )
+                            index, allow_unknown, ctx
+                        )).await
                     }
                     TokenType::LessEqual => {
-                        self.binary_operator(
+                        ctx.run(|ctx| self.binary_operator(
                             left, SkyeType::U8, &left_expr, &right_expr,
                             expr, "<=", "__le__", Operator::Le,
-                            index, allow_unknown
-                        )
+                            index, allow_unknown, ctx
+                        )).await
                     }
                     TokenType::EqualEqual => {
-                        self.binary_operator(
+                        ctx.run(|ctx| self.binary_operator(
                             left, SkyeType::U8, &left_expr, &right_expr,
                             expr, "==", "__eq__", Operator::Eq,
-                            index, allow_unknown
-                        )
+                            index, allow_unknown, ctx
+                        )).await
                     }
                     TokenType::BangEqual => {
-                        self.binary_operator(
+                        ctx.run(|ctx| self.binary_operator(
                             left, SkyeType::U8, &left_expr, &right_expr,
                             expr, "!=", "__ne__", Operator::Ne,
-                            index, allow_unknown
-                        )
+                            index, allow_unknown, ctx
+                        )).await
                     }
                     TokenType::Bang => {
                         let left_ok = matches!(left.type_, SkyeType::Type(_) | SkyeType::Void | SkyeType::Unknown(_));
@@ -2290,7 +2619,7 @@ impl CodeGen {
                                 return Err(ExecutionInterrupt::Error);
                             }
 
-                            let right = self.evaluate(&right_expr, index, allow_unknown)?;
+                            let right = ctx.run(|ctx| self.evaluate(&right_expr, index, allow_unknown, ctx)).await?;
 
                             if matches!(right.type_, SkyeType::Type(_) | SkyeType::Void | SkyeType::Unknown(_)) {
                                 // result operator
@@ -2304,17 +2633,16 @@ impl CodeGen {
                                 let mut custom_token = op.clone();
                                 custom_token.set_lexeme("core_DOT_Result");
 
-                                self.evaluate(
-                                    &Expression::Subscript(
-                                        Box::new(Expression::Variable(custom_token)),
-                                        op.clone(),
-                                        vec![
-                                            *left_expr.clone(),
-                                            *right_expr.clone(),
-                                        ]
-                                    ),
-                                    index, allow_unknown
-                                )
+                                let subscript_expr = Expression::Subscript(
+                                    Box::new(Expression::Variable(custom_token)),
+                                    op.clone(),
+                                    vec![
+                                        *left_expr.clone(),
+                                        *right_expr.clone(),
+                                    ]
+                                );
+
+                                ctx.run(|ctx| self.evaluate(&subscript_expr, index, allow_unknown, ctx)).await
                             } else {
                                 ast_error!(
                                     self, right_expr,
@@ -2359,7 +2687,7 @@ impl CodeGen {
                 }
             }
             Expression::Assign(target_expr, op, value_expr) => {
-                let target = self.evaluate(&target_expr, index, allow_unknown)?;
+                let target = ctx.run(|ctx| self.evaluate(&target_expr, index, allow_unknown, ctx)).await?;
                 let target_type = target.type_.clone();
 
                 if target.is_const {
@@ -2368,7 +2696,7 @@ impl CodeGen {
 
                 match op.type_ {
                     TokenType::Equal => {
-                        let value = self.evaluate(&value_expr, index, allow_unknown)?;
+                        let value = ctx.run(|ctx| self.evaluate(&value_expr, index, allow_unknown, ctx)).await?;
 
                         if target_type.equals(&value.type_, EqualsLevel::Strict) {
                             Ok(SkyeValue::new(Rc::from(format!("{} = {}", target.value, value.value)), value.type_, true))
@@ -2385,85 +2713,85 @@ impl CodeGen {
                         }
                     }
                     TokenType::PlusEquals => {
-                        self.binary_operator(
+                        ctx.run(|ctx| self.binary_operator(
                             target, target_type, &target_expr, &value_expr,
                             expr, "+=", "__setadd__", Operator::SetAdd,
-                            index, allow_unknown
-                        )
+                            index, allow_unknown, ctx
+                        )).await
                     }
                     TokenType::MinusEquals => {
-                        self.binary_operator(
+                        ctx.run(|ctx| self.binary_operator(
                             target, target_type, &target_expr, &value_expr,
                             expr, "-=", "__setsub__", Operator::SetSub,
-                            index, allow_unknown
-                        )
+                            index, allow_unknown, ctx
+                        )).await
                     }
                     TokenType::StarEquals => {
-                        self.binary_operator(
+                        ctx.run(|ctx| self.binary_operator(
                             target, target_type, &target_expr, &value_expr,
                             expr, "*=", "__setmul__", Operator::SetMul,
-                            index, allow_unknown
-                        )
+                            index, allow_unknown, ctx
+                        )).await
                     }
                     TokenType::SlashEquals => {
-                        self.binary_operator(
+                        ctx.run(|ctx| self.binary_operator(
                             target, target_type, &target_expr, &value_expr,
                             expr, "/=", "__setdiv__", Operator::SetDiv,
-                            index, allow_unknown
-                        )
+                            index, allow_unknown, ctx
+                        )).await
                     }
                     TokenType::ModEquals => {
-                        self.binary_operator(
+                        ctx.run(|ctx| self.binary_operator(
                             target, target_type, &target_expr, &value_expr,
                             expr, "%=", "__setmod__", Operator::SetMod,
-                            index, allow_unknown
-                        )
+                            index, allow_unknown, ctx
+                        )).await
                     }
                     TokenType::ShiftLeftEquals => {
-                        self.binary_operator(
+                        ctx.run(|ctx| self.binary_operator(
                             target, target_type, &target_expr, &value_expr,
                             expr, "<<=", "__setshl__", Operator::SetShl,
-                            index, allow_unknown
-                        )
+                            index, allow_unknown, ctx
+                        )).await
                     }
                     TokenType::ShiftRightEquals => {
-                        self.binary_operator(
+                        ctx.run(|ctx| self.binary_operator(
                             target, target_type, &target_expr, &value_expr,
                             expr, ">>=", "__setshr__", Operator::SetShr,
-                            index, allow_unknown
-                        )
+                            index, allow_unknown, ctx
+                        )).await
                     }
                     TokenType::AndEquals => {
-                        self.binary_operator(
+                        ctx.run(|ctx| self.binary_operator(
                             target, target_type, &target_expr, &value_expr,
                             expr, "&=", "__setand__", Operator::SetAnd,
-                            index, allow_unknown
-                        )
+                            index, allow_unknown, ctx
+                        )).await
                     }
                     TokenType::XorEquals => {
-                        self.binary_operator(
+                        ctx.run(|ctx| self.binary_operator(
                             target, target_type, &target_expr, &value_expr,
                             expr, "^=", "__setxor__", Operator::SetXor,
-                            index, allow_unknown
-                        )
+                            index, allow_unknown, ctx
+                        )).await
                     }
                     TokenType::OrEquals => {
-                        self.binary_operator(
+                        ctx.run(|ctx| self.binary_operator(
                             target, target_type, &target_expr, &value_expr,
                             expr, "|=", "__setor__", Operator::SetOr,
-                            index, allow_unknown
-                        )
+                            index, allow_unknown, ctx
+                        )).await
                     },
                     _ => unreachable!()
                 }
             }
             Expression::Call(callee_expr, _, arguments) => {
-                let callee = self.evaluate(&callee_expr, index, allow_unknown)?;
-                self.call(&callee, expr, callee_expr, arguments, index, allow_unknown)
+                let callee = ctx.run(|ctx| self.evaluate(&callee_expr, index, allow_unknown, ctx)).await?;
+                ctx.run(|ctx| self.call(&callee, expr, callee_expr, arguments, index, allow_unknown, ctx)).await
             }
             Expression::FnPtr(kw, return_type_expr, params) => {
-                let return_type = self.get_return_type(return_type_expr, index, allow_unknown)?;
-                let (params_string, params_output) = self.get_params(params, None, false, index, allow_unknown)?;
+                let return_type = ctx.run(|ctx| self.get_return_type(return_type_expr, index, allow_unknown, ctx)).await?;
+                let (params_string, params_output) = ctx.run(|ctx| self.get_params(params, None, false, index, allow_unknown, ctx)).await?;
 
                 let return_stringified = return_type.stringify();
                 let inner_type = SkyeType::Function(params_output, Box::new(return_type), false);
@@ -2473,7 +2801,7 @@ impl CodeGen {
                 Ok(SkyeValue::new(mangled.into(), type_, true))
             }
             Expression::Ternary(_, cond_expr, then_branch_expr, else_branch_expr) => {
-                let cond = self.evaluate(&cond_expr, index, allow_unknown)?;
+                let cond = ctx.run(|ctx| self.evaluate(&cond_expr, index, allow_unknown, ctx)).await?;
 
                 match cond.type_ {
                     SkyeType::U8  | SkyeType::I8  | SkyeType::U16 | SkyeType::I16 |
@@ -2515,7 +2843,7 @@ impl CodeGen {
                 self.definitions[tmp_index].push(" {\n");
                 self.definitions[tmp_index].inc_indent();
 
-                let then_branch = self.evaluate(&then_branch_expr, tmp_index, allow_unknown)?;
+                let then_branch = ctx.run(|ctx| self.evaluate(&then_branch_expr, index, allow_unknown, ctx)).await?;
 
                 self.definitions[tmp_index].push_indent();
                 self.definitions[tmp_index].push(&tmp_var);
@@ -2528,7 +2856,7 @@ impl CodeGen {
                 self.definitions[tmp_index].push("} else {\n");
                 self.definitions[tmp_index].inc_indent();
 
-                let else_branch = self.evaluate(&else_branch_expr, tmp_index, allow_unknown)?;
+                let else_branch = ctx.run(|ctx| self.evaluate(&else_branch_expr, index, allow_unknown, ctx)).await?;
 
                 self.definitions[tmp_index].push_indent();
                 self.definitions[tmp_index].push(&tmp_var);
@@ -2562,7 +2890,7 @@ impl CodeGen {
                 Ok(SkyeValue::new(Rc::from(tmp_var), then_branch.type_, true))
             }
             Expression::CompoundLiteral(identifier_expr, _, fields) => {
-                let identifier_type = self.evaluate(&identifier_expr, index, allow_unknown)?;
+                let identifier_type = ctx.run(|ctx| self.evaluate(&identifier_expr, index, allow_unknown, ctx)).await?;
 
                 match &identifier_type.type_ {
                     SkyeType::Type(inner_type) => {
@@ -2586,7 +2914,7 @@ impl CodeGen {
                                     let mut fields_output = String::new();
                                     for (i, field) in fields.iter().enumerate() {
                                         if let Some((field_type, _)) = defined_fields.get(&field.name.lexeme) {
-                                            let field_evaluated = self.evaluate(&field.expr, index, allow_unknown)?;
+                                            let field_evaluated = ctx.run(|ctx| self.evaluate(&field.expr, index, allow_unknown, ctx)).await?;
 
                                             if !field_type.equals(&field_evaluated.type_, EqualsLevel::Strict) {
                                                 ast_error!(
@@ -2604,7 +2932,8 @@ impl CodeGen {
 
                                             let search_tok = Token::dummy(Rc::from("__copy__"));
                                             if let Some(value) = self.get_method(&field_evaluated, &search_tok, true) {
-                                                let copy_constructor = self.call(&value, expr, &field.expr, &Vec::new(), index, allow_unknown)?;
+                                                let v = Vec::new();
+                                                let copy_constructor = ctx.run(|ctx| self.call(&value, expr, &field.expr, &v, index, allow_unknown, ctx)).await?;
                                                 fields_output.push_str(&copy_constructor.value);
 
                                                 ast_info!(field.expr, "Skye inserted a copy constructor call for this expression"); // +I-copies
@@ -2639,7 +2968,7 @@ impl CodeGen {
                                     let mut fields_output = String::new();
                                     for (i, field) in fields.iter().enumerate() {
                                         if let Some(field_type) = defined_fields.get(&field.name.lexeme) {
-                                            let field_evaluated = self.evaluate(&field.expr, index, allow_unknown)?;
+                                            let field_evaluated = ctx.run(|ctx| self.evaluate(&field.expr, index, allow_unknown, ctx)).await?;
 
                                             if !field_type.equals(&field_evaluated.type_, EqualsLevel::Strict) {
                                                 ast_error!(
@@ -2681,7 +3010,7 @@ impl CodeGen {
 
                                     let mut buf = String::new();
                                     if let Some(field_type) = defined_fields.get(&fields[0].name.lexeme) {
-                                        let field_evaluated = self.evaluate(&fields[0].expr, index, allow_unknown)?;
+                                        let field_evaluated = ctx.run(|ctx| self.evaluate(&fields[0].expr, index, allow_unknown, ctx)).await?;
 
                                         if !field_type.equals(&field_evaluated.type_, EqualsLevel::Strict) {
                                             ast_error!(
@@ -2699,7 +3028,8 @@ impl CodeGen {
 
                                         let search_tok = Token::dummy(Rc::from("__copy__"));
                                         if let Some(value) = self.get_method(&field_evaluated, &search_tok, true) {
-                                            let copy_constructor = self.call(&value, expr, &fields[0].expr, &Vec::new(), index, allow_unknown)?;
+                                            let v = Vec::new();
+                                            let copy_constructor = ctx.run(|ctx| self.call(&value, expr, &fields[0].expr, &v, index, allow_unknown, ctx)).await?;
                                             buf.push_str(&copy_constructor.value);
 
                                             ast_info!(fields[0].expr, "Skye inserted a copy constructor call for this expression"); // +I-copies
@@ -2769,7 +3099,7 @@ impl CodeGen {
                                     self.curr_name = curr_name.clone();
 
                                     let def_evaluated = {
-                                        if let Ok(evaluated) = self.evaluate(&def_field_expr, index, true) {
+                                        if let Ok(evaluated) = ctx.run(|ctx| self.evaluate(&def_field_expr, index, true, ctx)).await {
                                             evaluated
                                         } else {
                                             self.curr_name   = previous_name;
@@ -2781,7 +3111,7 @@ impl CodeGen {
                                     self.curr_name   = previous_name;
                                     self.environment = previous;
 
-                                    let literal_evaluated = self.evaluate(&field.expr, index, false)?;
+                                    let literal_evaluated = ctx.run(|ctx| self.evaluate(&field.expr, index, false, ctx)).await?;
 
                                     let def_type = {
                                         if matches!(def_evaluated.type_, SkyeType::Unknown(_)) {
@@ -2924,7 +3254,7 @@ impl CodeGen {
                             let previous_name = self.curr_name.clone();
                             self.curr_name = curr_name.clone();
 
-                            let type_ = self.execute(&definition, 0)?.unwrap_or_else(|| {
+                            let type_ = ctx.run(|ctx| self.execute(&definition, 0, ctx)).await?.unwrap_or_else(|| {
                                 ast_error!(self, expr, "Could not process template generation for this expression");
                                 SkyeType::Void
                             });
@@ -2975,7 +3305,7 @@ impl CodeGen {
                 }
             }
             Expression::Subscript(subscripted_expr, paren, arguments) => {
-                let subscripted = self.evaluate(&subscripted_expr, index, allow_unknown)?;
+                let subscripted = ctx.run(|ctx| self.evaluate(&subscripted_expr, index, allow_unknown, ctx)).await?;
 
                 match subscripted.type_ {
                     SkyeType::Pointer(inner_type, is_const) => {
@@ -2984,7 +3314,7 @@ impl CodeGen {
                             return Err(ExecutionInterrupt::Error);
                         }
 
-                        let arg = self.evaluate(&arguments[0], index, allow_unknown)?;
+                        let arg = ctx.run(|ctx| self.evaluate(&arguments[0], index, allow_unknown, ctx)).await?;
 
                         match arg.type_ {
                             SkyeType::U8  | SkyeType::I8  | SkyeType::U16 | SkyeType::I16 |
@@ -3042,7 +3372,7 @@ impl CodeGen {
                         for (i, generic) in generics.iter().enumerate() {
                             let evaluated = {
                                 if i >= offs && i - offs < arguments.len() {
-                                    self.evaluate(&arguments[i - offs], index, allow_unknown)?.type_
+                                    ctx.run(|ctx| self.evaluate(&arguments[i - offs], index, allow_unknown, ctx)).await?.type_
                                 } else {
                                     generic.default.as_ref().unwrap().clone()
                                 }
@@ -3135,7 +3465,7 @@ impl CodeGen {
                         let previous_name = self.curr_name.clone();
                         self.curr_name = curr_name;
 
-                        let type_ = self.execute(&definition, 0)?.unwrap_or_else(|| {
+                        let type_ = ctx.run(|ctx| self.execute(&definition, index, ctx)).await?.unwrap_or_else(|| {
                             ast_error!(self, expr, "Could not process template generation for this expression");
                             SkyeType::Void
                         });
@@ -3167,7 +3497,7 @@ impl CodeGen {
                             ImplementsHow::ThirdParty => {
                                 let search_tok = Token::dummy(Rc::from("__subscript__"));
                                 if let Some(value) = self.get_method(&subscripted, &search_tok, true) {
-                                    let call_value = self.call(&value, expr, subscripted_expr, &arguments, index, allow_unknown)?;
+                                    let call_value = ctx.run(|ctx| self.call(&value, expr, &subscripted_expr, &arguments, index, allow_unknown, ctx)).await?;
 
                                     if let SkyeType::Pointer(inner_type, is_const) = call_value.type_ {
                                         Ok(SkyeValue::new(Rc::from(format!("*{}", call_value.value).as_ref()), *inner_type, is_const))
@@ -3211,7 +3541,7 @@ impl CodeGen {
                 }
             }
             Expression::Get(object_expr, name) => {
-                let object = self.evaluate(&object_expr, index, allow_unknown)?;
+                let object = ctx.run(|ctx| self.evaluate(&object_expr, index, allow_unknown, ctx)).await?;
 
                 match object.type_.get(&object.value, name, object.is_const) {
                     GetResult::Ok(value, type_, is_const) => {
@@ -3239,7 +3569,7 @@ impl CodeGen {
                 Err(ExecutionInterrupt::Error)
             }
             Expression::StaticGet(object_expr, name) => {
-                let object = self.evaluate(&object_expr, index, allow_unknown)?;
+                let object = ctx.run(|ctx| self.evaluate(&object_expr, index, allow_unknown, ctx)).await?;
 
                 match object.type_.static_get(name) {
                     GetResult::Ok(value, ..) => {
@@ -3281,19 +3611,19 @@ impl CodeGen {
         }
     }
 
-    fn handle_deferred(&mut self, index: usize) {
+    async fn handle_deferred(&mut self, index: usize, ctx: &mut reblessive::Stk) {
         let deferred = self.deferred.borrow();
         if let Some(statements) = deferred.last() {
             let cloned = statements.clone();
             drop(deferred);
 
             for statement in cloned.iter().rev() {
-                let _ = self.execute(&statement, index);
+                let _ = ctx.run(|ctx| self.execute(&statement, index, ctx)).await;
             }
         }
     }
 
-    fn handle_destructors(&mut self, index: usize, global: bool, stmt: &Statement, msg: &str) -> Result<Option<SkyeType>, ExecutionInterrupt> {
+    async fn handle_destructors(&mut self, index: usize, global: bool, stmt: &Statement, msg: &str, ctx: &mut reblessive::Stk) -> Result<Option<SkyeType>, ExecutionInterrupt> {
         if !global {
             let vars = self.environment.borrow().iter_local();
 
@@ -3304,7 +3634,9 @@ impl CodeGen {
 
                     if let Some(value) = self.get_method(&var_value, &search_tok, true) {
                         let fake_expr = Expression::Variable(search_tok);
-                        let call = self.call(&value, &fake_expr, &fake_expr, &Vec::new(), index, false)?;
+                        let v = Vec::new();
+                        
+                        let call = ctx.run(|ctx| self.call(&value, &fake_expr, &fake_expr, &v, index, false, ctx)).await?;
 
                         ast_info!(stmt, format!("Skye inserted a destructor call for \"{}\" {} this statement", name, msg).as_ref()); // +I-destructors
 
@@ -3319,7 +3651,7 @@ impl CodeGen {
         Ok(None)
     }
 
-    fn execute_block(&mut self, statements: &Vec<Statement>, environment: Rc<RefCell<Environment>>, index: usize, global: bool) {
+    async fn execute_block(&mut self, statements: &Vec<Statement>, environment: Rc<RefCell<Environment>>, index: usize, global: bool, ctx: &mut reblessive::Stk) {
         let previous = Rc::clone(&self.environment);
         self.environment = environment;
 
@@ -3327,12 +3659,12 @@ impl CodeGen {
 
         let mut destructors_called = false;
         for (i, statement) in statements.iter().enumerate() {
-            if let Err(interrupt) = self.execute(statement, index) {
+            if let Err(interrupt) = ctx.run(|ctx| self.execute(statement, index, ctx)).await {
                 match interrupt {
                     ExecutionInterrupt::Error => (),
                     ExecutionInterrupt::Interrupt(output) => {
-                        self.handle_deferred(index);
-                        let _ = self.handle_destructors(index, global, statement, "before");
+                        ctx.run(|ctx| self.handle_deferred(index, ctx)).await;
+                        let _ = ctx.run(|ctx| self.handle_destructors(index, global, statement, "before", ctx)).await;
                         destructors_called = true;
 
                         self.definitions[index].push_indent();
@@ -3348,11 +3680,11 @@ impl CodeGen {
 
                         for statements in deferred.iter().rev() {
                             for statement in statements.iter().rev() {
-                                let _ = self.execute(&statement, index);
+                                let _ = ctx.run(|ctx| self.execute(&statement, index, ctx)).await;
                             }
                         }
 
-                        let _ = self.handle_destructors(index, global, statement, "before");
+                        let _ = ctx.run(|ctx| self.handle_destructors(index, global, statement, "before", ctx)).await;
                         destructors_called = true;
 
                         self.definitions[index].push_indent();
@@ -3368,15 +3700,15 @@ impl CodeGen {
         }
 
         if statements.len() != 0 && !destructors_called {
-            self.handle_deferred(index);
-            let _ = self.handle_destructors(index, global, statements.last().unwrap(), "after");
+            ctx.run(|ctx| self.handle_deferred(index, ctx)).await;
+            let _ = ctx.run(|ctx| self.handle_destructors(index, global, statements.last().unwrap(), "after", ctx)).await;
         }
 
         self.deferred.borrow_mut().pop();
         self.environment = previous;
     }
 
-    pub fn execute(&mut self, stmt: &Statement, index: usize) -> Result<Option<SkyeType>, ExecutionInterrupt> {
+    pub async fn execute(&mut self, stmt: &Statement, index: usize, ctx: &mut reblessive::Stk) -> Result<Option<SkyeType>, ExecutionInterrupt> {
         match stmt {
             Statement::Empty => (),
             Statement::Expression(expr) => {
@@ -3385,7 +3717,7 @@ impl CodeGen {
                     ast_note!(expr, "Place this expression inside a function");
                 }
 
-                let value = self.evaluate(expr, index, false)?;
+                let value = ctx.run(|ctx| self.evaluate(&expr, index, false, ctx)).await?;
 
                 if let SkyeType::Enum(.., base_name) = value.type_ {
                     if base_name.as_ref() == "core_DOT_Result" {
@@ -3403,7 +3735,7 @@ impl CodeGen {
             Statement::VarDecl(name, initializer, type_spec_expr, is_const, qualifiers) => {
                 let value = {
                     if let Some(init) = initializer {
-                        Some(self.evaluate(init, index, false)?)
+                        Some(ctx.run(|ctx| self.evaluate(init, index, false, ctx)).await?)
                     } else {
                         None
                     }
@@ -3411,7 +3743,7 @@ impl CodeGen {
 
                 let type_spec = {
                     if let Some(type_) = type_spec_expr {
-                        let type_spec_evaluated = self.evaluate(type_, index, false)?;
+                        let type_spec_evaluated = ctx.run(|ctx| self.evaluate(type_, index, false, ctx)).await?;
 
                         match type_spec_evaluated.type_ {
                             SkyeType::Type(inner_type) => {
@@ -3592,15 +3924,15 @@ impl CodeGen {
                     self.definitions[index].push("{\n");
                     self.definitions[index].inc_indent();
 
-                    self.execute_block(
+                    let _ = ctx.run(|ctx| self.execute_block(
                         statements,
                         Rc::new(RefCell::new(
                             Environment::with_enclosing(
                                 Rc::clone(&self.environment)
                             )
                         )),
-                        index, false
-                    );
+                        index, false, ctx
+                    )).await;
 
                     self.definitions[index].dec_indent();
                     self.definitions[index].push_indent();
@@ -3644,7 +3976,7 @@ impl CodeGen {
 
                 drop(env);
 
-                let return_type = self.get_return_type(return_type_expr, index, false)?;
+                let return_type = ctx.run(|ctx| self.get_return_type(return_type_expr, index, false, ctx)).await?;
 
                 if has_decl {
                     if let SkyeType::Function(_, existing_return_type, _) = &existing.as_ref().unwrap().type_ {
@@ -3661,7 +3993,7 @@ impl CodeGen {
                 }
 
                 let return_stringified = return_type.stringify();
-                let (params_string, params_output) = self.get_params(params, existing, has_decl, index, false)?;
+                let (params_string, params_output) = ctx.run(|ctx| self.get_params(params, existing, has_decl, index, false, ctx)).await?;
                 let type_ = SkyeType::Function(params_output.clone(), Box::new(return_type.clone()), body.is_some());
                 self.generate_fn_signature(name, &type_, &return_stringified, &params_string);
 
@@ -3801,11 +4133,11 @@ impl CodeGen {
                     self.definitions[new_index].push(" {\n");
                     self.definitions[new_index].inc_indent();
 
-                    self.execute_block(
+                    let _ = ctx.run(|ctx| self.execute_block(
                         body.as_ref().unwrap(),
                         Rc::new(RefCell::new(fn_environment.unwrap())),
-                        new_index, false
-                    );
+                        new_index, false, ctx
+                    )).await;
 
                     self.curr_function = enclosing_level;
                     self.deferred = enclosing_deferred;
@@ -3823,7 +4155,7 @@ impl CodeGen {
                     token_note!(kw, "Place this if statement inside a function");
                 }
 
-                let cond = self.evaluate(cond_expr, index, false)?;
+                let cond = ctx.run(|ctx| self.evaluate(cond_expr, index, false, ctx)).await?;
 
                 match cond.type_ {
                     SkyeType::U8  | SkyeType::I8  | SkyeType::U16 | SkyeType::I16 |
@@ -3863,15 +4195,16 @@ impl CodeGen {
                     self.definitions[index].push("{\n");
                     self.definitions[index].inc_indent();
 
-                    self.execute_block(
-                        &vec![*then_branch.clone()],
+                    let stmts = vec![*then_branch.clone()];
+                    let _ = ctx.run(|ctx| self.execute_block(
+                        &stmts,
                         Rc::new(RefCell::new(Environment::with_enclosing(
                             Rc::clone(&self.environment)
                         ))),
-                        index, false
-                    );
+                        index, false, ctx
+                    )).await;
                 } else {
-                    let _ = self.execute(&then_branch, index);
+                    let _ = ctx.run(|ctx| self.execute(&then_branch, index, ctx)).await;
                 }
 
                 if not_block {
@@ -3891,15 +4224,16 @@ impl CodeGen {
                         self.definitions[index].push("{\n");
                         self.definitions[index].inc_indent();
 
-                        self.execute_block(
-                            &vec![*else_branch_statement.clone()],
+                        let stmts = vec![*else_branch_statement.clone()];
+                        let _ = ctx.run(|ctx| self.execute_block(
+                            &stmts,
                             Rc::new(RefCell::new(Environment::with_enclosing(
                                 Rc::clone(&self.environment)
                             ))),
-                            index, false
-                        );
+                            index, false, ctx
+                        )).await;
                     } else {
-                        let _ = self.execute(&else_branch_statement, index);
+                        let _ = ctx.run(|ctx| self.execute(&else_branch_statement, index, ctx)).await;
                     }
 
                     if not_block {
@@ -3922,7 +4256,7 @@ impl CodeGen {
                 self.definitions[index].push("while (1) {\n");
                 self.definitions[index].inc_indent();
 
-                let cond = self.evaluate(cond_expr, index, false)?;
+                let cond = ctx.run(|ctx| self.evaluate(cond_expr, index, false, ctx)).await?;
 
                 match cond.type_ {
                     SkyeType::U8  | SkyeType::I8  | SkyeType::U16 | SkyeType::I16 |
@@ -3961,15 +4295,16 @@ impl CodeGen {
                 self.curr_loop = Some((Rc::clone(&break_label), Rc::clone(&continue_label)));
 
                 if not_block {
-                    self.execute_block(
-                        &vec![*body.clone()],
+                    let stmts = vec![*body.clone()];
+                    let _ = ctx.run(|ctx| self.execute_block(
+                        &stmts,
                         Rc::new(RefCell::new(Environment::with_enclosing(
                             Rc::clone(&self.environment)
                         ))),
-                        index, false
-                    );
+                        index, false, ctx
+                    )).await;
                 } else {
-                    let _ = self.execute(&body, index);
+                    let _ = ctx.run(|ctx| self.execute(&body, index, ctx)).await;
                 }
 
                 self.curr_loop = previous_loop;
@@ -3996,14 +4331,14 @@ impl CodeGen {
                 let not_grouping = !matches!(cond_expr, Expression::Grouping(_));
 
                 if let Some(init) = initializer {
-                    let _ = self.execute(&init, index);
+                    let _ = ctx.run(|ctx| self.execute(&init, index, ctx)).await;
                 }
 
                 self.definitions[index].push_indent();
                 self.definitions[index].push("while (1) {\n");
                 self.definitions[index].inc_indent();
 
-                let cond = self.evaluate(cond_expr, index, false)?;
+                let cond = ctx.run(|ctx| self.evaluate(cond_expr, index, false, ctx)).await?;
 
                 match cond.type_ {
                     SkyeType::U8  | SkyeType::I8  | SkyeType::U16 | SkyeType::I16 |
@@ -4042,15 +4377,16 @@ impl CodeGen {
                 self.curr_loop = Some((Rc::clone(&break_label), Rc::clone(&continue_label)));
 
                 if not_block {
-                    self.execute_block(
-                        &vec![*body.clone()],
+                    let stmts = vec![*body.clone()];
+                    let _ = ctx.run(|ctx| self.execute_block(
+                        &stmts,
                         Rc::new(RefCell::new(Environment::with_enclosing(
                             Rc::clone(&self.environment)
                         ))),
-                        index, false
-                    );
+                        index, false, ctx
+                    )).await;
                 } else {
-                    let _ = self.execute(&body, index);
+                    let _ = ctx.run(|ctx| self.execute(&body, index, ctx)).await;
                 }
 
                 self.curr_loop = previous_loop;
@@ -4060,7 +4396,8 @@ impl CodeGen {
                 self.definitions[index].push(":;\n");
 
                 if let Some(inc) = increment {
-                    let _ = self.execute(&Statement::Expression(inc.clone()), index);
+                    let stmt = Statement::Expression(inc.clone());
+                    let _ = ctx.run(|ctx| self.execute(&stmt, index, ctx)).await;
                 }
 
                 self.definitions[index].dec_indent();
@@ -4091,20 +4428,21 @@ impl CodeGen {
                 self.curr_loop = Some((Rc::clone(&break_label), Rc::clone(&continue_label)));
 
                 if not_block {
-                    self.execute_block(
-                        &vec![*body.clone()],
+                    let stmts = vec![*body.clone()];
+                    let _ = ctx.run(|ctx| self.execute_block(
+                        &stmts,
                         Rc::new(RefCell::new(Environment::with_enclosing(
                             Rc::clone(&self.environment)
                         ))),
-                        index, false
-                    );
+                        index, false, ctx
+                    )).await;
                 } else {
-                    let _ = self.execute(&body, index);
+                    let _ = ctx.run(|ctx| self.execute(&body, index, ctx)).await;
                 }
 
                 self.curr_loop = previous_loop;
 
-                let cond = self.evaluate(cond_expr, index, false)?;
+                let cond = ctx.run(|ctx| self.evaluate(&cond_expr, index, false, ctx)).await?;
 
                 match cond.type_ {
                     SkyeType::U8  | SkyeType::I8  | SkyeType::U16 | SkyeType::I16 |
@@ -4157,7 +4495,7 @@ impl CodeGen {
                 let mut buf = String::new();
 
                 if let Some(expr) = ret_expr {
-                    let value = self.evaluate(expr, index, false)?;
+                    let value = ctx.run(|ctx| self.evaluate(expr, index, false, ctx)).await?;
 
                     if let CurrentFn::Some(type_, orig_ret_type) = &self.curr_function {
                         if matches!(type_, SkyeType::Void) {
@@ -4182,7 +4520,8 @@ impl CodeGen {
                     let final_value = {
                         let search_tok = Token::dummy(Rc::from("__copy__"));
                         if let Some(method_value) = self.get_method(&value, &search_tok, true) {
-                            let copy_constructor = self.call(&method_value, expr, &expr, &Vec::new(), index, false)?;
+                            let v = Vec::new();
+                            let copy_constructor = ctx.run(|ctx| self.call(&method_value, expr, &expr, &v, index, false, ctx)).await?;
 
                             ast_info!(expr, "Skye inserted a copy constructor call for this expression"); // +I-copies
                             copy_constructor
@@ -4310,7 +4649,7 @@ impl CodeGen {
                         let mut output_fields = HashMap::new();
                         for field in fields {
                             let field_type = {
-                                let tmp = self.evaluate(&field.expr, index, false)?.type_;
+                                let tmp = ctx.run(|ctx| self.evaluate(&field.expr, index, false, ctx)).await?.type_;
 
                                 match tmp {
                                     SkyeType::Type(inner_type) => {
@@ -4384,7 +4723,7 @@ impl CodeGen {
                 return Ok(Some(output_type));
             }
             Statement::Impl(struct_expr, statements) => {
-                let struct_name = self.evaluate(struct_expr, index, false)?;
+                let struct_name = ctx.run(|ctx| self.evaluate(&struct_expr, index, false, ctx)).await?;
 
                 match &struct_name.type_ {
                     SkyeType::Type(inner_type) => {
@@ -4403,7 +4742,11 @@ impl CodeGen {
 
                                 let previous_name = self.curr_name.clone();
                                 self.curr_name = struct_name.value.to_string();
-                                self.execute_block(statements, Rc::clone(&self.globals), index, true);
+
+                                let _ = ctx.run(|ctx| self.execute_block(
+                                    statements, Rc::clone(&self.globals), index, true, ctx
+                                )).await;
+
                                 self.curr_name = previous_name;
 
                                 env = self.globals.borrow_mut();
@@ -4438,7 +4781,11 @@ impl CodeGen {
 
                                 let previous_name = self.curr_name.clone();
                                 self.curr_name = struct_name.value.to_string();
-                                self.execute_block(statements, Rc::clone(&self.globals), index, true);
+
+                                let _ = ctx.run(|ctx| self.execute_block(
+                                    statements, Rc::clone(&self.globals), index, true, ctx
+                                )).await;
+
                                 self.curr_name = previous_name;
 
                                 env = self.globals.borrow_mut();
@@ -4508,12 +4855,16 @@ impl CodeGen {
                 } else {
                     let previous_name = self.curr_name.clone();
                     self.curr_name = full_name.to_string();
-                    self.execute_block(statements, Rc::clone(&self.environment), index, true);
+
+                    let _ = ctx.run(|ctx| self.execute_block(
+                        statements, Rc::clone(&self.globals), index, true, ctx
+                    )).await;
+
                     self.curr_name = previous_name;
                 }
             }
             Statement::Use(use_expr, identifier) => {
-                let use_value = self.evaluate(use_expr, index, false)?;
+                let use_value = ctx.run(|ctx| self.evaluate(&use_expr, index, false, ctx)).await?;
 
                 if identifier.lexeme.as_ref() != "_" {
                     if use_value.value.len() != 0 {
@@ -4559,7 +4910,7 @@ impl CodeGen {
                 let full_name = self.get_generics(&base_name, generics, &self.environment)?;
 
                 let type_ = {
-                    let enum_type = self.evaluate(type_expr, index, false)?.type_;
+                    let enum_type = ctx.run(|ctx| self.evaluate(type_expr, index, false, ctx)).await?.type_;
 
                     if let SkyeType::Type(inner_type) = &enum_type {
                         match **inner_type {
@@ -4702,7 +5053,7 @@ impl CodeGen {
                         let mut evaluated_variants = Vec::new();
                         for variant in variants {
                             let variant_type = {
-                                let type_ = self.evaluate(&variant.expr, index, false)?.type_;
+                                let type_ = ctx.run(|ctx| self.evaluate(&variant.expr, index, false, ctx)).await?.type_;
                                 match type_ {
                                     SkyeType::Void | SkyeType::Unknown(_) => type_,
                                     SkyeType::Type(inner_type) => {
@@ -5011,7 +5362,7 @@ impl CodeGen {
                 }
 
                 let is_not_grouping = !matches!(switch_expr, Expression::Grouping(_));
-                let switch = self.evaluate(switch_expr, index, false)?;
+                let switch = ctx.run(|ctx| self.evaluate(&switch_expr, index, false, ctx)).await?;
                 match &switch.type_ {
                     SkyeType::U8  | SkyeType::I8  | SkyeType::U16 | SkyeType::I16 |
                     SkyeType::U32 | SkyeType::I32 | SkyeType::U64 | SkyeType::I64 |
@@ -5061,7 +5412,7 @@ impl CodeGen {
                             self.definitions[index].push_indent();
                             self.definitions[index].push("case ");
 
-                            let real_case_evaluated = self.evaluate(real_case, index, false)?;
+                            let real_case_evaluated = ctx.run(|ctx| self.evaluate(&real_case, index, false, ctx)).await?;
                             match real_case_evaluated.type_ {
                                 SkyeType::U8  | SkyeType::I8  | SkyeType::U16 | SkyeType::I16 |
                                 SkyeType::U32 | SkyeType::I32 | SkyeType::U64 | SkyeType::I64 |
@@ -5095,15 +5446,15 @@ impl CodeGen {
                     self.definitions[index].push("{\n");
                     self.definitions[index].inc_indent();
 
-                    self.execute_block(
+                    let _ = ctx.run(|ctx| self.execute_block(
                         &case.code,
                         Rc::new(RefCell::new(
                             Environment::with_enclosing(
                                 Rc::clone(&self.environment)
                             )
                         )),
-                        index, false
-                    );
+                        index, false, ctx
+                    )).await;
 
                     self.definitions[index].dec_indent();
                     self.definitions[index].push_indent();
@@ -5121,7 +5472,7 @@ impl CodeGen {
                 for generic in generics {
                     let bounds_type = {
                         if let Some(bounds) = &generic.bounds {
-                            let evaluated = self.evaluate(bounds, index, false)?;
+                            let evaluated = ctx.run(|ctx| self.evaluate(&bounds, index, false, ctx)).await?;
 
                             if evaluated.type_.is_type() || matches!(evaluated.type_, SkyeType::Void) {
                                 Some(evaluated.type_)
@@ -5143,7 +5494,7 @@ impl CodeGen {
 
                     let default_type = {
                         if let Some(default) = &generic.default {
-                            let evaluated = self.evaluate(default, index, false)?;
+                            let evaluated = ctx.run(|ctx| self.evaluate(&default, index, false, ctx)).await?;
 
                             if matches!(evaluated.type_, SkyeType::Type(_) | SkyeType::Void) {
                                 if evaluated.type_.check_completeness() {
@@ -5368,7 +5719,7 @@ impl CodeGen {
                         let mut output_fields = HashMap::new();
                         for field in fields {
                             let field_type = {
-                                let inner_field_type = self.evaluate(&field.expr, index, false)?.type_;
+                                let inner_field_type = ctx.run(|ctx| self.evaluate(&field.expr, index, false, ctx)).await?.type_;
 
                                 if let SkyeType::Type(inner_type) = inner_field_type {
                                     if inner_type.check_completeness() {
@@ -5603,7 +5954,7 @@ impl CodeGen {
                     token_note!(kw, "Place this for loop inside a function");
                 }
 
-                let iterator_raw = self.evaluate(iterator_expr, index, false)?;
+                let iterator_raw = ctx.run(|ctx| self.evaluate(iterator_expr, index, false, ctx)).await?;
 
                 let tmp_iter_var_name = self.get_temporary_var();
 
@@ -5641,10 +5992,8 @@ impl CodeGen {
                         search_tok.set_lexeme("iter");
 
                         if let Some(method) = self.get_method(&iterator, &search_tok, false) {
-                            let iterator_call = self.call(
-                                &method, iterator_expr, iterator_expr,
-                                &Vec::new(), index, false
-                            )?;
+                            let v = Vec::new();
+                            let iterator_call = ctx.run(|ctx| self.call(&method, iterator_expr, &iterator_expr, &v, index, false, ctx)).await?;
 
                             let iterator_type_stringified = iterator_call.type_.stringify();
                             if iterator_type_stringified.len() == 0 || !matches!(iterator.type_, SkyeType::Struct(..) | SkyeType::Enum(..)) {
@@ -5696,10 +6045,8 @@ impl CodeGen {
                 self.definitions[index].push("while (1) {\n");
                 self.definitions[index].inc_indent();
 
-                let next_call = self.call(
-                    &method, iterator_expr, iterator_expr,
-                    &Vec::new(), index, false
-                )?;
+                let v = Vec::new();
+                let next_call = ctx.run(|ctx| self.call(&method, iterator_expr, &iterator_expr, &v, index, false, ctx)).await?;
 
                 let item_type = {
                     if let SkyeType::Enum(_, variants, name) = &next_call.type_ {
@@ -5773,15 +6120,16 @@ impl CodeGen {
                 self.curr_loop = Some((Rc::clone(&break_label), Rc::clone(&continue_label)));
 
                 if matches!(**body, Statement::Block(..)) {
-                    self.execute_block(
-                        &vec![*body.clone()],
+                    let stmts = vec![*body.clone()];
+                    let _ = ctx.run(|ctx| self.execute_block(
+                        &stmts,
                         Rc::new(RefCell::new(Environment::with_enclosing(
                             Rc::clone(&self.environment)
                         ))),
-                        index, false
-                    );
+                        index, false, ctx
+                    )).await;
                 } else {
-                    let _ = self.execute(&body, index);
+                    let _ = ctx.run(|ctx| self.execute(&body, index, ctx)).await;
                 }
 
                 self.curr_loop = previous_loop;
@@ -5809,8 +6157,10 @@ impl CodeGen {
     }
 
     fn compile_internal(&mut self, statements: Vec<Statement>, index: usize) {
+        let mut stack = reblessive::Stack::new();
+
         for statement in statements {
-            let _ = self.execute(&statement, index);
+            let _ = stack.enter(|ctx| self.execute(&statement, index, ctx)).finish();
         }
     }
 

@@ -1,6 +1,6 @@
 [package]
 name = "skye"
-version = "2024.9.6"
+version = "2024.9.10"
 edition = "2021"
 description = "Skye ~ The retrofuturistic programming language"
 
@@ -11,3 +11,4 @@ convert_case = "0.6.0"
 zip = "2.2.0"
 scopeguard = "1.2.0"
 serde_json = "1.0.127"
+reblessive = "0.4.0"
