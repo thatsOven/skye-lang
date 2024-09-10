@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{cmp::max, rc::Rc};
 
 use colored::{ColoredString, Colorize};
 
@@ -25,16 +25,20 @@ pub fn info_color(msg: &str) -> ColoredString {
 pub fn report(source: &Rc<str>, msg: &str, type_: &str, filename: &Rc<str>, pos: usize, len: usize, line: usize, color: fn(&str) -> ColoredString) {
     let lines = source.lines().collect::<Vec<&str>>();
     let iter_range = {
-        if line <= 2 {
-            0..5
-        } else if line  >= lines.len() - 3 {
-            (lines.len() - 5)..lines.len()
+        if lines.len() < 5 {
+            0..lines.len()
         } else {
-            (line - 2)..(line + 3)
+            if line <= 2 {
+                0..5
+            } else if line >= lines.len() - 3 {
+                (lines.len() - 5)..lines.len()
+            } else {
+                (line - 2)..(line + 3)
+            }
         }
     };
 
-    let linelen = (iter_range.end as f64).log10().ceil() as usize;
+    let linelen = max((iter_range.end as f64).log10().ceil() as usize, 1);
 
     println!("{} ({}: line {}, pos {}): {}", color(type_), filename, line + 1, pos, msg);
 
