@@ -3,7 +3,7 @@
 # Skye
 Skye's programming language (Skye, for short) is the retrofuturistic systems programming language.
 
-Note: the language is currently in a very early stage! the standard library is very limited in functionality, the language is widely untested, and third party features (like the package manager) are missing for now.
+Note: the language is currently in a very early stage! the standard library is very limited in functionality, and the language is widely untested.
 
 # Who is Skye?
 Skye loves programming, and they enjoy writing their programs from scratch, just like you would do using C. However, they also think that while the C programming language is great, it's missing some tools and constructs to make their life easier. They do like manual memory allocation, but sometimes it's too much to handle. They like having control over all the code they write, but they would also like to have some more abstraction, as long as it doesn't hurt the runtime performance! If this sounds like you, then you have your answer: you are Skye.
