@@ -903,51 +903,33 @@ impl CodeGen {
                         if macro_name.as_ref() == "panic" {
                             // panic also includes position information
 
-                            let panic_pos = callee_expr.get_pos();
-                            let var_name = Rc::from("PANIC_POS");
+                            if self.debug {
+                                let panic_pos = callee_expr.get_pos();
 
-                            let mut statements = {
-                                if self.debug {
-                                    vec![
-                                        Statement::Use(
-                                            Expression::Literal(
-                                                Rc::from(format!(
-                                                    "{}: line {}, pos {}",
-                                                    panic_pos.filename, panic_pos.line + 1, panic_pos.start
-                                                )),
-                                                Token::dummy(Rc::from("")),
-                                                LiteralKind::String
-                                            ),
-                                            Token::dummy(Rc::clone(&var_name))
-                                        )
-                                    ]
-                                } else {
-                                    vec![
-                                        Statement::Use(
-                                            Expression::Literal(
-                                                Rc::from(""),
-                                                Token::dummy(Rc::from("")),
-                                                LiteralKind::String
-                                            ),
-                                            Token::dummy(Rc::clone(&var_name))
-                                        )
-                                    ]
-                                }
-                            };
+                                curr_expr = curr_expr.replace_variable(
+                                    &Rc::from("PANIC_POS"), 
+                                    &Expression::Literal(
+                                        Rc::from(format!(
+                                            "{}: line {}, pos {}",
+                                            panic_pos.filename, panic_pos.line + 1, panic_pos.start
+                                        )),
+                                        Token::dummy(Rc::from("")),
+                                        LiteralKind::String
+                                    )
+                                );
+                            } else {
+                                curr_expr = curr_expr.replace_variable(
+                                    &Rc::from("PANIC_POS"), 
+                                    &Expression::Literal(
+                                        Rc::from(""),
+                                        Token::dummy(Rc::from("")),
+                                        LiteralKind::String
+                                    )
+                                );
+                            }
+                        } 
 
-                            statements.push(Statement::Expression(curr_expr));
-
-                            let _ = self.execute_block(
-                                &statements, Rc::new(RefCell::new(
-                                    Environment::with_enclosing(Rc::clone(&self.environment))
-                                )),
-                                index, false
-                            );
-
-                            Ok(SkyeValue::special(SkyeType::Void))
-                        } else {
-                            self.evaluate(&curr_expr, index, allow_unknown)
-                        }
+                        self.evaluate(&curr_expr, index, allow_unknown)
                     } else {
                         // C macro binding call
                         let tmp_env = Rc::new(RefCell::new(Environment::with_enclosing(Rc::clone(&self.environment))));

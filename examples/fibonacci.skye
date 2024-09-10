@@ -1,7 +1,5 @@
 import "std/fmt";
-
 use core::io as io;
-use core::Option as Option;
 
 macro MAX_TERMS 94;
 
