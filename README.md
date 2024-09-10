@@ -416,13 +416,13 @@ let myStruct = MyStruct::new(1i32, 2i32); // Skye can infer generic types...
 let result = add[i32](2, 2); // ...but you can also specify types manually
 ```
 
-You can use generics in combination with the `@typeOf` macro to give the function different behaviors depending on types.
+You can use generics to give the function different behaviors depending on types.
 
 ```
 fn which32[T: u32 | i32 | f32](x: T) {
-    if @typeOf(T) == u32 {
+    if T == u32 {
         @println("got a u32");
-    } else if @typeOf(T) == i32 {
+    } else if T == i32 {
         @println("got a i32");
     } else {
         @println("got a f32");
