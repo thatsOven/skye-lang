@@ -190,7 +190,7 @@ pub struct CodeGen {
 impl CodeGen {
     pub fn new(path: Option<&Path>, debug: bool) -> Self {
         let globals = Rc::new(RefCell::new(Environment::new()));
-        
+
         globals.borrow_mut().define(
             Rc::from("voidptr"),
             SkyeVariable::new(
@@ -719,12 +719,17 @@ impl CodeGen {
         } else if is_typeof {
             let inner = ctx.run(|ctx| self.evaluate(&arguments[0], index, allow_unknown, ctx)).await?;
 
-            if let SkyeType::Type(_) = &inner.type_ {
-                ast_error!(self, arguments[0], "Cannot get type of type");
-                Ok(Some(SkyeValue::special(inner.type_)))
-            } else {
-                Ok(Some(SkyeValue::special(SkyeType::Type(Box::new(inner.type_)))))
+            match inner.type_ {
+                SkyeType::Void         => ast_error!(self, arguments[0], "Cannot get type of void"),
+                SkyeType::Type(_)      => ast_error!(self, arguments[0], "Cannot get type of type"),
+                SkyeType::Group(..)    => ast_error!(self, arguments[0], "Cannot get type of type group"),
+                SkyeType::Namespace(_) => ast_error!(self, arguments[0], "Cannot get type of namespace"),
+                SkyeType::Template(..) => ast_error!(self, arguments[0], "Cannot get type of template"),
+                SkyeType::Macro(..)    => ast_error!(self, arguments[0], "Cannot get type of macro"),
+                _ => return Ok(Some(SkyeValue::special(SkyeType::Type(Box::new(inner.type_)))))
             }
+
+            Ok(Some(SkyeValue::special(inner.type_)))
         } else {
             Ok(None)
         }
