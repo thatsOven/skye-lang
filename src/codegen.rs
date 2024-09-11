@@ -4032,7 +4032,7 @@ impl CodeGen {
                                 true
                             }
                         } else {
-                            token_error!(self, name, "Cannot declare function with same name as existing symbol in same scope");
+                            token_error!(self, name, "Cannot declare function with same name as existing symbol");
 
                             if let Some(token) = &var.tok {
                                 token_note!(*token, "Previously defined here");
@@ -4656,7 +4656,7 @@ impl CodeGen {
                                     true
                                 }
                             } else {
-                                token_error!(self, name, "Cannot declare struct with same name as existing symbol in same scope");
+                                token_error!(self, name, "Cannot declare struct with same name as existing symbol");
 
                                 if let Some(token) = &var.tok {
                                     token_note!(*token, "Previously defined here");
@@ -4665,7 +4665,7 @@ impl CodeGen {
                                 false
                             }
                         } else {
-                            token_error!(self, name, "Cannot declare struct with same name as existing symbol in same scope");
+                            token_error!(self, name, "Cannot declare struct with same name as existing symbol");
 
                             if let Some(token) = &var.tok {
                                 token_note!(*token, "Previously defined here");
@@ -4900,7 +4900,7 @@ impl CodeGen {
                     if let SkyeType::Namespace(_) = var.type_ {
                         ()
                     } else {
-                        token_error!(self, name, "Cannot declare namespace with same name as existing symbol in same scope");
+                        token_error!(self, name, "Cannot declare namespace with same name as existing symbol");
 
                         if let Some(token) = &var.tok {
                             token_note!(*token, "Previously defined here");
@@ -5390,14 +5390,14 @@ impl CodeGen {
                                 }
                             }
                         } else {
-                            token_error!(self, name, "Cannot declare enum with same name as existing symbol in same scope");
+                            token_error!(self, name, "Cannot declare enum with same name as existing symbol");
 
                             if let Some(token) = &var.tok {
                                 token_note!(*token, "Previously defined here");
                             }
                         }
                     } else {
-                        token_error!(self, name, "Cannot declare enum with same name as existing symbol in same scope");
+                        token_error!(self, name, "Cannot declare enum with same name as existing symbol");
 
                         if let Some(token) = &var.tok {
                             token_note!(*token, "Previously defined here");
@@ -5736,7 +5736,7 @@ impl CodeGen {
                                     true
                                 }
                             } else {
-                                token_error!(self, name, "Cannot declare union with same name as existing symbol in same scope");
+                                token_error!(self, name, "Cannot declare union with same name as existing symbol");
 
                                 if let Some(token) = &var.tok {
                                     token_note!(*token, "Previously defined here");
@@ -5745,7 +5745,7 @@ impl CodeGen {
                                 false
                             }
                         } else {
-                            token_error!(self, name, "Cannot declare union with same name as existing symbol in same scope");
+                            token_error!(self, name, "Cannot declare union with same name as existing symbol");
 
                             if let Some(token) = &var.tok {
                                 token_note!(*token, "Previously defined here");
@@ -5889,7 +5889,7 @@ impl CodeGen {
                                     true
                                 }
                             } else {
-                                token_error!(self, name, "Cannot declare union with same name as existing symbol in same scope");
+                                token_error!(self, name, "Cannot declare union with same name as existing symbol");
 
                                 if let Some(token) = &var.tok {
                                     token_note!(*token, "Previously defined here");
@@ -5898,7 +5898,7 @@ impl CodeGen {
                                 false
                             }
                         } else {
-                            token_error!(self, name, "Cannot declare union with same name as existing symbol in same scope");
+                            token_error!(self, name, "Cannot declare union with same name as existing symbol");
 
                             if let Some(token) = &var.tok {
                                 token_note!(*token, "Previously defined here");
