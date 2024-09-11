@@ -4100,7 +4100,7 @@ impl CodeGen {
 
                     let no_args = params_output.len() == 0;
 
-                    if (returns_void | returns_i32 | returns_i32_result | returns_void_result) && (no_args || has_args || has_stdargs) {
+                    if (returns_void || returns_i32 || returns_i32_result || returns_void_result) && (no_args || has_args || has_stdargs) {
                         full_name = Rc::from("_SKYE_MAIN");
 
                         let real_main_idx = self.definitions.len();
