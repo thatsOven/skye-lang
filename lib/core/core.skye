@@ -17,6 +17,9 @@ use @typeOf(0f64) as f64;
 use @typeOf(0usz) as usz;
 use @typeOf('\0') as char;
 
+use 0u8 as false;
+use 1u8 as true;
+
 macro WINDOWS -> u8;
 macro LINUX -> u8;
 macro MAC_OS -> u8;

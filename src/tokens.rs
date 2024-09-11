@@ -31,8 +31,8 @@ pub enum TokenType {
     I8, I16, I32, I64, AnyInt,
     F32, F64, AnyFloat,
 
-    Struct, Else, False, Fn, For, If, Return, 
-    True, Let, While, Enum, Import, Defer, 
+    Struct, Else, Fn, For, If, Return, 
+    Let, While, Enum, Import, Defer, 
     Impl, Void, Namespace, Switch, Continue, 
     Break, Do, Macro, Const, Use, Try, As, 
     Default, Union, Bitfield,

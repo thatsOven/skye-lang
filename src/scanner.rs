@@ -33,12 +33,10 @@ impl<'a> Scanner<'a> {
         keywords.insert(     "else", TokenType::Else);
         keywords.insert(     "enum", TokenType::Enum);
         keywords.insert(     "impl", TokenType::Impl);
-        keywords.insert(     "true", TokenType::True);
         keywords.insert(     "void", TokenType::Void);
         keywords.insert(    "break", TokenType::Break);
         keywords.insert(    "const", TokenType::Const);
         keywords.insert(    "defer", TokenType::Defer);
-        keywords.insert(    "false", TokenType::False);
         keywords.insert(    "macro", TokenType::Macro);
         keywords.insert(    "union", TokenType::Union);
         keywords.insert(    "while", TokenType::While);

@@ -172,14 +172,6 @@ impl Parser {
     }
 
     fn primary(&mut self) -> Option<Expression> {
-        if self.match_(&[TokenType::False]) {
-            return Some(Expression::Literal(Rc::from("0"), self.previous().clone(), LiteralKind::U8));
-        }
-
-        if self.match_(&[TokenType::True]) {
-            return Some(Expression::Literal(Rc::from("1"), self.previous().clone(), LiteralKind::U8));
-        }
-
         if self.match_(&[TokenType::Void]) {
             return Some(Expression::Literal(Rc::from(""), self.previous().clone(), LiteralKind::Void));
         }
