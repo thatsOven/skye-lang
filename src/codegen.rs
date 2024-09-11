@@ -3897,7 +3897,7 @@ impl CodeGen {
                 }
 
                 if matches!(type_, SkyeType::Void) {
-                    token_error!(self, name, "Cannot declare a variable as with type \"void\"");
+                    token_error!(self, name, "Cannot declare a variable with type \"void\"");
                     ast_note!(initializer.as_ref().unwrap(), "This expression returns void");
                 }
 
