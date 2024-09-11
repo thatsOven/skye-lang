@@ -493,6 +493,7 @@ impl CodeGen {
         let is_fprint   = macro_name.as_ref() == "fprint";
         let is_fprintln = macro_name.as_ref() == "fprintln";
         let is_typeof   = macro_name.as_ref() == "typeOf";
+        let is_cast     = macro_name.as_ref() == "cast";
 
         if is_format | is_fprint | is_fprintln {
             let first = ctx.run(|ctx| self.evaluate(&arguments[0], index, allow_unknown, ctx)).await?;
@@ -674,7 +675,6 @@ impl CodeGen {
                     let search_tok = Token::dummy(Rc::from("write"));
                     if self.get_method(&first, &search_tok, false).is_some() {
                         if do_write {
-                            // TODO check if `write` returns a result
                             statements.push(Statement::Expression(
                                 Expression::Call(
                                     Box::new(Expression::Get(
@@ -704,7 +704,7 @@ impl CodeGen {
                             self, arguments[0], 
                             format!(
                                 "Type {} is not a valid writable object",
-                                evaluated.type_.stringify_native()
+                                first.type_.stringify_native()
                             ).as_ref()
                         );
 
@@ -730,6 +730,37 @@ impl CodeGen {
             }
 
             Ok(Some(SkyeValue::special(inner.type_)))
+        } else if is_cast {
+            let cast_to = ctx.run(|ctx| self.evaluate(&arguments[0], index, allow_unknown, ctx)).await?;
+
+            if let SkyeType::Type(inner_type) = cast_to.type_ {
+                let to_cast = ctx.run(|ctx| self.evaluate(&arguments[1], index, allow_unknown, ctx)).await?;
+
+                if to_cast.type_.is_castable_to(&inner_type) {
+                    Ok(Some(SkyeValue::new(Rc::from(format!("({})({})", inner_type.stringify(), to_cast.value)), *inner_type, true)))
+                } else {
+                    ast_error!(
+                        self, arguments[1], 
+                        format!(
+                            "Type {} cannot be casted to type {}", 
+                            to_cast.type_.stringify_native(),
+                            inner_type.stringify_native()
+                        ).as_ref()
+                    );
+
+                    Ok(Some(SkyeValue::special(*inner_type)))
+                }
+            } else {
+                ast_error!(
+                    self, arguments[0], 
+                    format!(
+                        "Expecting type as cast type (got {})", 
+                        cast_to.type_.stringify_native()
+                    ).as_ref()
+                );
+
+                Ok(Some(SkyeValue::special(cast_to.type_)))
+            }
         } else {
             Ok(None)
         }

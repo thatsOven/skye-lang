@@ -792,4 +792,39 @@ impl SkyeType {
             SkyeType::Bitfield(_, fields) => fields.is_some()
         }
     }
+
+    pub fn is_castable_to(&self, cast_to: &SkyeType) -> bool {
+        match self {
+            SkyeType::Void | SkyeType::Type(_) | SkyeType::Group(..) | SkyeType::Function(..) |
+            SkyeType::Struct(..) | SkyeType::Namespace(_) | SkyeType::Template(..) |
+            SkyeType::Union(..) | SkyeType::Bitfield(..) | SkyeType::Macro(..) => false,
+            SkyeType::Unknown(_) => true,
+
+            SkyeType::U8 | SkyeType::U16 | SkyeType::U32 | SkyeType::U64 |
+            SkyeType::I8 | SkyeType::I16 | SkyeType::I32 | SkyeType::I64 | 
+            SkyeType::AnyInt | SkyeType::AnyFloat | SkyeType::F32 | SkyeType::F64 | 
+            SkyeType::Char => {
+                matches!(
+                    cast_to, 
+                    SkyeType::F32 | 
+                    SkyeType::F64 | 
+                    SkyeType::AnyFloat | 
+                    SkyeType::Char
+                ) || ALL_INTS.contains(cast_to)
+            }
+            SkyeType::Usz => {
+                matches!(
+                    cast_to, 
+                    SkyeType::F32 | 
+                    SkyeType::F64 | 
+                    SkyeType::AnyFloat | 
+                    SkyeType::Char |
+                    SkyeType::Pointer(..)
+                ) || ALL_INTS.contains(cast_to)
+            }
+
+            SkyeType::Pointer(..) => matches!(cast_to, SkyeType::Pointer(..) | SkyeType::Usz),
+            SkyeType::Enum(_, variants, _) => variants.is_none() && ALL_INTS.contains(cast_to)
+        }
+    }
 }

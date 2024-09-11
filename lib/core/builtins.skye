@@ -617,14 +617,14 @@ namespace core {
             buf.pushString(string.asString());
         }
 
-        fn __intToFile[T: AnyInt](const file: *core::io::File, const value: T) {
+        fn __intToFile[T: AnyInt, U](const file: *U, const value: T) {
             let string = core::fmt::allocIntToString(&core::mem::heapAllocator, value);
             const r = file.write(string.asString());
             string.free();
             r.panicOnError("String interpolation failed writing to file");
         }
 
-        fn __floatToFile[T: AnyFloat](const file: *core::io::File, const value: T) {
+        fn __floatToFile[T: AnyFloat, U](const file: *U, const value: T) {
             let string = core::fmt::allocFloatToString(&core::mem::heapAllocator, value);
             const r = file.write(string.asString());
             string.free();
