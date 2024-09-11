@@ -4959,6 +4959,15 @@ impl CodeGen {
                     }
 
                     let mut env = self.environment.borrow_mut();
+
+                    if let Some(existing) = env.get(&identifier) {
+                        token_error!(self, identifier, "Cannot redefine identifiers");
+
+                        if let Some(token) = &existing.tok {
+                            token_note!(*token, "Previously defined here");
+                        }
+                    }
+
                     env.define(
                         Rc::clone(&identifier.lexeme), SkyeVariable::new(
                             use_value.type_, use_value.is_const,
