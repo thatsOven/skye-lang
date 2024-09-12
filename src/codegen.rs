@@ -744,7 +744,7 @@ impl CodeGen {
                         ast_note!(arguments[0], "Cast to a const variant of this type");
 
                         if matches!(to_cast.type_, SkyeType::Pointer(..)) {
-                            ast_note!(arguments[1], "Since this is a pointer, you can also use the @constCast macro to ignore its constness");
+                            ast_note!(arguments[1], "Since this is a pointer, you can also use the @constCast macro to discard its constness");
                         }                        
                     }
 
