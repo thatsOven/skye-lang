@@ -38,7 +38,7 @@ namespace core {
                 const ptr = malloc(amt);
 
                 if ptr == @nullptr {
-                    @panic("Could not allocate requested memory");
+                    @panic("core::mem::HeapAllocator: Could not allocate requested memory");
                 }
 
                 return ptr;
@@ -48,7 +48,7 @@ namespace core {
                 const newptr = realloc(ptr, size);
 
                 if newptr == @nullptr {
-                    @panic("Could not allocate requested memory");
+                    @panic("core::mem::HeapAllocator: Could not allocate requested memory");
                 }
 
                 return newptr;
