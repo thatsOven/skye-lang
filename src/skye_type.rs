@@ -71,8 +71,15 @@ pub enum ImplementsHow {
     No
 }
 
+pub enum CastableHow {
+    Yes,
+    No,
+    ConstnessLoss
+}
+
 #[derive(Clone, Copy)]
 pub enum EqualsLevel {
+    ConstStrict,
     Strict,
     Typewise,
     Permissive
@@ -349,21 +356,31 @@ impl SkyeType {
                 }
             }
             SkyeType::Pointer(self_inner, self_is_const) => {
-                if matches!(level, EqualsLevel::Typewise) {
-                    if let SkyeType::Pointer(other_inner, _) = other {
-                        self_inner.equals(other_inner, level)
-                    } else {
-                        false
-                    }
-                } else {
-                    if let SkyeType::Pointer(other_inner, other_is_const) = other {
-                        if *self_is_const {
+                match level {
+                    EqualsLevel::Typewise => {
+                        if let SkyeType::Pointer(other_inner, _) = other {
                             self_inner.equals(other_inner, level)
                         } else {
-                            (!*other_is_const) && self_inner.equals(other_inner, level)
+                            false
                         }
-                    } else {
-                        false
+                    }
+                    EqualsLevel::ConstStrict => {
+                        if let SkyeType::Pointer(other_inner, other_is_const) = other {
+                            !(self_is_const ^ other_is_const) && self_inner.equals(other_inner, level)
+                        } else {
+                            false
+                        }
+                    }
+                    _ => {
+                        if let SkyeType::Pointer(other_inner, other_is_const) = other {
+                            if *self_is_const {
+                                self_inner.equals(other_inner, level)
+                            } else {
+                                (!*other_is_const) && self_inner.equals(other_inner, level)
+                            }
+                        } else {
+                            false
+                        }
                     }
                 }
             }
@@ -373,6 +390,10 @@ impl SkyeType {
                         false
                     } else {
                         for i in 0..self_params.len() {
+                            if matches!(level, EqualsLevel::ConstStrict) && (self_params[i].is_const ^ other_params[i].is_const) {
+                                return false;
+                            }
+
                             if !self_params[i].type_.equals(&other_params[i].type_, level) {
                                 return false;
                             }
@@ -793,38 +814,64 @@ impl SkyeType {
         }
     }
 
-    pub fn is_castable_to(&self, cast_to: &SkyeType) -> bool {
+    pub fn is_castable_to(&self, cast_to: &SkyeType) -> CastableHow {
         match self {
             SkyeType::Void | SkyeType::Type(_) | SkyeType::Group(..) | SkyeType::Function(..) |
             SkyeType::Struct(..) | SkyeType::Namespace(_) | SkyeType::Template(..) |
-            SkyeType::Union(..) | SkyeType::Bitfield(..) | SkyeType::Macro(..) => false,
-            SkyeType::Unknown(_) => true,
+            SkyeType::Union(..) | SkyeType::Bitfield(..) | SkyeType::Macro(..) => CastableHow::No,
+            SkyeType::Unknown(_) => CastableHow::Yes,
 
             SkyeType::U8 | SkyeType::U16 | SkyeType::U32 | SkyeType::U64 |
             SkyeType::I8 | SkyeType::I16 | SkyeType::I32 | SkyeType::I64 | 
             SkyeType::AnyInt | SkyeType::AnyFloat | SkyeType::F32 | SkyeType::F64 | 
             SkyeType::Char => {
-                matches!(
+                if matches!(
                     cast_to, 
                     SkyeType::F32 | 
                     SkyeType::F64 | 
                     SkyeType::AnyFloat | 
                     SkyeType::Char
-                ) || ALL_INTS.contains(cast_to)
+                ) || ALL_INTS.contains(cast_to) {
+                    CastableHow::Yes
+                } else {
+                    CastableHow::No
+                }
             }
             SkyeType::Usz => {
-                matches!(
+                if matches!(
                     cast_to, 
                     SkyeType::F32 | 
                     SkyeType::F64 | 
                     SkyeType::AnyFloat | 
                     SkyeType::Char |
                     SkyeType::Pointer(..)
-                ) || ALL_INTS.contains(cast_to)
+                ) || ALL_INTS.contains(cast_to) {
+                    CastableHow::Yes
+                } else {
+                    CastableHow::No
+                }
             }
 
-            SkyeType::Pointer(..) => matches!(cast_to, SkyeType::Pointer(..) | SkyeType::Usz),
-            SkyeType::Enum(_, variants, _) => variants.is_none() && ALL_INTS.contains(cast_to)
+            SkyeType::Pointer(_, self_is_const) => {
+                if matches!(cast_to, SkyeType::Usz) {
+                    CastableHow::Yes
+                } else if let SkyeType::Pointer(_, cast_to_const) = cast_to {
+                    if *cast_to_const || !*self_is_const {
+                        CastableHow::Yes
+                    } else {
+                        CastableHow::ConstnessLoss
+                    }
+                } else {
+                    CastableHow::No
+                }
+            }
+            SkyeType::Enum(_, variants, _) => {
+                if variants.is_none() && ALL_INTS.contains(cast_to) {
+                    CastableHow::Yes
+                } else {
+                    CastableHow::No
+                }
+            }
         }
     }
 }

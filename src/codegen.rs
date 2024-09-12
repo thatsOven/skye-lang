@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, env, ffi::OsString, path::{Path, PathBuf}, rc::Rc};
 
 use crate::{
-    ast::{Expression, FunctionParam, ImportType, LiteralKind, Statement}, ast_error, ast_info, ast_note, ast_warning, environment::{Environment, SkyeVariable}, parse_file, parser::Parser, scanner::Scanner, skye_type::{EqualsLevel, GetResult, ImplementsHow, Operator, SkyeEnumVariant, SkyeFunctionParam, SkyeGeneric, SkyeType}, token_error, token_note, token_warning, tokens::{Token, TokenType}, utils::{fix_raw_string, get_real_string_length, note}, SKYE_PATH_VAR
+    ast::{Expression, FunctionParam, ImportType, LiteralKind, Statement}, ast_error, ast_info, ast_note, ast_warning, environment::{Environment, SkyeVariable}, parse_file, parser::Parser, scanner::Scanner, skye_type::{CastableHow, EqualsLevel, GetResult, ImplementsHow, Operator, SkyeEnumVariant, SkyeFunctionParam, SkyeGeneric, SkyeType}, token_error, token_note, token_warning, tokens::{Token, TokenType}, utils::{fix_raw_string, get_real_string_length, note}, SKYE_PATH_VAR
 };
 
 const OUTPUT_INDENT_SPACES: usize = 4;
@@ -488,12 +488,13 @@ impl CodeGen {
         Ok(result)
     }
 
-    async fn handle_builtin_macros(&mut self, macro_name: &Rc<str>, arguments: &Vec<Expression>, index: usize, allow_unknown: bool, ctx: &mut reblessive::Stk) -> Result<Option<SkyeValue>, ExecutionInterrupt> {
-        let is_format   = macro_name.as_ref() == "format";
-        let is_fprint   = macro_name.as_ref() == "fprint";
-        let is_fprintln = macro_name.as_ref() == "fprintln";
-        let is_typeof   = macro_name.as_ref() == "typeOf";
-        let is_cast     = macro_name.as_ref() == "cast";
+    async fn handle_builtin_macros(&mut self, macro_name: &Rc<str>, arguments: &Vec<Expression>, index: usize, allow_unknown: bool, callee_expr: &Expression, ctx: &mut reblessive::Stk) -> Result<Option<SkyeValue>, ExecutionInterrupt> {
+        let is_format    = macro_name.as_ref() == "format";
+        let is_fprint    = macro_name.as_ref() == "fprint";
+        let is_fprintln  = macro_name.as_ref() == "fprintln";
+        let is_typeof    = macro_name.as_ref() == "typeOf";
+        let is_cast      = macro_name.as_ref() == "cast";
+        let is_constcast = macro_name.as_ref() == "constCast";
 
         if is_format | is_fprint | is_fprintln {
             let first = ctx.run(|ctx| self.evaluate(&arguments[0], index, allow_unknown, ctx)).await?;
@@ -736,8 +737,28 @@ impl CodeGen {
             if let SkyeType::Type(inner_type) = cast_to.type_ {
                 let to_cast = ctx.run(|ctx| self.evaluate(&arguments[1], index, allow_unknown, ctx)).await?;
 
-                if to_cast.type_.is_castable_to(&inner_type) {
-                    Ok(Some(SkyeValue::new(Rc::from(format!("({})({})", inner_type.stringify(), to_cast.value)), *inner_type, true)))
+                let castable_how = to_cast.type_.is_castable_to(&inner_type);
+                if matches!(castable_how, CastableHow::Yes | CastableHow::ConstnessLoss) {
+                    if matches!(castable_how, CastableHow::ConstnessLoss) {
+                        ast_warning!(arguments[1], "This cast discards the constness from casted type"); // +W-constness-loss
+                        ast_note!(arguments[0], "Cast to a const variant of this type or use the @constCast macro to ignore constness from the casted type");
+                    }
+
+                    if inner_type.equals(&to_cast.type_, EqualsLevel::ConstStrict) {
+                        ast_warning!(
+                            arguments[1], 
+                            format!(
+                                "Casted type ({}) matches target cast type",
+                                to_cast.type_.stringify_native()
+                            ).as_ref()
+                        ); // +W-useless-cast
+
+                        ast_note!(callee_expr, "Remove this cast");
+
+                        Ok(Some(to_cast))
+                    } else {
+                        Ok(Some(SkyeValue::new(Rc::from(format!("({})({})", inner_type.stringify(), to_cast.value)), *inner_type, true)))
+                    }
                 } else {
                     ast_error!(
                         self, arguments[1], 
@@ -760,6 +781,27 @@ impl CodeGen {
                 );
 
                 Ok(Some(SkyeValue::special(cast_to.type_)))
+            }
+        } else if is_constcast {
+            let to_cast = ctx.run(|ctx| self.evaluate(&arguments[0], index, allow_unknown, ctx)).await?;
+
+            if let SkyeType::Pointer(inner_type, is_const) = &to_cast.type_ {
+                if *is_const {
+                    Ok(Some(SkyeValue::new(to_cast.value, SkyeType::Pointer(inner_type.clone(), false), true)))
+                } else {
+                    // no warning here because you might use this in a generic context where you don't know the type of pointer
+                    Ok(Some(to_cast))
+                }
+            } else {
+                ast_error!(
+                    self, arguments[0], 
+                    format!(
+                        "Expecting pointer as @constCast argument (got {})", 
+                        to_cast.type_.stringify_native()
+                    ).as_ref()
+                );
+
+                Ok(Some(to_cast))
             }
         } else {
             Ok(None)
@@ -1237,7 +1279,7 @@ impl CodeGen {
                     if let Some(return_expr) = return_expr_opt {
                         // native macro call
 
-                        if let Some(result) = ctx.run(|ctx| self.handle_builtin_macros(macro_name, arguments, index, allow_unknown, ctx)).await? {
+                        if let Some(result) = ctx.run(|ctx| self.handle_builtin_macros(macro_name, arguments, index, allow_unknown, callee_expr, ctx)).await? {
                             return Ok(result);
                         }
 

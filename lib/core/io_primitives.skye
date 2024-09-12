@@ -120,7 +120,7 @@ namespace core {
             }
 
             fn write[T](self, const items: core::Slice[T]) !void {
-                if fwrite(@cast(voidptr, items.ptr), @sizeOf(T), items.length, self.cFile) != items.length {
+                if fwrite(@cast(voidptr, @constCast(items.ptr)), @sizeOf(T), items.length, self.cFile) != items.length {
                     return (!void)::Error;
                 }
 

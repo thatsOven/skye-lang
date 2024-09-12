@@ -3,6 +3,7 @@ import <<"core/internals.h">>;
 // compiler built-ins
 macro typeOf(T) void; 
 macro cast(T, E) void;
+macro constCast(E) void;
 
 use @typeOf(0u8)  as u8;
 use @typeOf(0i8)  as i8;

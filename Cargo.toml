@@ -1,6 +1,6 @@
 [package]
 name = "skye"
-version = "2024.9.11"
+version = "2024.9.12"
 edition = "2021"
 description = "Skye ~ The retrofuturistic programming language"
 
