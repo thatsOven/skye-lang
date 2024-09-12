@@ -741,7 +741,11 @@ impl CodeGen {
                 if matches!(castable_how, CastableHow::Yes | CastableHow::ConstnessLoss) {
                     if matches!(castable_how, CastableHow::ConstnessLoss) {
                         ast_warning!(arguments[1], "This cast discards the constness from casted type"); // +W-constness-loss
-                        ast_note!(arguments[0], "Cast to a const variant of this type or use the @constCast macro to ignore constness from the casted type");
+                        ast_note!(arguments[0], "Cast to a const variant of this type");
+
+                        if matches!(to_cast.type_, SkyeType::Pointer(..)) {
+                            ast_note!(arguments[1], "Since this is a pointer, you can also use the @constCast macro to ignore its constness");
+                        }                        
                     }
 
                     if inner_type.equals(&to_cast.type_, EqualsLevel::ConstStrict) {
