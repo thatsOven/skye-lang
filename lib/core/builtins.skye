@@ -70,7 +70,7 @@ namespace core {
                 return core::Ptr::new(ptr, ptr, ptr + amt, self);
             }
 
-            fn realloc[T](self, ptr: *core::Ptr[T, Self], size: usz) {
+            fn realloc[T](self, const ptr: *core::Ptr[T, Self], size: usz) {
                 const rawptr = @cast(*T, self.reallocRaw(@cast(voidptr, ptr.ptr), size * @sizeOf(T)));
                 ptr.ptr = rawptr;
                 ptr.min = rawptr;
@@ -83,7 +83,7 @@ namespace core {
                 return ptr;
             }
 
-            fn free[T](self, ptr: *const core::Ptr[T, Self]) {
+            fn free[T](self, const ptr: *const core::Ptr[T, Self]) {
                 self.freeRaw(@cast(voidptr, ptr.ptr));
             }
         }
@@ -106,7 +106,7 @@ namespace core {
             self.alloc.free(self);
         }
 
-        fn __subscript__(self, offs: usz) *T {
+        fn __subscript__(self, const offs: usz) *T {
             const r = self.ptr + offs;
             if self.min <= r && r <= self.max {
                 return r;
