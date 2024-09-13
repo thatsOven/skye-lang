@@ -331,6 +331,13 @@ impl Generic {
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub enum MacroParams {
+    None,
+    Some(Vec<Token>),
+    Variable(Token)
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Statement {
     Expression(Expression),
     VarDecl(Token, Option<Expression>, Option<Expression>, bool, Vec<Token>), // name initializer type is_const qualifiers
@@ -356,7 +363,7 @@ pub enum Statement {
     Import(Token, ImportType), // path is_ang
     Union(Token, Vec<StructField>, bool, Option<Token>, bool), // name fields has_body binding bind_typedefed
     Bitfield(Token, Vec<BitfieldField>, bool, Option<Token>, bool), // name fields has_body binding bind_typedefed
-    Macro(Token, Option<Vec<Token>>, Option<Expression>, Option<Expression>), // name params return_expr return_type
+    Macro(Token, MacroParams, Option<Expression>, Option<Expression>), // name params return_expr return_type
     Foreach(Token, Token, Expression, Box<Statement>) // kw variable iterator body
 }
 

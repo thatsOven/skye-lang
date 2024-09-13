@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, env, ffi::OsString, path::{Path, PathBuf}, rc::Rc};
 
 use crate::{
-    ast::{Expression, FunctionParam, ImportType, LiteralKind, Statement}, ast_error, ast_info, ast_note, ast_warning, environment::{Environment, SkyeVariable}, parse_file, parser::Parser, scanner::Scanner, skye_type::{CastableHow, EqualsLevel, GetResult, ImplementsHow, Operator, SkyeEnumVariant, SkyeFunctionParam, SkyeGeneric, SkyeType}, token_error, token_note, token_warning, tokens::{Token, TokenType}, utils::{fix_raw_string, get_real_string_length, note}, SKYE_PATH_VAR
+    ast::{Expression, FunctionParam, ImportType, LiteralKind, MacroParams, Statement}, ast_error, ast_info, ast_note, ast_warning, environment::{Environment, SkyeVariable}, parse_file, parser::Parser, scanner::Scanner, skye_type::{CastableHow, EqualsLevel, GetResult, ImplementsHow, Operator, SkyeEnumVariant, SkyeFunctionParam, SkyeGeneric, SkyeType}, token_error, token_note, token_warning, tokens::{Token, TokenType}, utils::{fix_raw_string, get_real_string_length, note}, SKYE_PATH_VAR
 };
 
 const OUTPUT_INDENT_SPACES: usize = 4;
@@ -808,6 +808,45 @@ impl CodeGen {
                     Ok(Some(to_cast))
                 }
             }
+            "concat" => {
+                if arguments.len() == 1 {
+                    if let Expression::Literal(.., kind) = &arguments[0] {
+                        if matches!(kind, LiteralKind::String) {
+                            ast_warning!(arguments[0], "@concat macro is being used with no effect"); // +W-useless-concat
+                            ast_note!(callee_expr, "The @concat macro is used to concatenate multiple strings together. Calling it with one argument is unnecessary");
+                            ast_note!(callee_expr, "Remove this macro call");
+                        } else {
+                            ast_error!(self, arguments[0], "Arguments to @concat macro must be strings");
+                        }
+                    } else {
+                        ast_error!(self, arguments[0], "String for @concat macro must be a literal");
+                        ast_note!(arguments[0], "The value of the string must be known at compile time");
+                    }
+
+                    Ok(Some(ctx.run(|ctx| self.evaluate(&arguments[0], index, allow_unknown, ctx)).await?))
+                } else {
+                    let mut result = String::new();
+                
+                    for argument in arguments {
+                        if let Expression::Literal(value, _, kind) = argument {
+                            if matches!(kind, LiteralKind::String) {
+                                result.push_str(value);
+                            } else {
+                                ast_error!(self, argument, "Arguments to @concat macro must be strings");
+                            }
+                        } else {
+                            ast_error!(self, argument, "String for @concat macro must be a literal");
+                            ast_note!(argument, "The value of the string must be known at compile time");
+                        }
+                    }
+
+                    let pos = callee_expr.get_pos();
+                    let lexeme = Rc::from(result.as_ref());
+                    let tok = Token::new(pos.source, pos.filename, TokenType::String, Rc::clone(&lexeme), pos.start, pos.line);
+                    let output_expr = Expression::Literal(Rc::clone(&lexeme), tok, LiteralKind::String);
+                    Ok(Some(ctx.run(|ctx| self.evaluate(&output_expr, index, allow_unknown, ctx)).await?))
+                }
+            }
             _ => Ok(None)
         }
     }
@@ -1267,17 +1306,24 @@ impl CodeGen {
                 }
             }
             SkyeType::Macro(macro_name, params_opt, return_expr_opt, return_type) => {
-                if let Some(params) = params_opt {
-                    if params.len() != arguments_len {
-                        ast_error!(
-                            self, expr,
-                            format!(
-                                "Expecting {} arguments for macro call but got {}",
-                                params.len(), arguments_len
-                            ).as_str()
-                        );
-
-                        return Err(ExecutionInterrupt::Error);
+                if !matches!(params_opt, MacroParams::None) {
+                    if let MacroParams::Some(params) = params_opt {
+                        if params.len() != arguments_len {
+                            ast_error!(
+                                self, expr,
+                                format!(
+                                    "Expecting {} arguments for macro call but got {}",
+                                    params.len(), arguments_len
+                                ).as_str()
+                            );
+    
+                            return Err(ExecutionInterrupt::Error);
+                        }
+                    } else {
+                        if arguments_len == 0 {
+                            ast_error!(self, expr, "Expecting at least one argument for macro call but got none");
+                            return Err(ExecutionInterrupt::Error);
+                        }
                     }
 
                     if let Some(return_expr) = return_expr_opt {
@@ -1288,39 +1334,51 @@ impl CodeGen {
                         }
 
                         let mut curr_expr = return_expr.clone();
-                        for i in 0 .. arguments_len {
-                            curr_expr = curr_expr.replace_variable(&params[i].lexeme, &arguments[i]);
-                        }
 
-                        if macro_name.as_ref() == "panic" {
-                            // panic also includes position information
-
-                            if self.debug {
-                                let panic_pos = callee_expr.get_pos();
-
+                        match params_opt {
+                            MacroParams::Some(params) => {
+                                for i in 0 .. arguments_len {
+                                    curr_expr = curr_expr.replace_variable(&params[i].lexeme, &arguments[i]);
+                                }
+    
+                                if macro_name.as_ref() == "panic" {
+                                    // panic also includes position information
+        
+                                    if self.debug {
+                                        let panic_pos = callee_expr.get_pos();
+        
+                                        curr_expr = curr_expr.replace_variable(
+                                            &Rc::from("PANIC_POS"), 
+                                            &Expression::Literal(
+                                                Rc::from(format!(
+                                                    "{}: line {}, pos {}",
+                                                    panic_pos.filename, panic_pos.line + 1, panic_pos.start
+                                                )),
+                                                Token::dummy(Rc::from("")),
+                                                LiteralKind::String
+                                            )
+                                        );
+                                    } else {
+                                        curr_expr = curr_expr.replace_variable(
+                                            &Rc::from("PANIC_POS"), 
+                                            &Expression::Literal(
+                                                Rc::from(""),
+                                                Token::dummy(Rc::from("")),
+                                                LiteralKind::String
+                                            )
+                                        );
+                                    }
+                                } 
+                            }
+                            MacroParams::Variable(var_name) => {
                                 curr_expr = curr_expr.replace_variable(
-                                    &Rc::from("PANIC_POS"), 
-                                    &Expression::Literal(
-                                        Rc::from(format!(
-                                            "{}: line {}, pos {}",
-                                            panic_pos.filename, panic_pos.line + 1, panic_pos.start
-                                        )),
-                                        Token::dummy(Rc::from("")),
-                                        LiteralKind::String
-                                    )
-                                );
-                            } else {
-                                curr_expr = curr_expr.replace_variable(
-                                    &Rc::from("PANIC_POS"), 
-                                    &Expression::Literal(
-                                        Rc::from(""),
-                                        Token::dummy(Rc::from("")),
-                                        LiteralKind::String
-                                    )
+                                    &var_name.lexeme, 
+                                    &Expression::Slice(var_name.clone(), arguments.clone())
                                 );
                             }
-                        } 
-
+                            MacroParams::None => unreachable!()
+                        }
+                        
                         ctx.run(|ctx| self.evaluate(&curr_expr, index, allow_unknown, ctx)).await
                     } else {
                         // C macro binding call
@@ -1337,13 +1395,15 @@ impl CodeGen {
                                 args.push_str(&arg.value);
                             }
 
-                            env.define(
-                                Rc::clone(&params[i].lexeme),
-                                SkyeVariable::new(
-                                    arg.type_, true,
-                                    Some(Box::new(params[i].clone()))
-                                )
-                            );
+                            if let MacroParams::Some(params) = params_opt {
+                                env.define(
+                                    Rc::clone(&params[i].lexeme),
+                                    SkyeVariable::new(
+                                        arg.type_, true,
+                                        Some(Box::new(params[i].clone()))
+                                    )
+                                );
+                            }
 
                             if i != arguments_len - 1 {
                                 args.push_str(", ");
@@ -2319,7 +2379,7 @@ impl CodeGen {
                         TokenType::At => {
                             if let SkyeType::Type(inner_type) = inner.type_ {
                                 if let SkyeType::Macro(name, params, return_expr, return_type) = &*inner_type {
-                                    if params.is_none() {
+                                    if matches!(params, MacroParams::None) {
                                         if let Some(real_return_expr) = return_expr {
                                             ctx.run(|ctx| self.evaluate(&real_return_expr, index, allow_unknown, ctx)).await
                                         } else {

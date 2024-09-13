@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use crate::{ast::{Expression, Statement}, environment::Environment, tokens::Token};
+use crate::{ast::{Expression, MacroParams, Statement}, environment::Environment, tokens::Token};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SkyeFunctionParam {
@@ -110,7 +110,7 @@ pub enum SkyeType {
     Template(Rc<str>, Statement, Vec<SkyeGeneric>, Vec<Token>, String, Rc<RefCell<Environment>>), // name definition generics generics_names curr_name environment
     Union(Rc<str>, Option<HashMap<Rc<str>, SkyeType>>), // name fields
     Bitfield(Rc<str>, Option<HashMap<Rc<str>, SkyeType>>), // name fields
-    Macro(Rc<str>, Option<Vec<Token>>, Option<Expression>, Option<Expression>), // name params return_expr return_type
+    Macro(Rc<str>, MacroParams, Option<Expression>, Option<Expression>), // name params return_expr return_type
 }
 
 impl std::fmt::Debug for SkyeType {

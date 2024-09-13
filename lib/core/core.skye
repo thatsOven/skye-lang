@@ -4,6 +4,7 @@ import <<"core/internals.h">>;
 macro typeOf(T) void; 
 macro cast(T, E) void;
 macro constCast(E) void;
+macro concat(S*) void;
 
 use @typeOf(0u8)  as u8;
 use @typeOf(0i8)  as i8;

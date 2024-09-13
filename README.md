@@ -210,6 +210,17 @@ You can create function bindings for existing C functions by using the `#bind` q
 ```
 Overloading is not allowed, however it's possible to bind different behaviors to the same function called with different types through [generics](#generics).
 
+Variable parameter length is not allowed, however it's possible to create [macros](#macros) to call functions with a variable amount of arguments:
+```
+fn printAllFunction(strings: Slice[String]) {
+    for string; strings {
+        @println("{string}");
+    }
+}
+
+macro printAll(strings*) printAllFunction(strings);
+```
+
 It's possible to create function pointers either by referencing an existing function or using the function pointer type.
 ```
 let aFunctionPointer: fn (i32) void = a;
@@ -473,6 +484,13 @@ To reference macros, the `@` operator must be used.
 let number = @costantNumber;
 @saySomething("hello!");
 let result = @A_C_MACRO(1, 1);
+```
+
+You can create macros with variable parameter length using the following syntax:
+```
+macro variableArgumentsMacro(args*) {
+    // `args` will be bound to a `Slice` of whatever arguments it got passed
+}
 ```
 
 # Main operators

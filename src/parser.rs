@@ -2,7 +2,7 @@ use convert_case::{Case, Casing};
 use std::{collections::HashMap, rc::Rc};
 
 use crate::{
-    ast::{BitfieldField, EnumVariant, Expression, FunctionParam, Generic, ImportType, LiteralKind, Statement, StructField, SwitchCase}, 
+    ast::{BitfieldField, EnumVariant, Expression, FunctionParam, Generic, ImportType, LiteralKind, MacroParams, Statement, StructField, SwitchCase}, 
     ast_error, ast_note, token_error, token_note, 
     tokens::{Token, TokenType}, 
     utils::is_valid_variant
@@ -1367,10 +1367,18 @@ impl Parser {
                     }
                 }
 
+                let ret = {
+                    if params.len() == 1 && self.match_(&[TokenType::Star]) {
+                        MacroParams::Variable(params[0].clone())
+                    } else {
+                        MacroParams::Some(params)
+                    }
+                };
+
                 self.consume(TokenType::RightParen, "Expecting ')' after macro parameters")?;
-                Some(params)
+                ret
             } else {
-                None
+                MacroParams::None
             }
         };
 
