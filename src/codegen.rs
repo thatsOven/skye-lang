@@ -1490,8 +1490,8 @@ impl CodeGen {
                     token_error!(
                         self, op,
                         format!(
-                            "This operator is not implemented for type {}",
-                            inner.type_.stringify_native()
+                            "prefix unary '{}' operator is not implemented for type {}",
+                            op_stringified, inner.type_.stringify_native()
                         ).as_ref()
                     );
 
@@ -1502,8 +1502,8 @@ impl CodeGen {
                 token_error!(
                     self, op,
                     format!(
-                        "Type {} cannot use this operator",
-                        inner.type_.stringify_native()
+                        "Type {} cannot use prefix unary '{}' operator",
+                        inner.type_.stringify_native(), op_stringified
                     ).as_ref()
                 );
 
@@ -1547,8 +1547,8 @@ impl CodeGen {
                     token_error!(
                         self, op,
                         format!(
-                            "This operator is not implemented for type {}",
-                            inner.type_.stringify_native()
+                            "postfix unary '{}' operator is not implemented for type {}",
+                            op_stringified, inner.type_.stringify_native()
                         ).as_ref()
                     );
 
@@ -1559,8 +1559,8 @@ impl CodeGen {
                 token_error!(
                     self, op,
                     format!(
-                        "Type {} cannot use this operator",
-                        inner.type_.stringify_native()
+                        "Type {} cannot use postfix unary '{}' operator",
+                        inner.type_.stringify_native(), op_stringified
                     ).as_ref()
                 );
 
@@ -1586,8 +1586,8 @@ impl CodeGen {
                     token_error!(
                         self, op,
                         format!(
-                            "This operator is not implemented for type {}",
-                            inner.type_.stringify_native()
+                            "prefix unary '{}' operator is not implemented for type {}",
+                            op_stringified, inner.type_.stringify_native()
                         ).as_ref()
                     );
 
@@ -1598,8 +1598,8 @@ impl CodeGen {
                 token_error!(
                     self, op,
                     format!(
-                        "Type {} cannot use this operator",
-                        inner.type_.stringify_native()
+                        "Type {} cannot use prefix unary '{}' operator",
+                        inner.type_.stringify_native(), op_stringified
                     ).as_ref()
                 );
 
@@ -1644,8 +1644,8 @@ impl CodeGen {
                     ast_error!(
                         self, left_expr,
                         format!(
-                            "This operator is not implemented for type {}",
-                            left.type_.stringify_native()
+                            "binary '{}' operator is not implemented for type {}",
+                            op_stringified, left.type_.stringify_native()
                         ).as_ref()
                     );
 
@@ -1656,8 +1656,8 @@ impl CodeGen {
                 ast_error!(
                     self, left_expr,
                     format!(
-                        "Type {} cannot use this operator",
-                        left.type_.stringify_native()
+                        "Type {} cannot use binary '{}' operator",
+                        left.type_.stringify_native(), op_stringified
                     ).as_ref()
                 );
 
@@ -1699,8 +1699,8 @@ impl CodeGen {
                     ast_error!(
                         self, left_expr,
                         format!(
-                            "This operator is not implemented for type {}",
-                            left.type_.stringify_native()
+                            "binary '{}' operator is not implemented for type {}",
+                            op_stringified, left.type_.stringify_native()
                         ).as_ref()
                     );
 
@@ -1711,8 +1711,8 @@ impl CodeGen {
                 ast_error!(
                     self, left_expr,
                     format!(
-                        "Type {} cannot use this operator",
-                        left.type_.stringify_native()
+                        "Type {} cannot use binary '{}' operator",
+                        left.type_.stringify_native(), op_stringified
                     ).as_ref()
                 );
 
@@ -2044,7 +2044,7 @@ impl CodeGen {
                                     token_error!(
                                         self, op,
                                         format!(
-                                            "Type {} cannot use this operator",
+                                            "Type {} cannot use '&' operator",
                                             inner.type_.stringify_native()
                                         ).as_ref()
                                     );
@@ -2080,7 +2080,7 @@ impl CodeGen {
                                     token_error!(
                                         self, op,
                                         format!(
-                                            "Type {} cannot use this operator",
+                                            "Type {} cannot use '&const' operator",
                                             inner.type_.stringify_native()
                                         ).as_ref()
                                     );
@@ -2153,7 +2153,7 @@ impl CodeGen {
                                                 token_error!(
                                                     self, op,
                                                     format!(
-                                                        "This operator is not implemented for type {}",
+                                                        "prefix unary '*' operator is not implemented for type {}",
                                                         inner.type_.stringify_native()
                                                     ).as_ref()
                                                 );
@@ -2165,7 +2165,7 @@ impl CodeGen {
                                             token_error!(
                                                 self, op,
                                                 format!(
-                                                    "Type {} cannot use this operator",
+                                                    "Type {} cannot use prefix unary '*' operator",
                                                     inner.type_.stringify_native()
                                                 ).as_ref()
                                             );
@@ -2603,7 +2603,7 @@ impl CodeGen {
                                     ast_error!(
                                         self, left_expr,
                                         format!(
-                                            "This operator is not implemented for type {}",
+                                            "binary '||' operator is not implemented for type {}",
                                             left.type_.stringify_native()
                                         ).as_ref()
                                     );
@@ -2615,7 +2615,7 @@ impl CodeGen {
                                 ast_error!(
                                     self, left_expr,
                                     format!(
-                                        "Type {} cannot use this operator",
+                                        "Type {} cannot use binary '||' operator",
                                         left.type_.stringify_native()
                                     ).as_ref()
                                 );
@@ -2689,7 +2689,7 @@ impl CodeGen {
                                     ast_error!(
                                         self, left_expr,
                                         format!(
-                                            "This operator is not implemented for type {}",
+                                            "binary '&&' operator is not implemented for type {}",
                                             left.type_.stringify_native()
                                         ).as_ref()
                                     );
@@ -2701,7 +2701,7 @@ impl CodeGen {
                                 ast_error!(
                                     self, left_expr,
                                     format!(
-                                        "Type {} cannot use this operator",
+                                        "Type {} cannot use binary '&&' operator",
                                         left.type_.stringify_native()
                                     ).as_ref()
                                 );
