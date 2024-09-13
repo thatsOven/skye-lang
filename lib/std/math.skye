@@ -1,11 +1,46 @@
+impl[T] core::Slice[T] {
+    fn max[T](const self) ?T {
+        if self.length == 0 {
+            return (?T)::None;
+        }
+
+        let max = self.ptr[0];
+        for let i = 1usz; i < self.length; i++ {
+            if self.ptr[i] > max {
+                max = self.ptr[i];
+            }
+        }
+
+        return (?T)::Some(max);
+    }
+
+    fn min[T](const self) ?T {
+        if self.length == 0 {
+            return (?T)::None;
+        }
+
+        let min = self.ptr[0];
+        for let i = 1usz; i < self.length; i++ {
+            if self.ptr[i] < min {
+                min = self.ptr[i];
+            }
+        }
+
+        return (?T)::Some(min);
+    }
+}
+
 namespace std {
     namespace math {
-        fn max[T](a: T, b: T) T {
+        fn max2[T](a: T, b: T) T {
             return a > b ? a : b;
         }
 
-        fn min[T](a: T, b: T) T {
+        fn min2[T](a: T, b: T) T {
             return a < b ? a : b;
         }
+
+        macro max(items*) items.max();
+        macro min(items*) items.min();
     }
 }

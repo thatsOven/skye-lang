@@ -250,8 +250,9 @@ impl Parser {
         let mut expr = self.primary()?;
 
         while self.match_(&[TokenType::ColonColon]) {
+            let gets_macro = self.match_(&[TokenType::At]);
             let name = self.consume(TokenType::Identifier, "Expecting property name after '::'")?.clone();
-            expr = Expression::StaticGet(Box::new(expr), name);
+            expr = Expression::StaticGet(Box::new(expr), name, gets_macro);
         }
 
         Some(expr)

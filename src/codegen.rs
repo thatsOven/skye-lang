@@ -1378,8 +1378,16 @@ impl CodeGen {
                             }
                             MacroParams::None => unreachable!()
                         }
-                        
-                        ctx.run(|ctx| self.evaluate(&curr_expr, index, allow_unknown, ctx)).await
+
+                        let old_had_error = self.had_error;
+
+                        let res = ctx.run(|ctx| self.evaluate(&curr_expr, index, allow_unknown, ctx)).await;
+
+                        if self.had_error && !old_had_error {
+                            ast_note!(expr, "This error is a result of this macro expansion");
+                        }
+
+                        res
                     } else {
                         // C macro binding call
                         let tmp_env = Rc::new(RefCell::new(Environment::with_enclosing(Rc::clone(&self.environment))));
@@ -2381,7 +2389,15 @@ impl CodeGen {
                                 if let SkyeType::Macro(name, params, return_expr, return_type) = &*inner_type {
                                     if matches!(params, MacroParams::None) {
                                         if let Some(real_return_expr) = return_expr {
-                                            ctx.run(|ctx| self.evaluate(&real_return_expr, index, allow_unknown, ctx)).await
+                                            let old_had_error = self.had_error;
+
+                                            let res = ctx.run(|ctx| self.evaluate(&real_return_expr, index, allow_unknown, ctx)).await;
+
+                                            if self.had_error && !old_had_error {
+                                                ast_note!(expr, "This error is a result of this macro expansion");
+                                            }
+
+                                            res
                                         } else {
                                             let ret_type = ctx.run(|ctx| self.evaluate(&return_type.as_ref().unwrap(), index, allow_unknown, ctx)).await?;
 
@@ -3745,16 +3761,28 @@ impl CodeGen {
 
                 Err(ExecutionInterrupt::Error)
             }
-            Expression::StaticGet(object_expr, name) => {
+            Expression::StaticGet(object_expr, name, gets_macro) => {
                 let object = ctx.run(|ctx| self.evaluate(&object_expr, index, allow_unknown, ctx)).await?;
 
                 match object.type_.static_get(name) {
                     GetResult::Ok(value, ..) => {
-                        let mut search_tok = Token::dummy(Rc::clone(&value));
+                        let mut search_tok = name.clone();
+                        search_tok.set_lexeme(&value);
+
                         let env = self.globals.borrow();
 
                         if let Some(var) = env.get(&search_tok) {
-                            return Ok(SkyeValue::new(value, var.type_, var.is_const))
+                            if *gets_macro {
+                                drop(env);
+
+                                let mut operator_token = name.clone();
+                                operator_token.set_type(TokenType::At);
+
+                                let output_expr = Expression::Unary(operator_token, Box::new(Expression::Variable(search_tok)), true);
+                                return ctx.run(|ctx| self.evaluate(&output_expr, index, allow_unknown, ctx)).await;
+                            } else {
+                                return Ok(SkyeValue::new(value, var.type_, var.is_const));
+                            }
                         } else if let SkyeType::Type(inner_type) = &object.type_ {
                             if let SkyeType::Enum(enum_name, ..) = &**inner_type {
                                 search_tok.set_lexeme(format!("{}_DOT_{}", enum_name, name.lexeme).as_ref());
@@ -6113,17 +6141,25 @@ impl CodeGen {
                 );
             }
             Statement::Macro(name, params, return_expr, return_type) => {
-                if self.curr_name != "" {
-                    token_warning!(name, "Macros do not support namespaces. This macro will be saved in the global namespace"); // +Wmacro-namespace
-                }
+                let full_name = {
+                    if return_type.is_some() {
+                        if self.curr_name != "" {
+                            token_warning!(name, "C macro bindings do not support namespaces. This macro will be saved in the global namespace"); // +Wmacro-namespace
+                        }
+
+                        Rc::clone(&name.lexeme)
+                    } else {
+                        self.get_name(&name.lexeme)
+                    }
+                };
 
                 let mut env = self.globals.borrow_mut();
                 env.define(
-                    Rc::clone(&name.lexeme),
+                    Rc::clone(&full_name),
                     SkyeVariable::new(
                         SkyeType::Type(Box::new(
                             SkyeType::Macro(
-                                Rc::clone(&name.lexeme),
+                                full_name,
                                 params.clone(),
                                 return_expr.clone(),
                                 return_type.clone()
