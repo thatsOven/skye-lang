@@ -489,134 +489,121 @@ impl CodeGen {
     }
 
     async fn handle_builtin_macros(&mut self, macro_name: &Rc<str>, arguments: &Vec<Expression>, index: usize, allow_unknown: bool, callee_expr: &Expression, ctx: &mut reblessive::Stk) -> Result<Option<SkyeValue>, ExecutionInterrupt> {
-        let is_format    = macro_name.as_ref() == "format";
-        let is_fprint    = macro_name.as_ref() == "fprint";
-        let is_fprintln  = macro_name.as_ref() == "fprintln";
-        let is_typeof    = macro_name.as_ref() == "typeOf";
-        let is_cast      = macro_name.as_ref() == "cast";
-        let is_constcast = macro_name.as_ref() == "constCast";
+        match macro_name.as_ref() {
+            "format" | "fprint" | "fprintln" => {
+                let is_format   = macro_name.as_ref() == "format";
+                let is_fprintln = macro_name.as_ref() == "fprintln";
 
-        if is_format | is_fprint | is_fprintln {
-            let first = ctx.run(|ctx| self.evaluate(&arguments[0], index, allow_unknown, ctx)).await?;
+                let first = ctx.run(|ctx| self.evaluate(&arguments[0], index, allow_unknown, ctx)).await?;
 
-            let (real_fmt_string, tok) = {
-                if let Expression::Literal(value, string_tok, kind) = &arguments[1] {
-                    if matches!(kind, LiteralKind::String) {
-                        (value, string_tok)
-                    } else {
-                        ast_error!(self, arguments[1], "Format string must be a string");
-                        return Err(ExecutionInterrupt::Error);
-                    }
-                } else {
-                    ast_error!(self, arguments[1], "Format string must be a literal");
-                    ast_note!(arguments[1], "The format string must be known at compile time for the compiler to generate the necessary code");
-                    return Err(ExecutionInterrupt::Error);
-                }
-            };
-
-            let mut splitted = self.split_interpolated_string(real_fmt_string, tok)?;
-
-            if is_fprintln {
-                splitted.push((String::from("\\n"), false));
-            }
-
-            let mut statements = Vec::new();
-            for (portion, mut interpolated) in &splitted {
-                if portion == "" {
-                    continue;
-                }
-
-                let portion_expr = {
-                    if interpolated {
-                        let mut scanner = Scanner::new(&portion, Rc::clone(&tok.filename));
-                        scanner.scan_tokens();
-
-                        if scanner.had_error {
-                            self.had_error = true;
-                            token_note!(tok, "This error occurred while lexing this interpolated string");
-                            continue;
-                        }
-
-                        let mut parser = Parser::new(scanner.tokens);
-                        if let Some(result) = parser.expression() {
-                            if let Expression::Literal(.., kind) = &result {
-                                if matches!(kind, LiteralKind::String) {
-                                    interpolated = false;
-                                }
-                            }
-
-                            result
+                let (real_fmt_string, tok) = {
+                    if let Expression::Literal(value, string_tok, kind) = &arguments[1] {
+                        if matches!(kind, LiteralKind::String) {
+                            (value, string_tok)
                         } else {
-                            self.had_error = true;
-                            token_note!(tok, "This error occurred while parsing this interpolated string");
-                            continue;
+                            ast_error!(self, arguments[1], "Format string must be a string");
+                            return Err(ExecutionInterrupt::Error);
                         }
                     } else {
-                        Expression::Literal(
-                            Rc::from(portion.as_ref()), 
-                            tok.clone(),
-                            LiteralKind::String
-                        )
+                        ast_error!(self, arguments[1], "Format string must be a literal");
+                        ast_note!(arguments[1], "The format string must be known at compile time for the compiler to generate the necessary code");
+                        return Err(ExecutionInterrupt::Error);
                     }
                 };
 
-                let evaluated = ctx.run(|ctx| self.evaluate(&portion_expr, index, allow_unknown, ctx)).await?;
-                let mut do_write = true;
-                let interpolated_expr = 'interpolated_expr_blk: {
-                    if interpolated {
-                        if SkyeType::AnyInt.is_respected_by(&evaluated.type_) {
-                            do_write = false;
+                let mut splitted = self.split_interpolated_string(real_fmt_string, tok)?;
 
-                            if is_format {
-                                break 'interpolated_expr_blk Expression::Call(
-                                    Box::new(Expression::Variable(Token::dummy(Rc::from("core_DOT_fmt_DOT_intToBuf")))),
-                                    tok.clone(),
-                                    vec![arguments[0].clone(), portion_expr]
-                                );
+                if is_fprintln {
+                    splitted.push((String::from("\\n"), false));
+                }
+
+                let mut statements = Vec::new();
+                for (portion, mut interpolated) in &splitted {
+                    if portion == "" {
+                        continue;
+                    }
+
+                    let portion_expr = {
+                        if interpolated {
+                            let mut scanner = Scanner::new(&portion, Rc::clone(&tok.filename));
+                            scanner.scan_tokens();
+
+                            if scanner.had_error {
+                                self.had_error = true;
+                                token_note!(tok, "This error occurred while lexing this interpolated string");
+                                continue;
+                            }
+
+                            let mut parser = Parser::new(scanner.tokens);
+                            if let Some(result) = parser.expression() {
+                                if let Expression::Literal(.., kind) = &result {
+                                    if matches!(kind, LiteralKind::String) {
+                                        interpolated = false;
+                                    }
+                                }
+
+                                result
                             } else {
-                                break 'interpolated_expr_blk Expression::Call(
-                                    Box::new(Expression::Variable(Token::dummy(Rc::from("core_DOT_fmt_DOT___intToFile")))),
-                                    tok.clone(),
-                                    vec![arguments[0].clone(), portion_expr]
-                                );
+                                self.had_error = true;
+                                token_note!(tok, "This error occurred while parsing this interpolated string");
+                                continue;
                             }
-                        }
-
-                        if SkyeType::AnyFloat.is_respected_by(&evaluated.type_) {
-                            do_write = false;
-
-                            if is_format {
-                                break 'interpolated_expr_blk Expression::Call(
-                                    Box::new(Expression::Variable(Token::dummy(Rc::from("core_DOT_fmt_DOT_floatToBuf")))),
-                                    tok.clone(),
-                                    vec![arguments[0].clone(), portion_expr]
-                                );
-                            } else {
-                                break 'interpolated_expr_blk Expression::Call(
-                                    Box::new(Expression::Variable(Token::dummy(Rc::from("core_DOT_fmt_DOT___floatToFile")))),
-                                    tok.clone(),
-                                    vec![arguments[0].clone(), portion_expr]
-                                );
-                            }
-                        }
-
-                        if let SkyeType::Struct(full_name, ..) = &evaluated.type_ {
-                            if full_name.as_ref() == "core_DOT_Slice_GENOF_char_GENEND_" {
-                                break 'interpolated_expr_blk portion_expr;
-                            }
-                        }
-
-                        let mut search_tok = Token::dummy(Rc::from("asString"));
-                        if self.get_method(&evaluated, &search_tok, false).is_some() {
-                            Expression::Call(
-                                Box::new(Expression::Get(
-                                    Box::new(portion_expr.clone()), search_tok
-                                )),
-                                tok.clone(), 
-                                Vec::new()
-                            )
                         } else {
-                            search_tok = Token::dummy(Rc::from("toString"));
+                            Expression::Literal(
+                                Rc::from(portion.as_ref()), 
+                                tok.clone(),
+                                LiteralKind::String
+                            )
+                        }
+                    };
+
+                    let evaluated = ctx.run(|ctx| self.evaluate(&portion_expr, index, allow_unknown, ctx)).await?;
+                    let mut do_write = true;
+                    let interpolated_expr = 'interpolated_expr_blk: {
+                        if interpolated {
+                            if SkyeType::AnyInt.is_respected_by(&evaluated.type_) {
+                                do_write = false;
+
+                                if is_format {
+                                    break 'interpolated_expr_blk Expression::Call(
+                                        Box::new(Expression::Variable(Token::dummy(Rc::from("core_DOT_fmt_DOT_intToBuf")))),
+                                        tok.clone(),
+                                        vec![arguments[0].clone(), portion_expr]
+                                    );
+                                } else {
+                                    break 'interpolated_expr_blk Expression::Call(
+                                        Box::new(Expression::Variable(Token::dummy(Rc::from("core_DOT_fmt_DOT___intToFile")))),
+                                        tok.clone(),
+                                        vec![arguments[0].clone(), portion_expr]
+                                    );
+                                }
+                            }
+
+                            if SkyeType::AnyFloat.is_respected_by(&evaluated.type_) {
+                                do_write = false;
+
+                                if is_format {
+                                    break 'interpolated_expr_blk Expression::Call(
+                                        Box::new(Expression::Variable(Token::dummy(Rc::from("core_DOT_fmt_DOT_floatToBuf")))),
+                                        tok.clone(),
+                                        vec![arguments[0].clone(), portion_expr]
+                                    );
+                                } else {
+                                    break 'interpolated_expr_blk Expression::Call(
+                                        Box::new(Expression::Variable(Token::dummy(Rc::from("core_DOT_fmt_DOT___floatToFile")))),
+                                        tok.clone(),
+                                        vec![arguments[0].clone(), portion_expr]
+                                    );
+                                }
+                            }
+
+                            if let SkyeType::Struct(full_name, ..) = &evaluated.type_ {
+                                if full_name.as_ref() == "core_DOT_Slice_GENOF_char_GENEND_" {
+                                    break 'interpolated_expr_blk portion_expr;
+                                }
+                            }
+
+                            let mut search_tok = Token::dummy(Rc::from("asString"));
                             if self.get_method(&evaluated, &search_tok, false).is_some() {
                                 Expression::Call(
                                     Box::new(Expression::Get(
@@ -626,189 +613,202 @@ impl CodeGen {
                                     Vec::new()
                                 )
                             } else {
-                                ast_error!(
-                                    self, portion_expr, 
-                                    format!(
-                                        "Type {} is not printable",
-                                        evaluated.type_.stringify_native()
-                                    ).as_ref()
-                                );
-
-                                ast_note!(portion_expr, "Implement a \"asString\" or \"toString\" method to be able to print this type");
-                                token_note!(tok, "This error occurred while evaluating this interpolated string");
-                                Expression::Literal(Rc::from(""), tok.clone(), LiteralKind::Void)
-                            }
-                        }
-                    } else {
-                        portion_expr
-                    }
-                };
-
-                if is_format {
-                    let search_tok = Token::dummy(Rc::from("pushString"));
-                    if self.get_method(&first, &search_tok, false).is_some() {
-                        if do_write {
-                            statements.push(Statement::Expression(
-                                Expression::Call(
-                                    Box::new(Expression::Get(
-                                        Box::new(arguments[0].clone()),
-                                        search_tok
-                                    )),
-                                    tok.clone(),
-                                    vec![interpolated_expr]
-                                )
-                            ));
-                        } else {
-                            statements.push(Statement::Expression(interpolated_expr));
-                        }
-                    } else {
-                        ast_error!(
-                            self, arguments[0], 
-                            format!(
-                                "Type {} is not a valid string buffer",
-                                evaluated.type_.stringify_native()
-                            ).as_ref()
-                        );
-
-                        ast_note!(arguments[0], "This type does not implement a \"pushString\" method");
-                    }
-                } else {
-                    let search_tok = Token::dummy(Rc::from("write"));
-                    if self.get_method(&first, &search_tok, false).is_some() {
-                        if do_write {
-                            statements.push(Statement::Expression(
-                                Expression::Call(
-                                    Box::new(Expression::Get(
-                                        Box::new(Expression::Call(
-                                            Box::new(Expression::Get(
-                                                Box::new(arguments[0].clone()),
-                                                search_tok
-                                            )),
-                                            tok.clone(),
-                                            vec![interpolated_expr]
+                                search_tok = Token::dummy(Rc::from("toString"));
+                                if self.get_method(&evaluated, &search_tok, false).is_some() {
+                                    Expression::Call(
+                                        Box::new(Expression::Get(
+                                            Box::new(portion_expr.clone()), search_tok
                                         )),
-                                        Token::dummy(Rc::from("panicOnError"))
-                                    )),
-                                    tok.clone(),
-                                    vec![Expression::Literal(
-                                        Rc::from("String interpolation failed writing to file"),
-                                        tok.clone(),
-                                        LiteralKind::String
-                                    )]
-                                )
-                            ));
+                                        tok.clone(), 
+                                        Vec::new()
+                                    )
+                                } else {
+                                    ast_error!(
+                                        self, portion_expr, 
+                                        format!(
+                                            "Type {} is not printable",
+                                            evaluated.type_.stringify_native()
+                                        ).as_ref()
+                                    );
+
+                                    ast_note!(portion_expr, "Implement a \"asString\" or \"toString\" method to be able to print this type");
+                                    token_note!(tok, "This error occurred while evaluating this interpolated string");
+                                    Expression::Literal(Rc::from(""), tok.clone(), LiteralKind::Void)
+                                }
+                            }
                         } else {
-                            statements.push(Statement::Expression(interpolated_expr));
+                            portion_expr
+                        }
+                    };
+
+                    if is_format {
+                        let search_tok = Token::dummy(Rc::from("pushString"));
+                        if self.get_method(&first, &search_tok, false).is_some() {
+                            if do_write {
+                                statements.push(Statement::Expression(
+                                    Expression::Call(
+                                        Box::new(Expression::Get(
+                                            Box::new(arguments[0].clone()),
+                                            search_tok
+                                        )),
+                                        tok.clone(),
+                                        vec![interpolated_expr]
+                                    )
+                                ));
+                            } else {
+                                statements.push(Statement::Expression(interpolated_expr));
+                            }
+                        } else {
+                            ast_error!(
+                                self, arguments[0], 
+                                format!(
+                                    "Type {} is not a valid string buffer",
+                                    evaluated.type_.stringify_native()
+                                ).as_ref()
+                            );
+
+                            ast_note!(arguments[0], "This type does not implement a \"pushString\" method");
                         }
                     } else {
-                        ast_error!(
-                            self, arguments[0], 
-                            format!(
-                                "Type {} is not a valid writable object",
-                                first.type_.stringify_native()
-                            ).as_ref()
-                        );
+                        let search_tok = Token::dummy(Rc::from("write"));
+                        if self.get_method(&first, &search_tok, false).is_some() {
+                            if do_write {
+                                statements.push(Statement::Expression(
+                                    Expression::Call(
+                                        Box::new(Expression::Get(
+                                            Box::new(Expression::Call(
+                                                Box::new(Expression::Get(
+                                                    Box::new(arguments[0].clone()),
+                                                    search_tok
+                                                )),
+                                                tok.clone(),
+                                                vec![interpolated_expr]
+                                            )),
+                                            Token::dummy(Rc::from("panicOnError"))
+                                        )),
+                                        tok.clone(),
+                                        vec![Expression::Literal(
+                                            Rc::from("String interpolation failed writing to file"),
+                                            tok.clone(),
+                                            LiteralKind::String
+                                        )]
+                                    )
+                                ));
+                            } else {
+                                statements.push(Statement::Expression(interpolated_expr));
+                            }
+                        } else {
+                            ast_error!(
+                                self, arguments[0], 
+                                format!(
+                                    "Type {} is not a valid writable object",
+                                    first.type_.stringify_native()
+                                ).as_ref()
+                            );
 
-                        ast_note!(arguments[0], "This type does not implement a \"write\" method");
+                            ast_note!(arguments[0], "This type does not implement a \"write\" method");
+                        }
                     }
                 }
+
+                let stmts = Statement::Block(tok.clone(), statements);
+                let _ = ctx.run(|ctx| self.execute(&stmts, index, ctx)).await;
+                Ok(Some(SkyeValue::special(SkyeType::Void)))
             }
+            "typeOf" => {
+                let inner = ctx.run(|ctx| self.evaluate(&arguments[0], index, allow_unknown, ctx)).await?;
 
-            let stmts = Statement::Block(tok.clone(), statements);
-            let _ = ctx.run(|ctx| self.execute(&stmts, index, ctx)).await;
-            Ok(Some(SkyeValue::special(SkyeType::Void)))
-        } else if is_typeof {
-            let inner = ctx.run(|ctx| self.evaluate(&arguments[0], index, allow_unknown, ctx)).await?;
+                match inner.type_ {
+                    SkyeType::Void         => ast_error!(self, arguments[0], "Cannot get type of void"),
+                    SkyeType::Type(_)      => ast_error!(self, arguments[0], "Cannot get type of type"),
+                    SkyeType::Group(..)    => ast_error!(self, arguments[0], "Cannot get type of type group"),
+                    SkyeType::Namespace(_) => ast_error!(self, arguments[0], "Cannot get type of namespace"),
+                    SkyeType::Template(..) => ast_error!(self, arguments[0], "Cannot get type of template"),
+                    SkyeType::Macro(..)    => ast_error!(self, arguments[0], "Cannot get type of macro"),
+                    _ => return Ok(Some(SkyeValue::special(SkyeType::Type(Box::new(inner.type_)))))
+                }
 
-            match inner.type_ {
-                SkyeType::Void         => ast_error!(self, arguments[0], "Cannot get type of void"),
-                SkyeType::Type(_)      => ast_error!(self, arguments[0], "Cannot get type of type"),
-                SkyeType::Group(..)    => ast_error!(self, arguments[0], "Cannot get type of type group"),
-                SkyeType::Namespace(_) => ast_error!(self, arguments[0], "Cannot get type of namespace"),
-                SkyeType::Template(..) => ast_error!(self, arguments[0], "Cannot get type of template"),
-                SkyeType::Macro(..)    => ast_error!(self, arguments[0], "Cannot get type of macro"),
-                _ => return Ok(Some(SkyeValue::special(SkyeType::Type(Box::new(inner.type_)))))
+                Ok(Some(SkyeValue::special(inner.type_)))
             }
+            "cast" => {
+                let cast_to = ctx.run(|ctx| self.evaluate(&arguments[0], index, allow_unknown, ctx)).await?;
 
-            Ok(Some(SkyeValue::special(inner.type_)))
-        } else if is_cast {
-            let cast_to = ctx.run(|ctx| self.evaluate(&arguments[0], index, allow_unknown, ctx)).await?;
+                if let SkyeType::Type(inner_type) = cast_to.type_ {
+                    let to_cast = ctx.run(|ctx| self.evaluate(&arguments[1], index, allow_unknown, ctx)).await?;
 
-            if let SkyeType::Type(inner_type) = cast_to.type_ {
-                let to_cast = ctx.run(|ctx| self.evaluate(&arguments[1], index, allow_unknown, ctx)).await?;
+                    let castable_how = to_cast.type_.is_castable_to(&inner_type);
+                    if matches!(castable_how, CastableHow::Yes | CastableHow::ConstnessLoss) {
+                        if matches!(castable_how, CastableHow::ConstnessLoss) {
+                            ast_warning!(arguments[1], "This cast discards the constness from casted type"); // +W-constness-loss
+                            ast_note!(arguments[0], "Cast to a const variant of this type");
 
-                let castable_how = to_cast.type_.is_castable_to(&inner_type);
-                if matches!(castable_how, CastableHow::Yes | CastableHow::ConstnessLoss) {
-                    if matches!(castable_how, CastableHow::ConstnessLoss) {
-                        ast_warning!(arguments[1], "This cast discards the constness from casted type"); // +W-constness-loss
-                        ast_note!(arguments[0], "Cast to a const variant of this type");
+                            if matches!(to_cast.type_, SkyeType::Pointer(..)) {
+                                ast_note!(arguments[1], "Since this is a pointer, you can also use the @constCast macro to discard its constness");
+                            }                        
+                        }
 
-                        if matches!(to_cast.type_, SkyeType::Pointer(..)) {
-                            ast_note!(arguments[1], "Since this is a pointer, you can also use the @constCast macro to discard its constness");
-                        }                        
-                    }
+                        if inner_type.equals(&to_cast.type_, EqualsLevel::ConstStrict) {
+                            ast_warning!(
+                                arguments[1], 
+                                format!(
+                                    "Casted type ({}) matches target cast type",
+                                    to_cast.type_.stringify_native()
+                                ).as_ref()
+                            ); // +W-useless-cast
 
-                    if inner_type.equals(&to_cast.type_, EqualsLevel::ConstStrict) {
-                        ast_warning!(
-                            arguments[1], 
-                            format!(
-                                "Casted type ({}) matches target cast type",
-                                to_cast.type_.stringify_native()
-                            ).as_ref()
-                        ); // +W-useless-cast
+                            ast_note!(callee_expr, "Remove this cast");
 
-                        ast_note!(callee_expr, "Remove this cast");
-
-                        Ok(Some(to_cast))
+                            Ok(Some(to_cast))
+                        } else {
+                            Ok(Some(SkyeValue::new(Rc::from(format!("({})({})", inner_type.stringify(), to_cast.value)), *inner_type, true)))
+                        }
                     } else {
-                        Ok(Some(SkyeValue::new(Rc::from(format!("({})({})", inner_type.stringify(), to_cast.value)), *inner_type, true)))
+                        ast_error!(
+                            self, arguments[1], 
+                            format!(
+                                "Type {} cannot be casted to type {}", 
+                                to_cast.type_.stringify_native(),
+                                inner_type.stringify_native()
+                            ).as_ref()
+                        );
+
+                        Ok(Some(SkyeValue::special(*inner_type)))
                     }
                 } else {
                     ast_error!(
-                        self, arguments[1], 
+                        self, arguments[0], 
                         format!(
-                            "Type {} cannot be casted to type {}", 
-                            to_cast.type_.stringify_native(),
-                            inner_type.stringify_native()
+                            "Expecting type as cast type (got {})", 
+                            cast_to.type_.stringify_native()
                         ).as_ref()
                     );
 
-                    Ok(Some(SkyeValue::special(*inner_type)))
+                    Ok(Some(SkyeValue::special(cast_to.type_)))
                 }
-            } else {
-                ast_error!(
-                    self, arguments[0], 
-                    format!(
-                        "Expecting type as cast type (got {})", 
-                        cast_to.type_.stringify_native()
-                    ).as_ref()
-                );
-
-                Ok(Some(SkyeValue::special(cast_to.type_)))
             }
-        } else if is_constcast {
-            let to_cast = ctx.run(|ctx| self.evaluate(&arguments[0], index, allow_unknown, ctx)).await?;
+            "constCast" => {
+                let to_cast = ctx.run(|ctx| self.evaluate(&arguments[0], index, allow_unknown, ctx)).await?;
 
-            if let SkyeType::Pointer(inner_type, is_const) = &to_cast.type_ {
-                if *is_const {
-                    Ok(Some(SkyeValue::new(to_cast.value, SkyeType::Pointer(inner_type.clone(), false), true)))
+                if let SkyeType::Pointer(inner_type, is_const) = &to_cast.type_ {
+                    if *is_const {
+                        Ok(Some(SkyeValue::new(to_cast.value, SkyeType::Pointer(inner_type.clone(), false), true)))
+                    } else {
+                        // no warning here because you might use this in a generic context where you don't know the type of pointer
+                        Ok(Some(to_cast))
+                    }
                 } else {
-                    // no warning here because you might use this in a generic context where you don't know the type of pointer
+                    ast_error!(
+                        self, arguments[0], 
+                        format!(
+                            "Expecting pointer as @constCast argument (got {})", 
+                            to_cast.type_.stringify_native()
+                        ).as_ref()
+                    );
+
                     Ok(Some(to_cast))
                 }
-            } else {
-                ast_error!(
-                    self, arguments[0], 
-                    format!(
-                        "Expecting pointer as @constCast argument (got {})", 
-                        to_cast.type_.stringify_native()
-                    ).as_ref()
-                );
-
-                Ok(Some(to_cast))
             }
-        } else {
-            Ok(None)
+            _ => Ok(None)
         }
     }
 
