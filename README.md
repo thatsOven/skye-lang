@@ -486,6 +486,15 @@ let number = @costantNumber;
 let result = @A_C_MACRO(1, 1);
 ```
 
+To reference macros inside namespaces, this syntax is used:
+```
+namespace myNamespace {
+    macro constantNumber 32;
+}
+
+// myNamespace::@constantNumber
+```
+
 You can create macros with variable parameter length using the following syntax:
 ```
 macro variableArgumentsMacro(args*) {
