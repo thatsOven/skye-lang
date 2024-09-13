@@ -47,7 +47,7 @@ pub fn compile(source: &String, path: Option<&Path>, filename: Rc<str>, debug: b
                 Rc::clone(&filename),
                 TokenType::Identifier,
                 Rc::from("core/core"),
-                0, 0
+                0, 1, 0
             ),
             ImportType::Default
         )
@@ -61,7 +61,7 @@ pub fn compile(source: &String, path: Option<&Path>, filename: Rc<str>, debug: b
                 Rc::clone(&filename),
                 TokenType::Identifier,
                 Rc::from(primitives.as_ref()),
-                0, 0
+                0, 1, 0
             ),
             ImportType::Default
         )
@@ -75,7 +75,7 @@ pub fn compile(source: &String, path: Option<&Path>, filename: Rc<str>, debug: b
                 filename,
                 TokenType::Identifier,
                 Rc::from("core/builtins"),
-                0, 0
+                0, 1, 0
             ),
             ImportType::Default
         )

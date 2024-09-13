@@ -88,7 +88,8 @@ impl<'a> Scanner<'a> {
             Rc::from(self.source.as_ref()), 
             Rc::clone(&self.filename), type_, 
             substring(&self.source, self.start, self.curr).into(), 
-            self.start - self.start_positions[self.line], self.line
+            self.start - self.start_positions[self.line], 
+            self.curr - self.start_positions[self.line], self.line
         ));
     }
 
@@ -334,7 +335,9 @@ impl<'a> Scanner<'a> {
                         Rc::clone(&self.filename),
                         TokenType::AnyInt, 
                         Rc::from(lexeme), 
-                        self.start - self.start_positions[self.line], self.line
+                        self.start - self.start_positions[self.line], 
+                        self.curr - self.start_positions[self.line],
+                        self.line
                     ));
                 }
             }
@@ -579,7 +582,7 @@ impl<'a> Scanner<'a> {
             Rc::from(self.source.as_ref()), 
             Rc::clone(&self.filename), 
             TokenType::EOF, Rc::from(""), 
-            0, self.line
+            0, 1, self.line
         ));
     }
 }

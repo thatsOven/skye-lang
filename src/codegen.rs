@@ -842,7 +842,7 @@ impl CodeGen {
 
                     let pos = callee_expr.get_pos();
                     let lexeme = Rc::from(result.as_ref());
-                    let tok = Token::new(pos.source, pos.filename, TokenType::String, Rc::clone(&lexeme), pos.start, pos.line);
+                    let tok = Token::new(pos.source, pos.filename, TokenType::String, Rc::clone(&lexeme), pos.start, pos.end, pos.line);
                     let output_expr = Expression::Literal(Rc::clone(&lexeme), tok, LiteralKind::String);
                     Ok(Some(ctx.run(|ctx| self.evaluate(&output_expr, index, allow_unknown, ctx)).await?))
                 }
