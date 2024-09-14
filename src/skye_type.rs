@@ -85,6 +85,31 @@ pub enum EqualsLevel {
     Permissive
 }
 
+pub struct SkyeValue {
+    pub value: Rc<str>,
+    pub type_: SkyeType,
+    pub is_const: bool,
+    pub self_info: Option<(Rc<str>, SkyeType)>
+}
+
+impl SkyeValue {
+    pub fn new(value: Rc<str>, type_: SkyeType, is_const: bool) -> Self {
+        SkyeValue { value, type_, is_const, self_info: None }
+    }
+
+    pub fn special(type_: SkyeType) -> Self {
+        SkyeValue { value: Rc::from(""), type_, is_const: true, self_info: None }
+    }
+
+    pub fn with_self_info(value: Rc<str>, type_: SkyeType, is_const: bool, self_info: (Rc<str>, SkyeType)) -> Self {
+        SkyeValue { value, type_, is_const, self_info: Some(self_info) }
+    }
+
+    pub fn follow_reference(&self) -> Self {
+        self.type_.follow_reference(self.is_const, &self.value)
+    }
+}
+
 const ALL_INTS: &[SkyeType] = &[
     SkyeType::U8, SkyeType::U16, SkyeType::U32, SkyeType::U64, SkyeType::Usz,
     SkyeType::I8, SkyeType::I16, SkyeType::I32, SkyeType::I64, SkyeType::AnyInt
@@ -100,7 +125,7 @@ pub enum SkyeType {
     Void,
     Unknown(Rc<str>), // used for type inference
 
-    Pointer(Box<SkyeType>, bool), // type is_const
+    Pointer(Box<SkyeType>, bool, bool), // type is_const is_reference
     Type(Box<SkyeType>),
     Group(Box<SkyeType>, Box<SkyeType>), // left right
     Function(Vec<SkyeFunctionParam>, Box<SkyeType>, bool), // params return_type has_body
@@ -132,7 +157,7 @@ impl std::fmt::Debug for SkyeType {
             Self::Char => write!(f, "Char"),
             Self::Void => write!(f, "Void"),
             Self::Unknown(arg0) => f.debug_tuple("Unknown").field(arg0).finish(),
-            Self::Pointer(arg0, arg1) => f.debug_tuple("Pointer").field(arg0).field(arg1).finish(),
+            Self::Pointer(arg0, arg1, arg2) => f.debug_tuple("Pointer").field(arg0).field(arg1).field(arg2).finish(),
             Self::Type(arg0) => f.debug_tuple("Type").field(arg0).finish(),
             Self::Group(arg0, arg1) => f.debug_tuple("Group").field(arg0).field(arg1).finish(),
             Self::Function(arg0, arg1, arg2) => f.debug_tuple("Function").field(arg0).field(arg1).field(arg2).finish(),
@@ -174,7 +199,7 @@ impl SkyeType {
             SkyeType::Type(inner) => inner.stringify(),
             SkyeType::Function(..) => self.mangle(),
 
-            SkyeType::Pointer(inner, _) => {
+            SkyeType::Pointer(inner, ..) => {
                 String::from(format!("{}*", inner.stringify()))
             }
 
@@ -231,11 +256,19 @@ impl SkyeType {
                 buf
             }
 
-            SkyeType::Pointer(inner, is_const) => {
+            SkyeType::Pointer(inner, is_const, is_reference) => {
+                let sym = {
+                    if *is_reference {
+                        '&'
+                    } else {
+                        '*'
+                    }
+                };
+                
                 if *is_const {
-                    String::from(format!("*const {}", inner.stringify_native()))
+                    String::from(format!("{}const {}", sym, inner.stringify_native()))
                 } else {
-                    String::from(format!("*{}", inner.stringify_native()))
+                    String::from(format!("{}{}", sym, inner.stringify_native()))
                 }
             }
 
@@ -288,7 +321,7 @@ impl SkyeType {
             SkyeType::Union(name, _) | 
             SkyeType::Bitfield(name, _) => name.to_string(),
 
-            SkyeType::Pointer(inner, _) => {
+            SkyeType::Pointer(inner, ..) => {
                 let inner_mangled = inner.mangle();
                 if inner_mangled.len() == 0 {
                     return inner_mangled;
@@ -355,24 +388,24 @@ impl SkyeType {
                     false
                 }
             }
-            SkyeType::Pointer(self_inner, self_is_const) => {
+            SkyeType::Pointer(self_inner, self_is_const, _) => {
                 match level {
                     EqualsLevel::Typewise => {
-                        if let SkyeType::Pointer(other_inner, _) = other {
+                        if let SkyeType::Pointer(other_inner, ..) = other {
                             self_inner.equals(other_inner, level)
                         } else {
                             false
                         }
                     }
                     EqualsLevel::ConstStrict => {
-                        if let SkyeType::Pointer(other_inner, other_is_const) = other {
+                        if let SkyeType::Pointer(other_inner, other_is_const, _) = other {
                             !(self_is_const ^ other_is_const) && self_inner.equals(other_inner, level)
                         } else {
                             false
                         }
                     }
                     _ => {
-                        if let SkyeType::Pointer(other_inner, other_is_const) = other {
+                        if let SkyeType::Pointer(other_inner, other_is_const, _) = other {
                             if *self_is_const {
                                 self_inner.equals(other_inner, level)
                             } else {
@@ -476,7 +509,7 @@ impl SkyeType {
 
     fn get_internal(&self, from: &Rc<str>, name: &Token, is_source_const: bool, d: usize) -> GetResult {
         match self {
-            SkyeType::Pointer(inner_type, is_pointer_const) => {
+            SkyeType::Pointer(inner_type, is_pointer_const, _) => {
                 let inner_res = inner_type.get_internal(from, name, *is_pointer_const, d + 1);
                 if let GetResult::Ok(inner_str, type_, is_const) = inner_res {
                     if d == 0 {
@@ -547,7 +580,7 @@ impl SkyeType {
 
     fn static_get_internal(&self, name: &Token, d: usize) -> GetResult {
         match self {
-            SkyeType::Pointer(inner_type, _) => inner_type.static_get_internal(name, d + 1),
+            SkyeType::Pointer(inner_type, ..) => inner_type.static_get_internal(name, d + 1),
             SkyeType::Type(inner_type) => {
                 if d == 0 {
                     inner_type.static_get_internal(name, d + 1)
@@ -571,8 +604,8 @@ impl SkyeType {
 
     pub fn get_method(&self, name: &Token, strict: bool) -> GetResult {
         match self {
-            SkyeType::Pointer(inner_type, _) => {
-                if strict {
+            SkyeType::Pointer(inner_type, _, is_reference) => {
+                if strict && !*is_reference {
                     GetResult::InvalidType
                 } else {
                     inner_type.get_method(name, strict)
@@ -589,7 +622,7 @@ impl SkyeType {
 
     fn get_self_internal(&self, from: &Rc<str>, is_source_const: bool, d: usize) -> Option<(Rc<str>, SkyeType)> {
         match self {
-            SkyeType::Pointer(inner_type, is_const) => {
+            SkyeType::Pointer(inner_type, is_const, _) => {
                 if d == 0 {
                     inner_type.get_self_internal(from, *is_const, d + 1)
                 } else {
@@ -599,9 +632,9 @@ impl SkyeType {
             }
             SkyeType::Struct(..) | SkyeType::Enum(..) => {
                 if d == 0 {
-                    Some((Rc::from(format!("&{}", from)), SkyeType::Pointer(Box::new(self.clone()), is_source_const)))
+                    Some((Rc::from(format!("&{}", from)), SkyeType::Pointer(Box::new(self.clone()), is_source_const, true)))
                 } else {
-                    Some((Rc::clone(from), SkyeType::Pointer(Box::new(self.clone()), is_source_const)))
+                    Some((Rc::clone(from), SkyeType::Pointer(Box::new(self.clone()), is_source_const, true)))
                 }
             }
             _ => None
@@ -626,17 +659,17 @@ impl SkyeType {
             SkyeType::Macro(..) => (),
 
             SkyeType::Unknown(name) => {
-                if let SkyeType::Pointer(inner_type, _) = other {
-                    data.borrow_mut().insert(Rc::clone(name), SkyeType::Pointer(inner_type.clone(), false));
+                if let SkyeType::Pointer(inner_type, ..) = other {
+                    data.borrow_mut().insert(Rc::clone(name), SkyeType::Pointer(inner_type.clone(), false, false));
                 } else {
                     data.borrow_mut().insert(Rc::clone(name), other.clone());
                 }
             }
            
-            SkyeType::Pointer(self_inner_type, _) | 
+            SkyeType::Pointer(self_inner_type, ..) | 
             SkyeType::Type(self_inner_type) => {
                 match other {
-                    SkyeType::Pointer(other_inner_type, _) | 
+                    SkyeType::Pointer(other_inner_type, ..) | 
                     SkyeType::Type(other_inner_type) => {
                         self_inner_type.infer_type_from_similar_internal(other_inner_type, data)?;
                     }
@@ -843,19 +876,24 @@ impl SkyeType {
                     SkyeType::F32 | 
                     SkyeType::F64 | 
                     SkyeType::AnyFloat | 
-                    SkyeType::Char |
-                    SkyeType::Pointer(..)
+                    SkyeType::Char
                 ) || ALL_INTS.contains(cast_to) {
                     CastableHow::Yes
+                } else if let SkyeType::Pointer(.., is_reference) = cast_to {
+                    if *is_reference {
+                        CastableHow::No
+                    } else {
+                        CastableHow::Yes
+                    }
                 } else {
                     CastableHow::No
                 }
             }
 
-            SkyeType::Pointer(_, self_is_const) => {
+            SkyeType::Pointer(_, self_is_const, _) => {
                 if matches!(cast_to, SkyeType::Usz) {
                     CastableHow::Yes
-                } else if let SkyeType::Pointer(_, cast_to_const) = cast_to {
+                } else if let SkyeType::Pointer(_, cast_to_const, _) = cast_to {
                     if *cast_to_const || !*self_is_const {
                         CastableHow::Yes
                     } else {
@@ -871,6 +909,22 @@ impl SkyeType {
                 } else {
                     CastableHow::No
                 }
+            }
+        }
+    }
+
+    pub fn follow_reference(&self, is_source_const: bool, from: &Rc<str>) -> SkyeValue {
+        match self {
+            SkyeType::Pointer(inner_type, is_const, is_reference) => {
+                if *is_reference {
+                    let value = inner_type.follow_reference(*is_const, from);
+                    SkyeValue::new(Rc::from(format!("*{}", value.value)), value.type_, value.is_const)
+                } else {
+                    SkyeValue::new(Rc::clone(from), self.clone(), is_source_const)
+                }
+            }
+            _ => {
+                SkyeValue::new(Rc::clone(from), self.clone(), is_source_const)
             }
         }
     }

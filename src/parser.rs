@@ -860,9 +860,9 @@ impl Parser {
 
                     let mut star_tok = p_name.clone();
                     if is_const {
-                        star_tok.set_type(TokenType::StarConst);
+                        star_tok.set_type(TokenType::RefConst);
                     } else {
-                        star_tok.set_type(TokenType::Star)
+                        star_tok.set_type(TokenType::BitwiseAnd)
                     }
 
                     type_ = Expression::Unary(star_tok, Box::new(type_), true);

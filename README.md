@@ -226,6 +226,51 @@ It's possible to create function pointers either by referencing an existing func
 let aFunctionPointer: fn (i32) void = a;
 aFunctionPointer(3);
 ```
+# Pointers
+There are two types of pointers in Skye: the raw pointer, and the reference. 
+
+Pointers are their own type. They point to a location in memory, support pointer arithmetics, and behave as an indipendent type.
+On the other hand, references internally work like pointers, but they just operate as the underlying data type. For example, if you have two references to `i32`s, you can add them directly without dereferencing them, because the compiler does it automatically.
+
+Pointers and references also have their own `const`ness associated to them. If a pointer or a reference are `const`, the value they point to cannot be mutated.
+
+Pointer and reference types are created with the prefix `*` and `&` operators respectively, and a `const` keyword can be added to create a `const` pointer or reference.
+
+```
+let a = 2;
+// the address pointed by these pointers can be mutated
+let aPtr: *i32 = &a; // a can be mutated through this pointer
+let aConstPtr: *const i32 = &a; // a cannot be mutated through this pointer
+let anotherConstPtr = &const a; // you can also use the `&const` operator to create a const pointer
+
+// the address pointed by these pointers cannot be mutated
+const constAPtr: *i32 = &a; // a can be mutated through this pointer
+const constAConstPtr: *const i32 = &a; // a cannot be mutated through this pointer
+
+let b = 3;
+const refA: &const i32 = &a; // a cannot be mutated through this reference
+const refB: &i32 = &b; // b can be mutated through this reference
+
+let result = refA + refB; // equivalent to a + b (= 5)
+```
+
+If a function parameter is defined as a reference, the compiler will automatically create a reference for you if the function gets passed the value directly.
+
+```
+fn add(const a: &const i32, const b: &const i32) i32 {
+    return a + b;
+}
+
+fn main() {
+    const a = 2;
+    const b = 3;
+
+    // these are both valid
+    const result = add(a, b); // here, the compiler will automatically pass the values by reference
+    const resultAgain = add(&a, &b);
+}
+```
+
 # Qualifiers
 It's possible to use C qualifiers on function and variable declarations using the `#` operator
 ```
@@ -549,7 +594,7 @@ struct Vector {
 }
 
 impl Vector {
-    fn __add__(const self, const other: *const Self) Self {
+    fn __add__(const self, const other: &const Self) Self {
         return Vector.{ x: self.x + other.x, y: self.y + other.y };
     }
 }

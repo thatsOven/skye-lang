@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, env, ffi::OsString, path::{Path, PathBuf}, rc::Rc};
 
 use crate::{
-    ast::{Expression, FunctionParam, ImportType, LiteralKind, MacroParams, Statement}, ast_error, ast_info, ast_note, ast_warning, environment::{Environment, SkyeVariable}, parse_file, parser::Parser, scanner::Scanner, skye_type::{CastableHow, EqualsLevel, GetResult, ImplementsHow, Operator, SkyeEnumVariant, SkyeFunctionParam, SkyeGeneric, SkyeType}, token_error, token_note, token_warning, tokens::{Token, TokenType}, utils::{fix_raw_string, get_real_string_length, note}, SKYE_PATH_VAR
+    ast::{Expression, FunctionParam, ImportType, LiteralKind, MacroParams, Statement}, ast_error, ast_info, ast_note, ast_warning, environment::{Environment, SkyeVariable}, parse_file, parser::Parser, scanner::Scanner, skye_type::{CastableHow, EqualsLevel, GetResult, ImplementsHow, Operator, SkyeEnumVariant, SkyeFunctionParam, SkyeGeneric, SkyeType, SkyeValue}, token_error, token_note, token_warning, tokens::{Token, TokenType}, utils::{fix_raw_string, get_real_string_length, note}, SKYE_PATH_VAR
 };
 
 const OUTPUT_INDENT_SPACES: usize = 4;
@@ -91,27 +91,6 @@ const I32_MAIN_PLUS_ARGS: &str = concat!(
     "}\n\n"
 );
 
-struct SkyeValue {
-    value: Rc<str>,
-    type_: SkyeType,
-    is_const: bool,
-    pub self_info: Option<(Rc<str>, SkyeType)>
-}
-
-impl SkyeValue {
-    pub fn new(value: Rc<str>, type_: SkyeType, is_const: bool) -> Self {
-        SkyeValue { value, type_, is_const, self_info: None }
-    }
-
-    pub fn special(type_: SkyeType) -> Self {
-        SkyeValue { value: Rc::from(""), type_, is_const: true, self_info: None }
-    }
-
-    pub fn with_self_info(value: Rc<str>, type_: SkyeType, is_const: bool, self_info: (Rc<str>, SkyeType)) -> Self {
-        SkyeValue { value, type_, is_const, self_info: Some(self_info) }
-    }
-}
-
 #[derive(Clone, Debug)]
 enum CurrentFn {
     None,
@@ -196,7 +175,8 @@ impl CodeGen {
             SkyeVariable::new(
                 SkyeType::Type(
                     Box::new(SkyeType::Pointer(
-                        Box::new(SkyeType::Void), false
+                        Box::new(SkyeType::Void), 
+                        false, false
                     ))
                 ),
                 true, None
@@ -789,9 +769,9 @@ impl CodeGen {
             "constCast" => {
                 let to_cast = ctx.run(|ctx| self.evaluate(&arguments[0], index, allow_unknown, ctx)).await?;
 
-                if let SkyeType::Pointer(inner_type, is_const) = &to_cast.type_ {
+                if let SkyeType::Pointer(inner_type, is_const, is_reference) = &to_cast.type_ {
                     if *is_const {
-                        Ok(Some(SkyeValue::new(to_cast.value, SkyeType::Pointer(inner_type.clone(), false), true)))
+                        Ok(Some(SkyeValue::new(to_cast.value, SkyeType::Pointer(inner_type.clone(), false, *is_reference), true)))
                     } else {
                         // no warning here because you might use this in a generic context where you don't know the type of pointer
                         Ok(Some(to_cast))
@@ -905,7 +885,7 @@ impl CodeGen {
                     let arg = 'argblock: {
                         if i == 0 {
                             if let Some((info_val, info_type)) = &callee.self_info {
-                                if let SkyeType::Pointer(_, is_const) = info_type {
+                                if let SkyeType::Pointer(_, is_const, _) = info_type {
                                     break 'argblock SkyeValue::new(
                                         Rc::clone(info_val),
                                         info_type.clone(),
@@ -920,9 +900,34 @@ impl CodeGen {
                         ctx.run(|ctx| self.evaluate(&arguments[i - arguments_mod], index, allow_unknown, ctx)).await?
                     };
 
-                    if params[i].type_.equals(&arg.type_, EqualsLevel::Permissive) {
-                        if !params[i].type_.equals(&arg.type_, EqualsLevel::Strict) {
-                            if i == 0 && arguments_mod == 1 {
+                    let is_self = i == 0 && arguments_mod == 1;
+
+                    let new_arg = {
+                        if is_self {
+                            arg
+                        } else if let SkyeType::Pointer(.., is_reference) = &params[i].type_ {
+                            if *is_reference && !matches!(arg.type_, SkyeType::Pointer(..)) {
+                                // automatically create reference for pass-by-reference params
+                                let arg_pos = arguments[i - arguments_mod].get_pos();
+                                let custom_tok = Token::new(
+                                    arg_pos.source, arg_pos.filename, 
+                                    TokenType::BitwiseAnd, Rc::from(""), 
+                                    arg_pos.start, arg_pos.end, arg_pos.line
+                                );
+
+                                let ref_expr = Expression::Unary(custom_tok, Box::new(arguments[i - arguments_mod].clone()), true);
+                                ctx.run(|ctx| self.evaluate(&ref_expr, index, allow_unknown, ctx)).await?
+                            } else {
+                                arg
+                            }
+                        } else {
+                            arg
+                        }
+                    };
+
+                    if params[i].type_.equals(&new_arg.type_, EqualsLevel::Permissive) {
+                        if !params[i].type_.equals(&new_arg.type_, EqualsLevel::Strict) {
+                            if is_self {
                                 if let Some((_, self_type)) = &callee.self_info {
                                     ast_error!(
                                         self, callee_expr,
@@ -939,34 +944,34 @@ impl CodeGen {
                                     self, arguments[i - arguments_mod],
                                     format!(
                                         "Argument type does not match parameter type (expecting {} but got {})",
-                                        params[i].type_.stringify_native(), arg.type_.stringify_native()
+                                        params[i].type_.stringify_native(), new_arg.type_.stringify_native()
                                     ).as_ref()
                                 );
                             }
                         }
                     } else {
-                        if i == 0 && arguments_mod == 1 {
+                        if is_self {
                             ast_error!(self, callee_expr, "This method cannot be called from a const source");
                         } else {
                             ast_error!(
                                 self, arguments[i - arguments_mod],
                                 format!(
                                     "Argument type does not match parameter type (expecting {} but got {})",
-                                    params[i].type_.stringify_native(), arg.type_.stringify_native()
+                                    params[i].type_.stringify_native(), new_arg.type_.stringify_native()
                                 ).as_ref()
                             );
                         }
                     }
 
                     let search_tok = Token::dummy(Rc::from("__copy__"));
-                    if let Some(value) = self.get_method(&arg, &search_tok, true) {
+                    if let Some(value) = self.get_method(&new_arg, &search_tok, true) {
                         let v = Vec::new();
                         let copy_constructor = ctx.run(|ctx| self.call(&value, expr, &arguments[i - arguments_mod], &v, index, allow_unknown, ctx)).await?;
                         args.push_str(&copy_constructor.value);
 
                         ast_info!(arguments[i - arguments_mod], "Skye inserted a copy constructor call for this expression"); // +I-copies
                     } else {
-                        args.push_str(&arg.value);
+                        args.push_str(&new_arg.value);
                     }
 
                     if i != arguments_len - 1 {
@@ -1007,7 +1012,7 @@ impl CodeGen {
                         let call_evaluated = 'argblock: {
                             if i == 0 {
                                 if let Some((info_val, info_type)) = &callee.self_info {
-                                    if let SkyeType::Pointer(_, is_const) = info_type {
+                                    if let SkyeType::Pointer(_, is_const, _) = info_type {
                                         break 'argblock SkyeValue::new(
                                             Rc::clone(info_val),
                                             info_type.clone(),
@@ -1055,6 +1060,35 @@ impl CodeGen {
                             }
                         };
 
+                        let is_self = i == 0 && arguments_mod == 1;
+
+                        let new_call_evaluated = {
+                            if is_self {
+                                call_evaluated
+                            } else if let SkyeType::Type(inner_type) = &def_type {
+                                if let SkyeType::Pointer(.., is_reference) = **inner_type {
+                                    if is_reference && !matches!(call_evaluated.type_, SkyeType::Pointer(..)) {
+                                        // automatically create reference for pass-by-reference params
+                                        let arg_pos = arguments[i - arguments_mod].get_pos();
+                                        let custom_tok = Token::new(
+                                            arg_pos.source, arg_pos.filename, 
+                                            TokenType::BitwiseAnd, Rc::from(""), 
+                                            arg_pos.start, arg_pos.end, arg_pos.line
+                                        );
+        
+                                        let ref_expr = Expression::Unary(custom_tok, Box::new(arguments[i - arguments_mod].clone()), true);
+                                        ctx.run(|ctx| self.evaluate(&ref_expr, index, allow_unknown, ctx)).await?
+                                    } else {
+                                        call_evaluated
+                                    }
+                                } else {
+                                    call_evaluated
+                                }
+                            } else {
+                                call_evaluated
+                            }
+                        };
+
                         if !def_type.check_completeness() {
                             ast_error!(self, params[i].type_, "Cannot use incomplete type directly");
                             ast_note!(params[i].type_, "Define this type or reference it through a pointer");
@@ -1062,8 +1096,8 @@ impl CodeGen {
                         }
 
                         if let SkyeType::Type(inner_type) = &def_type {
-                            if inner_type.equals(&call_evaluated.type_, EqualsLevel::Permissive) {
-                                if let Some(inferred) = inner_type.infer_type_from_similar(&call_evaluated.type_) {
+                            if inner_type.equals(&new_call_evaluated.type_, EqualsLevel::Permissive) {
+                                if let Some(inferred) = inner_type.infer_type_from_similar(&new_call_evaluated.type_) {
                                     for (generic_name, generic_type) in inferred {
                                         if generics_to_find.get(&generic_name).unwrap().is_none() {
                                             let wrapped = SkyeType::Type(Box::new(generic_type));
@@ -1107,7 +1141,7 @@ impl CodeGen {
                                             self, arguments[i - arguments_mod],
                                             format!(
                                                 "Argument type does not match parameter type (expecting {} but got {})",
-                                                inner_type.stringify_native(), call_evaluated.type_.stringify_native()
+                                                inner_type.stringify_native(), new_call_evaluated.type_.stringify_native()
                                             ).as_ref()
                                         );
 
@@ -1123,7 +1157,7 @@ impl CodeGen {
                                         self, arguments[i - arguments_mod],
                                         format!(
                                             "Argument type does not match parameter type (expecting {} but got {})",
-                                            inner_type.stringify_native(), call_evaluated.type_.stringify_native()
+                                            inner_type.stringify_native(), new_call_evaluated.type_.stringify_native()
                                         ).as_ref()
                                     );
 
@@ -1143,7 +1177,7 @@ impl CodeGen {
                         }
 
                         let search_tok = Token::dummy(Rc::from("__copy__"));
-                        if let Some(value) = self.get_method(&call_evaluated, &search_tok, true) {
+                        if let Some(value) = self.get_method(&new_call_evaluated, &search_tok, true) {
                             let loc_callee_expr = {
                                 if i != 0 || arguments_mod != 1 {
                                     &arguments[i - arguments_mod]
@@ -1158,7 +1192,7 @@ impl CodeGen {
 
                             ast_info!(loc_callee_expr, "Skye inserted a copy constructor call for this expression"); // +I-copies
                         } else {
-                            args.push_str(&call_evaluated.value);
+                            args.push_str(&new_call_evaluated.value);
                         }
 
                         if i != arguments_len - 1 {
@@ -1575,11 +1609,13 @@ impl CodeGen {
         op_type: Operator, op: &Token, index: usize, allow_unknown: bool,
         ctx: &mut reblessive::Stk
     ) -> Result<SkyeValue, ExecutionInterrupt> {
-        match inner.type_.implements_op(op_type) {
-            ImplementsHow::Native(_) => Ok(SkyeValue::new(Rc::from(format!("{}{}", op_stringified, inner.value)), inner.type_, false)),
+        let new_inner = inner.follow_reference();
+
+        match new_inner.type_.implements_op(op_type) {
+            ImplementsHow::Native(_) => Ok(SkyeValue::new(Rc::from(format!("{}{}", op_stringified, new_inner.value)), new_inner.type_, false)),
             ImplementsHow::ThirdParty => {
                 let search_tok = Token::dummy(Rc::from(op_method));
-                if let Some(value) = self.get_method(&inner, &search_tok, true) {
+                if let Some(value) = self.get_method(&new_inner, &search_tok, true) {
                     let v = Vec::new();
                     ctx.run(|ctx| self.call(&value, expr, inner_expr, &v, index, allow_unknown, ctx)).await
                 } else {
@@ -1587,7 +1623,7 @@ impl CodeGen {
                         self, op,
                         format!(
                             "prefix unary '{}' operator is not implemented for type {}",
-                            op_stringified, inner.type_.stringify_native()
+                            op_stringified, new_inner.type_.stringify_native()
                         ).as_ref()
                     );
 
@@ -1599,7 +1635,7 @@ impl CodeGen {
                     self, op,
                     format!(
                         "Type {} cannot use prefix unary '{}' operator",
-                        inner.type_.stringify_native(), op_stringified
+                        new_inner.type_.stringify_native(), op_stringified
                     ).as_ref()
                 );
 
@@ -1609,26 +1645,32 @@ impl CodeGen {
     }
 
     async fn binary_operator(
-        &mut self, left: SkyeValue, return_type: SkyeType,
+        &mut self, left: SkyeValue, forced_return_type: Option<SkyeType>,
         left_expr: &Expression, right_expr: &Expression, expr: &Expression,
         op_stringified: &str, op_method: &str, op_type: Operator,
         index: usize, allow_unknown: bool, ctx: &mut reblessive::Stk
     ) -> Result<SkyeValue, ExecutionInterrupt> {
-        match left.type_.implements_op(op_type) {
-            ImplementsHow::Native(compatible_types) => {
-                let right = ctx.run(|ctx| self.evaluate(&right_expr, index, allow_unknown, ctx)).await?;
+        let new_left = left.follow_reference();
 
-                if matches!(left.type_, SkyeType::Unknown(_)) ||
-                   left.type_.equals(&right.type_, EqualsLevel::Typewise) ||
-                   compatible_types.contains(&right.type_)
+        match new_left.type_.implements_op(op_type) {
+            ImplementsHow::Native(compatible_types) => {
+                let right = ctx.run(|ctx| self.evaluate(&right_expr, index, allow_unknown, ctx)).await?.follow_reference();
+
+                if matches!(new_left.type_, SkyeType::Unknown(_)) ||
+                    new_left.type_.equals(&right.type_, EqualsLevel::Typewise) ||
+                    compatible_types.contains(&right.type_)
                 {
-                    Ok(SkyeValue::new(Rc::from(format!("{} {} {}", left.value, op_stringified, right.value)), return_type, false))
+                    if let Some(type_) = forced_return_type {
+                        Ok(SkyeValue::new(Rc::from(format!("{} {} {}", new_left.value, op_stringified, right.value)), type_, false))
+                    } else {
+                        Ok(SkyeValue::new(Rc::from(format!("{} {} {}", new_left.value, op_stringified, right.value)), new_left.type_, false))
+                    }
                 } else {
                     ast_error!(
                         self, right_expr,
                         format!(
                             "Left operand type ({}) does not match right operand type ({})",
-                            left.type_.stringify_native(), right.type_.stringify_native()
+                            new_left.type_.stringify_native(), right.type_.stringify_native()
                         ).as_ref()
                     );
 
@@ -1637,7 +1679,7 @@ impl CodeGen {
             }
             ImplementsHow::ThirdParty => {
                 let search_tok = Token::dummy(Rc::from(op_method));
-                if let Some(value) = self.get_method(&left, &search_tok, true) {
+                if let Some(value) = self.get_method(&new_left, &search_tok, true) {
                     let args = vec![right_expr.clone()];
                     ctx.run(|ctx| self.call(&value, expr, left_expr, &args, index, allow_unknown, ctx)).await
                 } else {
@@ -1645,7 +1687,7 @@ impl CodeGen {
                         self, left_expr,
                         format!(
                             "binary '{}' operator is not implemented for type {}",
-                            op_stringified, left.type_.stringify_native()
+                            op_stringified, new_left.type_.stringify_native()
                         ).as_ref()
                     );
 
@@ -1657,7 +1699,7 @@ impl CodeGen {
                     self, left_expr,
                     format!(
                         "Type {} cannot use binary '{}' operator",
-                        left.type_.stringify_native(), op_stringified
+                        new_left.type_.stringify_native(), op_stringified
                     ).as_ref()
                 );
 
@@ -1667,17 +1709,19 @@ impl CodeGen {
     }
 
     async fn binary_operator_int_on_right(
-        &mut self, left: SkyeValue, return_type: SkyeType,
-        left_expr: &Expression, right_expr: &Expression, expr: &Expression,
-        op_stringified: &str, op_method: &str, op_type: Operator,
-        index: usize, allow_unknown: bool, ctx: &mut reblessive::Stk
+        &mut self, left: SkyeValue, left_expr: &Expression, 
+        right_expr: &Expression, expr: &Expression, op_stringified: &str, 
+        op_method: &str, op_type: Operator, index: usize, allow_unknown: bool, 
+        ctx: &mut reblessive::Stk
     ) -> Result<SkyeValue, ExecutionInterrupt> {
-        match left.type_.implements_op(op_type) {
+        let new_left = left.follow_reference();
+
+        match new_left.type_.implements_op(op_type) {
             ImplementsHow::Native(_) => {
-                let right = ctx.run(|ctx| self.evaluate(&right_expr, index, allow_unknown, ctx)).await?;
+                let right = ctx.run(|ctx| self.evaluate(&right_expr, index, allow_unknown, ctx)).await?.follow_reference();
 
                 if right.type_.equals(&SkyeType::AnyInt, EqualsLevel::Typewise) {
-                    Ok(SkyeValue::new(Rc::from(format!("{} {} {}", left.value, op_stringified, right.value)), return_type, false))
+                    Ok(SkyeValue::new(Rc::from(format!("{} {} {}", new_left.value, op_stringified, right.value)), new_left.type_, false))
                 } else {
                     ast_error!(
                         self, right_expr,
@@ -1692,7 +1736,7 @@ impl CodeGen {
             }
             ImplementsHow::ThirdParty => {
                 let search_tok = Token::dummy(Rc::from(op_method));
-                if let Some(value) = self.get_method(&left, &search_tok, true) {
+                if let Some(value) = self.get_method(&new_left, &search_tok, true) {
                     let args = vec![right_expr.clone()];
                     ctx.run(|ctx| self.call(&value, expr, left_expr, &args, index, allow_unknown, ctx)).await
                 } else {
@@ -1700,7 +1744,7 @@ impl CodeGen {
                         self, left_expr,
                         format!(
                             "binary '{}' operator is not implemented for type {}",
-                            op_stringified, left.type_.stringify_native()
+                            op_stringified, new_left.type_.stringify_native()
                         ).as_ref()
                     );
 
@@ -1712,7 +1756,7 @@ impl CodeGen {
                     self, left_expr,
                     format!(
                         "Type {} cannot use binary '{}' operator",
-                        left.type_.stringify_native(), op_stringified
+                        new_left.type_.stringify_native(), op_stringified
                     ).as_ref()
                 );
 
@@ -1849,7 +1893,7 @@ impl CodeGen {
                     LiteralKind::Char => Ok(SkyeValue::new(Rc::from(format!("'{}'", value)), SkyeType::Char, true)),
                     LiteralKind::RawString => {
                         if let Some(string_const) = self.strings.get(value) {
-                            Ok(SkyeValue::new(Rc::from(format!("SKYE_STRING_{}", string_const)), SkyeType::Pointer(Box::new(SkyeType::Char), true), true))
+                            Ok(SkyeValue::new(Rc::from(format!("SKYE_STRING_{}", string_const)), SkyeType::Pointer(Box::new(SkyeType::Char), true, false), true))
                         } else {
                             let str_index = self.strings.len();
                             self.strings_code.push(format!(
@@ -1858,7 +1902,7 @@ impl CodeGen {
                             ).as_ref());
 
                             self.strings.insert(Rc::clone(value), str_index);
-                            Ok(SkyeValue::new(Rc::from(format!("SKYE_STRING_{}", str_index)), SkyeType::Pointer(Box::new(SkyeType::Char), true), true))
+                            Ok(SkyeValue::new(Rc::from(format!("SKYE_STRING_{}", str_index)), SkyeType::Pointer(Box::new(SkyeType::Char), true, false), true))
                         }
                     }
                     LiteralKind::String => {
@@ -1910,7 +1954,9 @@ impl CodeGen {
                 if *is_prefix {
                     match op.type_ {
                         TokenType::PlusPlus => {
-                            if inner.is_const {
+                            let new_inner = inner.follow_reference();
+
+                            if new_inner.is_const {
                                 ast_error!(self, inner_expr, "Cannot apply '++' operator on const value");
                                 Err(ExecutionInterrupt::Error)
                             } else if !inner_expr.is_valid_assignment_target() {
@@ -1918,13 +1964,15 @@ impl CodeGen {
                                 Err(ExecutionInterrupt::Error)
                             } else {
                                 ctx.run(|ctx| self.pre_eval_unary_operator(
-                                    inner, inner_expr, expr, "++",
+                                    new_inner, inner_expr, expr, "++",
                                     "__inc__", Operator::Inc, op, index, allow_unknown, ctx
                                 )).await
                             }
                         }
                         TokenType::MinusMinus => {
-                            if inner.is_const {
+                            let new_inner = inner.follow_reference();
+
+                            if new_inner.is_const {
                                 ast_error!(self, inner_expr, "Cannot apply '--' operator on const value");
                                 Err(ExecutionInterrupt::Error)
                             } else if !inner_expr.is_valid_assignment_target() {
@@ -1932,7 +1980,7 @@ impl CodeGen {
                                 Err(ExecutionInterrupt::Error)
                             } else {
                                 ctx.run(|ctx| self.pre_eval_unary_operator(
-                                    inner, inner_expr, expr, "--",
+                                    new_inner, inner_expr, expr, "--",
                                     "__dec__", Operator::Dec, op, index, allow_unknown, ctx
                                 )).await
                             }
@@ -2018,80 +2066,112 @@ impl CodeGen {
                             )).await
                         }
                         TokenType::BitwiseAnd => {
-                            match inner.type_.implements_op(Operator::Ref) {
-                                ImplementsHow::Native(_) | ImplementsHow::ThirdParty => {
-                                    let value = {
-                                        if inner_expr.is_valid_assignment_target() {
-                                            inner.value
-                                        } else {
-                                            let tmp_var = self.get_temporary_var();
-
-                                            self.definitions[index].push_indent();
-                                            self.definitions[index].push(&inner.type_.stringify());
-                                            self.definitions[index].push(" ");
-                                            self.definitions[index].push(&tmp_var);
-                                            self.definitions[index].push(" = ");
-                                            self.definitions[index].push(&inner.value);
-                                            self.definitions[index].push(";\n");
-
-                                            Rc::from(tmp_var)
-                                        }
-                                    };
-
-                                    Ok(SkyeValue::new(Rc::from(format!("&{}", value)), SkyeType::Pointer(Box::new(inner.type_), inner.is_const), true))
+                            match inner.type_ {
+                                SkyeType::Type(type_type) => {
+                                    Ok(SkyeValue::new(
+                                        Rc::from(format!("{}*", inner.value)),
+                                        SkyeType::Type(Box::new(SkyeType::Pointer(type_type, false, true))),
+                                        true
+                                    ))
                                 }
-                                ImplementsHow::No => {
-                                    token_error!(
-                                        self, op,
-                                        format!(
-                                            "Type {} cannot use '&' operator",
-                                            inner.type_.stringify_native()
-                                        ).as_ref()
-                                    );
+                                SkyeType::Unknown(_) => {
+                                    Ok(SkyeValue::special(SkyeType::Type(Box::new(SkyeType::Pointer(Box::new(inner.type_), false, true)))))
+                                }
+                                _ => {
+                                    let new_inner = inner.follow_reference();
 
-                                    Err(ExecutionInterrupt::Error)
+                                    match new_inner.type_.implements_op(Operator::Ref) {
+                                        ImplementsHow::Native(_) | ImplementsHow::ThirdParty => {
+                                            let value = {
+                                                if inner_expr.is_valid_assignment_target() {
+                                                    new_inner.value
+                                                } else {
+                                                    let tmp_var = self.get_temporary_var();
+        
+                                                    self.definitions[index].push_indent();
+                                                    self.definitions[index].push(&new_inner.type_.stringify());
+                                                    self.definitions[index].push(" ");
+                                                    self.definitions[index].push(&tmp_var);
+                                                    self.definitions[index].push(" = ");
+                                                    self.definitions[index].push(&new_inner.value);
+                                                    self.definitions[index].push(";\n");
+        
+                                                    Rc::from(tmp_var)
+                                                }
+                                            };
+        
+                                            Ok(SkyeValue::new(Rc::from(format!("&{}", value)), SkyeType::Pointer(Box::new(new_inner.type_), new_inner.is_const, false), true))
+                                        }
+                                        ImplementsHow::No => {
+                                            token_error!(
+                                                self, op,
+                                                format!(
+                                                    "Type {} cannot use '&' operator",
+                                                    inner.type_.stringify_native()
+                                                ).as_ref()
+                                            );
+        
+                                            Err(ExecutionInterrupt::Error)
+                                        }
+                                    }
                                 }
                             }
                         }
                         TokenType::RefConst => {
-                            match inner.type_.implements_op(Operator::ConstRef) {
-                                ImplementsHow::Native(_) | ImplementsHow::ThirdParty => {
-                                    let value = {
-                                        if inner_expr.is_valid_assignment_target() {
-                                            inner.value
-                                        } else {
-                                            let tmp_var = self.get_temporary_var();
-
-                                            self.definitions[index].push_indent();
-                                            self.definitions[index].push(&inner.type_.stringify());
-                                            self.definitions[index].push(" ");
-                                            self.definitions[index].push(&tmp_var);
-                                            self.definitions[index].push(" = ");
-                                            self.definitions[index].push(&inner.value);
-                                            self.definitions[index].push(";\n");
-
-                                            Rc::from(tmp_var)
-                                        }
-                                    };
-
-                                    Ok(SkyeValue::new(Rc::from(format!("&{}", value)), SkyeType::Pointer(Box::new(inner.type_), true), true))
+                            match inner.type_ {
+                                SkyeType::Type(type_type) => {
+                                    Ok(SkyeValue::new(
+                                        Rc::from(format!("{}*", inner.value)),
+                                        SkyeType::Type(Box::new(SkyeType::Pointer(type_type, true, true))),
+                                        true
+                                    ))
                                 }
-                                ImplementsHow::No => {
-                                    token_error!(
-                                        self, op,
-                                        format!(
-                                            "Type {} cannot use '&const' operator",
-                                            inner.type_.stringify_native()
-                                        ).as_ref()
-                                    );
+                                SkyeType::Unknown(_) => {
+                                    Ok(SkyeValue::special(SkyeType::Type(Box::new(SkyeType::Pointer(Box::new(inner.type_), true, true)))))
+                                }
+                                _ => {
+                                    let new_inner = inner.follow_reference();
 
-                                    Err(ExecutionInterrupt::Error)
+                                    match new_inner.type_.implements_op(Operator::ConstRef) {
+                                        ImplementsHow::Native(_) | ImplementsHow::ThirdParty => {
+                                            let value = {
+                                                if inner_expr.is_valid_assignment_target() {
+                                                    new_inner.value
+                                                } else {
+                                                    let tmp_var = self.get_temporary_var();
+
+                                                    self.definitions[index].push_indent();
+                                                    self.definitions[index].push(&new_inner.type_.stringify());
+                                                    self.definitions[index].push(" ");
+                                                    self.definitions[index].push(&tmp_var);
+                                                    self.definitions[index].push(" = ");
+                                                    self.definitions[index].push(&new_inner.value);
+                                                    self.definitions[index].push(";\n");
+
+                                                    Rc::from(tmp_var)
+                                                }
+                                            };
+
+                                            Ok(SkyeValue::new(Rc::from(format!("&{}", value)), SkyeType::Pointer(Box::new(new_inner.type_), true, false), true))
+                                        }
+                                        ImplementsHow::No => {
+                                            token_error!(
+                                                self, op,
+                                                format!(
+                                                    "Type {} cannot use '&const' operator",
+                                                    new_inner.type_.stringify_native()
+                                                ).as_ref()
+                                            );
+
+                                            Err(ExecutionInterrupt::Error)
+                                        }
+                                    }
                                 }
                             }
                         }
                         TokenType::Star => {
                             match inner.type_ {
-                                SkyeType::Pointer(ptr_type, is_const) => {
+                                SkyeType::Pointer(ptr_type, is_const, _) => {
                                     if matches!(*ptr_type, SkyeType::Void) {
                                         ast_error!(self, inner_expr, "Cannot dereference a voidptr");
                                         Err(ExecutionInterrupt::Error)
@@ -2102,12 +2182,12 @@ impl CodeGen {
                                 SkyeType::Type(type_type) => {
                                     Ok(SkyeValue::new(
                                         Rc::from(format!("{}*", inner.value)),
-                                        SkyeType::Type(Box::new(SkyeType::Pointer(type_type, false))),
+                                        SkyeType::Type(Box::new(SkyeType::Pointer(type_type, false, false))),
                                         true
                                     ))
                                 }
                                 SkyeType::Unknown(_) => {
-                                    Ok(SkyeValue::special(SkyeType::Type(Box::new(SkyeType::Pointer(Box::new(inner.type_), false)))))
+                                    Ok(SkyeValue::special(SkyeType::Type(Box::new(SkyeType::Pointer(Box::new(inner.type_), false, false)))))
                                 }
                                 _ => {
                                     match inner.type_.implements_op(Operator::Deref) {
@@ -2133,7 +2213,7 @@ impl CodeGen {
                                                 let value = ctx.run(|ctx| self.call(&value, expr, inner_expr, &v, index, allow_unknown, ctx)).await?;
 
                                                 let (inner_type, is_const) = {
-                                                    if let SkyeType::Pointer(inner, ptr_is_const) = &value.type_ {
+                                                    if let SkyeType::Pointer(inner, ptr_is_const, _) = &value.type_ {
                                                         (*inner.clone(), *ptr_is_const)
                                                     } else {
                                                         token_error!(
@@ -2178,7 +2258,7 @@ impl CodeGen {
                         }
                         TokenType::StarConst => {
                             match inner.type_ {
-                                SkyeType::Pointer(ptr_type, _) => { // readonly dereference
+                                SkyeType::Pointer(ptr_type, ..) => { // readonly dereference
                                     if matches!(*ptr_type, SkyeType::Void) {
                                         ast_error!(self, inner_expr, "Cannot dereference a voidptr");
                                         Err(ExecutionInterrupt::Error)
@@ -2189,12 +2269,12 @@ impl CodeGen {
                                 SkyeType::Type(type_type) => {
                                     Ok(SkyeValue::new(
                                         Rc::from(format!("{}*", inner.value)),
-                                        SkyeType::Type(Box::new(SkyeType::Pointer(type_type, true))),
+                                        SkyeType::Type(Box::new(SkyeType::Pointer(type_type, true, false))),
                                         true
                                     ))
                                 }
                                 SkyeType::Unknown(_) => {
-                                    Ok(SkyeValue::special(SkyeType::Type(Box::new(SkyeType::Pointer(Box::new(inner.type_), true)))))
+                                    Ok(SkyeValue::special(SkyeType::Type(Box::new(SkyeType::Pointer(Box::new(inner.type_), true, false)))))
                                 }
                                 _ => {
                                     ctx.run(|ctx| self.unary_operator(
@@ -2453,7 +2533,9 @@ impl CodeGen {
                 } else {
                     match op.type_ {
                         TokenType::PlusPlus => {
-                            if inner.is_const {
+                            let new_inner = inner.follow_reference();
+
+                            if new_inner.is_const {
                                 ast_error!(self, inner_expr, "Cannot apply '++' operator on const value");
                                 Err(ExecutionInterrupt::Error)
                             } else if !inner_expr.is_valid_assignment_target() {
@@ -2461,13 +2543,15 @@ impl CodeGen {
                                 Err(ExecutionInterrupt::Error)
                             } else {
                                 ctx.run(|ctx| self.post_eval_unary_operator(
-                                    inner, inner_expr, expr, "++",
+                                    new_inner, inner_expr, expr, "++",
                                     "__inc__", Operator::Inc, op, index, allow_unknown, ctx
                                 )).await
                             }
                         }
                         TokenType::MinusMinus => {
-                            if inner.is_const {
+                            let new_inner = inner.follow_reference();
+
+                            if new_inner.is_const {
                                 ast_error!(self, inner_expr, "Cannot apply '--' operator on const value");
                                 Err(ExecutionInterrupt::Error)
                             } else if !inner_expr.is_valid_assignment_target() {
@@ -2475,7 +2559,7 @@ impl CodeGen {
                                 Err(ExecutionInterrupt::Error)
                             } else {
                                 ctx.run(|ctx| self.post_eval_unary_operator(
-                                    inner, inner_expr, expr, "--",
+                                    new_inner, inner_expr, expr, "--",
                                     "__dec__", Operator::Dec, op, index, allow_unknown, ctx
                                 )).await
                             }
@@ -2486,60 +2570,61 @@ impl CodeGen {
             }
             Expression::Binary(left_expr, op, right_expr) => {
                 let left = ctx.run(|ctx| self.evaluate(&left_expr, index, allow_unknown, ctx)).await?;
-                let left_type = left.type_.clone();
 
                 match op.type_ {
                     TokenType::Plus => {
                         ctx.run(|ctx| self.binary_operator(
-                            left, left_type, &left_expr, &right_expr,
+                            left, None, &left_expr, &right_expr,
                             expr, "+", "__add__", Operator::Add,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::Minus => {
                         ctx.run(|ctx| self.binary_operator(
-                            left, left_type, &left_expr, &right_expr,
+                            left, None, &left_expr, &right_expr,
                             expr, "-", "__sub__", Operator::Sub,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::Slash => {
                         ctx.run(|ctx| self.binary_operator(
-                            left, left_type, &left_expr, &right_expr,
+                            left, None, &left_expr, &right_expr,
                             expr, "/", "__div__", Operator::Div,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::Star => {
                         ctx.run(|ctx| self.binary_operator(
-                            left, left_type, &left_expr, &right_expr,
+                            left, None, &left_expr, &right_expr,
                             expr, "*", "__mul__", Operator::Mul,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::Mod => {
                         ctx.run(|ctx| self.binary_operator(
-                            left, left_type, &left_expr, &right_expr,
+                            left, None, &left_expr, &right_expr,
                             expr, "%", "__mod__", Operator::Mod,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::ShiftLeft => {
                         ctx.run(|ctx| self.binary_operator_int_on_right(
-                            left, left_type, &left_expr, &right_expr,
+                            left, &left_expr, &right_expr,
                             expr, "<<", "__shl__", Operator::Shl,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::ShiftRight => {
                         ctx.run(|ctx| self.binary_operator_int_on_right(
-                            left, left_type, &left_expr, &right_expr,
+                            left, &left_expr, &right_expr,
                             expr, ">>", "__shr__", Operator::Shr,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::LogicOr => {
-                        match left.type_.implements_op(Operator::Or) {
+                        let new_left = left.follow_reference();
+
+                        match new_left.type_.implements_op(Operator::Or) {
                             ImplementsHow::Native(compatible_types) => {
                                 // needed so short circuiting can work
                                 let tmp_var = self.get_temporary_var();
@@ -2551,7 +2636,7 @@ impl CodeGen {
 
                                 self.definitions[index].push_indent();
                                 self.definitions[index].push("if (");
-                                self.definitions[index].push(&left.value);
+                                self.definitions[index].push(&new_left.value);
                                 self.definitions[index].push(") {\n");
                                 self.definitions[index].inc_indent();
 
@@ -2564,18 +2649,18 @@ impl CodeGen {
                                 self.definitions[index].push("} else {\n");
                                 self.definitions[index].inc_indent();
 
-                                let right = ctx.run(|ctx| self.evaluate(&right_expr, index, allow_unknown, ctx)).await?;
+                                let right = ctx.run(|ctx| self.evaluate(&right_expr, index, allow_unknown, ctx)).await?.follow_reference();
 
                                 if !(
-                                    matches!(left.type_, SkyeType::Unknown(_)) ||
-                                    left.type_.equals(&right.type_, EqualsLevel::Typewise) ||
+                                    matches!(new_left.type_, SkyeType::Unknown(_)) ||
+                                    new_left.type_.equals(&right.type_, EqualsLevel::Typewise) ||
                                     compatible_types.contains(&right.type_)
                                 ) {
                                     ast_error!(
                                         self, right_expr,
                                         format!(
                                             "Left operand type ({}) does not match right operand type ({})",
-                                            left.type_.stringify_native(), right.type_.stringify_native()
+                                            new_left.type_.stringify_native(), right.type_.stringify_native()
                                         ).as_ref()
                                     );
 
@@ -2596,7 +2681,7 @@ impl CodeGen {
                             }
                             ImplementsHow::ThirdParty => {
                                 let search_tok = Token::dummy(Rc::from("__or__"));
-                                if let Some(value) = self.get_method(&left, &search_tok, true) {
+                                if let Some(value) = self.get_method(&new_left, &search_tok, true) {
                                     let args = vec![*right_expr.clone()];
                                     ctx.run(|ctx| self.call(&value, expr, left_expr, &args, index, allow_unknown, ctx)).await
                                 } else {
@@ -2604,7 +2689,7 @@ impl CodeGen {
                                         self, left_expr,
                                         format!(
                                             "binary '||' operator is not implemented for type {}",
-                                            left.type_.stringify_native()
+                                            new_left.type_.stringify_native()
                                         ).as_ref()
                                     );
 
@@ -2616,7 +2701,7 @@ impl CodeGen {
                                     self, left_expr,
                                     format!(
                                         "Type {} cannot use binary '||' operator",
-                                        left.type_.stringify_native()
+                                        new_left.type_.stringify_native()
                                     ).as_ref()
                                 );
 
@@ -2625,7 +2710,9 @@ impl CodeGen {
                         }
                     }
                     TokenType::LogicAnd => {
-                        match left.type_.implements_op(Operator::And) {
+                        let new_left = left.follow_reference();
+
+                        match new_left.type_.implements_op(Operator::And) {
                             ImplementsHow::Native(compatible_types) => {
                                 // needed so short circuiting can work
                                 let tmp_var = self.get_temporary_var();
@@ -2637,22 +2724,22 @@ impl CodeGen {
 
                                 self.definitions[index].push_indent();
                                 self.definitions[index].push("if (");
-                                self.definitions[index].push(&left.value);
+                                self.definitions[index].push(&new_left.value);
                                 self.definitions[index].push(") {\n");
                                 self.definitions[index].inc_indent();
 
-                                let right = ctx.run(|ctx| self.evaluate(&right_expr, index, allow_unknown, ctx)).await?;
+                                let right = ctx.run(|ctx| self.evaluate(&right_expr, index, allow_unknown, ctx)).await?.follow_reference();
 
                                 if !(
-                                    matches!(left.type_, SkyeType::Unknown(_)) ||
-                                    left.type_.equals(&right.type_, EqualsLevel::Typewise) ||
+                                    matches!(new_left.type_, SkyeType::Unknown(_)) ||
+                                    new_left.type_.equals(&right.type_, EqualsLevel::Typewise) ||
                                     compatible_types.contains(&right.type_)
                                 ) {
                                     ast_error!(
                                         self, right_expr,
                                         format!(
                                             "Left operand type ({}) does not match right operand type ({})",
-                                            left.type_.stringify_native(), right.type_.stringify_native()
+                                            new_left.type_.stringify_native(), right.type_.stringify_native()
                                         ).as_ref()
                                     );
 
@@ -2682,7 +2769,7 @@ impl CodeGen {
                             }
                             ImplementsHow::ThirdParty => {
                                 let search_tok = Token::dummy(Rc::from("__and__"));
-                                if let Some(value) = self.get_method(&left, &search_tok, true) {
+                                if let Some(value) = self.get_method(&new_left, &search_tok, true) {
                                     let args = vec![*right_expr.clone()];
                                     ctx.run(|ctx| self.call(&value, expr, left_expr, &args, index, allow_unknown, ctx)).await
                                 } else {
@@ -2690,7 +2777,7 @@ impl CodeGen {
                                         self, left_expr,
                                         format!(
                                             "binary '&&' operator is not implemented for type {}",
-                                            left.type_.stringify_native()
+                                            new_left.type_.stringify_native()
                                         ).as_ref()
                                     );
 
@@ -2702,7 +2789,7 @@ impl CodeGen {
                                     self, left_expr,
                                     format!(
                                         "Type {} cannot use binary '&&' operator",
-                                        left.type_.stringify_native()
+                                        new_left.type_.stringify_native()
                                     ).as_ref()
                                 );
 
@@ -2712,7 +2799,7 @@ impl CodeGen {
                     }
                     TokenType::BitwiseXor => {
                         ctx.run(|ctx| self.binary_operator(
-                            left, left_type, &left_expr, &right_expr,
+                            left, None, &left_expr, &right_expr,
                             expr, "^", "__xor__", Operator::Xor,
                             index, allow_unknown, ctx
                         )).await
@@ -2736,7 +2823,7 @@ impl CodeGen {
                             }
                         } else {
                             ctx.run(|ctx| self.binary_operator(
-                                left, left_type, &left_expr, &right_expr,
+                                left, None, &left_expr, &right_expr,
                                 expr, "|", "__bitor__", Operator::BitOr,
                                 index, allow_unknown, ctx
                             )).await
@@ -2744,35 +2831,35 @@ impl CodeGen {
                     }
                     TokenType::BitwiseAnd => {
                         ctx.run(|ctx| self.binary_operator(
-                            left, left_type, &left_expr, &right_expr,
+                            left, None, &left_expr, &right_expr,
                             expr, "&", "__bitand__", Operator::BitAnd,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::Greater => {
                         ctx.run(|ctx| self.binary_operator(
-                            left, SkyeType::U8, &left_expr, &right_expr,
+                            left, Some(SkyeType::U8), &left_expr, &right_expr,
                             expr, ">", "__gt__", Operator::Gt,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::GreaterEqual => {
                         ctx.run(|ctx| self.binary_operator(
-                            left, SkyeType::U8, &left_expr, &right_expr,
+                            left, Some(SkyeType::U8), &left_expr, &right_expr,
                             expr, ">=", "__ge__", Operator::Ge,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::Less => {
                         ctx.run(|ctx| self.binary_operator(
-                            left, SkyeType::U8, &left_expr, &right_expr,
+                            left, Some(SkyeType::U8), &left_expr, &right_expr,
                             expr, "<", "__lt__", Operator::Lt,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::LessEqual => {
                         ctx.run(|ctx| self.binary_operator(
-                            left, SkyeType::U8, &left_expr, &right_expr,
+                            left, Some(SkyeType::U8), &left_expr, &right_expr,
                             expr, "<=", "__le__", Operator::Le,
                             index, allow_unknown, ctx
                         )).await
@@ -2784,7 +2871,7 @@ impl CodeGen {
                             )).await
                         } else {
                             ctx.run(|ctx| self.binary_operator(
-                                left, SkyeType::U8, &left_expr, &right_expr,
+                                left, Some(SkyeType::U8), &left_expr, &right_expr,
                                 expr, "==", "__eq__", Operator::Eq,
                                 index, allow_unknown, ctx
                             )).await
@@ -2797,7 +2884,7 @@ impl CodeGen {
                             )).await
                         } else {
                             ctx.run(|ctx| self.binary_operator(
-                                left, SkyeType::U8, &left_expr, &right_expr,
+                                left, Some(SkyeType::U8), &left_expr, &right_expr,
                                 expr, "!=", "__ne__", Operator::Ne,
                                 index, allow_unknown, ctx
                             )).await
@@ -2883,8 +2970,14 @@ impl CodeGen {
                 let target = ctx.run(|ctx| self.evaluate(&target_expr, index, allow_unknown, ctx)).await?;
                 let target_type = target.type_.clone();
 
-                if target.is_const {
-                    ast_error!(self, target_expr, "Assignment target is const");
+                if matches!(op.type_, TokenType::Equal) {
+                    if target.is_const {
+                        ast_error!(self, target_expr, "Assignment target is const");
+                    }
+                } else {
+                    if target.follow_reference().is_const {
+                        ast_error!(self, target_expr, "Assignment target is const");
+                    }
                 }
 
                 match op.type_ {
@@ -2907,70 +3000,70 @@ impl CodeGen {
                     }
                     TokenType::PlusEquals => {
                         ctx.run(|ctx| self.binary_operator(
-                            target, target_type, &target_expr, &value_expr,
+                            target, None, &target_expr, &value_expr,
                             expr, "+=", "__setadd__", Operator::SetAdd,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::MinusEquals => {
                         ctx.run(|ctx| self.binary_operator(
-                            target, target_type, &target_expr, &value_expr,
+                            target, None, &target_expr, &value_expr,
                             expr, "-=", "__setsub__", Operator::SetSub,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::StarEquals => {
                         ctx.run(|ctx| self.binary_operator(
-                            target, target_type, &target_expr, &value_expr,
+                            target, None, &target_expr, &value_expr,
                             expr, "*=", "__setmul__", Operator::SetMul,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::SlashEquals => {
                         ctx.run(|ctx| self.binary_operator(
-                            target, target_type, &target_expr, &value_expr,
+                            target, None, &target_expr, &value_expr,
                             expr, "/=", "__setdiv__", Operator::SetDiv,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::ModEquals => {
                         ctx.run(|ctx| self.binary_operator(
-                            target, target_type, &target_expr, &value_expr,
+                            target, None, &target_expr, &value_expr,
                             expr, "%=", "__setmod__", Operator::SetMod,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::ShiftLeftEquals => {
                         ctx.run(|ctx| self.binary_operator(
-                            target, target_type, &target_expr, &value_expr,
+                            target, None, &target_expr, &value_expr,
                             expr, "<<=", "__setshl__", Operator::SetShl,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::ShiftRightEquals => {
                         ctx.run(|ctx| self.binary_operator(
-                            target, target_type, &target_expr, &value_expr,
+                            target, None, &target_expr, &value_expr,
                             expr, ">>=", "__setshr__", Operator::SetShr,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::AndEquals => {
                         ctx.run(|ctx| self.binary_operator(
-                            target, target_type, &target_expr, &value_expr,
+                            target, None, &target_expr, &value_expr,
                             expr, "&=", "__setand__", Operator::SetAnd,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::XorEquals => {
                         ctx.run(|ctx| self.binary_operator(
-                            target, target_type, &target_expr, &value_expr,
+                            target, None, &target_expr, &value_expr,
                             expr, "^=", "__setxor__", Operator::SetXor,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::OrEquals => {
                         ctx.run(|ctx| self.binary_operator(
-                            target, target_type, &target_expr, &value_expr,
+                            target, None, &target_expr, &value_expr,
                             expr, "|=", "__setor__", Operator::SetOr,
                             index, allow_unknown, ctx
                         )).await
@@ -3500,8 +3593,12 @@ impl CodeGen {
             Expression::Subscript(subscripted_expr, paren, arguments) => {
                 let subscripted = ctx.run(|ctx| self.evaluate(&subscripted_expr, index, allow_unknown, ctx)).await?;
 
-                match subscripted.type_ {
-                    SkyeType::Pointer(inner_type, is_const) => {
+                let new_subscripted = subscripted.follow_reference();
+
+                match new_subscripted.type_ {
+                    SkyeType::Pointer(inner_type, is_const, is_reference) => {
+                        assert!(!is_reference); // if the references were followed correctly, this cannot be a reference
+
                         if arguments.len() != 1 {
                             token_error!(self, paren, "Expecting one subscript argument for pointer offset");
                             return Err(ExecutionInterrupt::Error);
@@ -3513,7 +3610,7 @@ impl CodeGen {
                             SkyeType::U8  | SkyeType::I8  | SkyeType::U16 | SkyeType::I16 |
                             SkyeType::U32 | SkyeType::I32 | SkyeType::U64 | SkyeType::I64 |
                             SkyeType::Usz | SkyeType::AnyInt => {
-                                Ok(SkyeValue::new(Rc::from(format!("{}[{}]", subscripted.value, arg.value)), *inner_type, is_const))
+                                return Ok(SkyeValue::new(Rc::from(format!("{}[{}]", subscripted.value, arg.value)), *inner_type.clone(), is_const));
                             }
                             _ => {
                                 ast_error!(
@@ -3524,7 +3621,7 @@ impl CodeGen {
                                     ).as_ref()
                                 );
 
-                                Err(ExecutionInterrupt::Error)
+                                return Err(ExecutionInterrupt::Error);
                            }
                         }
                     }
@@ -3685,14 +3782,14 @@ impl CodeGen {
                         }
                     }
                     _ => {
-                        match subscripted.type_.implements_op(Operator::Subscript) {
+                        match new_subscripted.type_.implements_op(Operator::Subscript) {
                             ImplementsHow::Native(_) => unreachable!(),
                             ImplementsHow::ThirdParty => {
                                 let search_tok = Token::dummy(Rc::from("__subscript__"));
-                                if let Some(value) = self.get_method(&subscripted, &search_tok, true) {
+                                if let Some(value) = self.get_method(&new_subscripted, &search_tok, true) {
                                     let call_value = ctx.run(|ctx| self.call(&value, expr, &subscripted_expr, &arguments, index, allow_unknown, ctx)).await?;
 
-                                    if let SkyeType::Pointer(inner_type, is_const) = call_value.type_ {
+                                    if let SkyeType::Pointer(inner_type, is_const, _) = call_value.type_ {
                                         Ok(SkyeValue::new(Rc::from(format!("*{}", call_value.value).as_ref()), *inner_type, is_const))
                                     } else {
                                         ast_error!(
@@ -3710,7 +3807,7 @@ impl CodeGen {
                                         self, subscripted_expr,
                                         format!(
                                             "Subscripting operation is not implemented for type {}",
-                                            subscripted.type_.stringify_native()
+                                            new_subscripted.type_.stringify_native()
                                         ).as_ref()
                                     );
 
@@ -3722,7 +3819,7 @@ impl CodeGen {
                                     self, subscripted_expr,
                                     format!(
                                         "Type {} cannot be subscripted",
-                                        subscripted.type_.stringify_native()
+                                        new_subscripted.type_.stringify_native()
                                     ).as_ref()
                                 );
 
@@ -4218,7 +4315,13 @@ impl CodeGen {
                     let has_stdargs = {
                         params_output.len() == 2 &&
                         params_output[0].type_.equals(&SkyeType::AnyInt, EqualsLevel::Typewise) &&
-                        params_output[1].type_.equals(&SkyeType::Pointer(Box::new(SkyeType::Pointer(Box::new(SkyeType::Char), false)), false), EqualsLevel::Typewise)
+                        params_output[1].type_.equals(&SkyeType::Pointer(
+                            Box::new(SkyeType::Pointer(
+                                Box::new(SkyeType::Char), 
+                                false, false
+                            )), 
+                            false, false
+                        ), EqualsLevel::Typewise)
                     };
 
                     let has_args = {
