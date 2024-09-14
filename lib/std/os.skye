@@ -7,9 +7,7 @@ namespace std {
             let buf = core::Array::new[char]();
             defer buf.free();
 
-            buf.pushString(command);
-            buf.push('\0');
-
+            @format(&buf, "{command}\0");
             const result = system(buf.array.ptr);
             
             if (result) return (!i32)::Error(result);
@@ -20,9 +18,7 @@ namespace std {
             let buf = core::Array::new[char]();
             defer buf.free();
 
-            buf.pushString(file);
-            buf.push('\0');
-
+            @format(&buf, "{file}\0");
             const result = remove(buf.array.ptr);
 
             if (result) return (!void)::Error;    

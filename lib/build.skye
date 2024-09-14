@@ -5,10 +5,7 @@ namespace build {
         let buf = core::Array::from("skye compile ");
         defer buf.free();
 
-        buf.pushString(input);
-        buf.pushString(" --emit-c -o ");
-        buf.pushString(output);
-
+        @format(&buf, "{input} --emit-c -o {output}");
         const result = std::os::system(buf.asString());
         
         if result.kind == core::Result::Kind::Error {
@@ -28,11 +25,8 @@ namespace build {
             // TODO
             @panic("This platform is not supported yet, sorry!");
         }
-
-        buf.pushString(input);
-        buf.pushString(" -o ");
-        buf.pushString(output);
-
+        
+        @format(&buf, "{input} -o {output}");
         const result = std::os::system(buf.asString());
 
         if result.kind == core::Result::Kind::Error {

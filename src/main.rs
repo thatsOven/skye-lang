@@ -152,14 +152,15 @@ fn main() -> Result<(), Error> {
                     let mut f = File::create(buf.join("build.skye"))?;
                     f.write_all(BUILD_FILE_INIT)?;
                     drop(f);
-
+                    
+                    let orig_buf = buf.clone();
                     buf = buf.join("src");
                     create_dir(&buf)?;
 
                     f = File::create(buf.join("main.skye"))?;
                     f.write_all(MAIN_FILE_INIT)?;
 
-                    println!("Standalone project created at {}", buf.to_str().unwrap());
+                    println!("Standalone project created at {}", orig_buf.to_str().unwrap());
                 }
                 ProjectType::Package { name } => {
                     if name == "core" || name == "build" || name == "std" || name == "setup" {
