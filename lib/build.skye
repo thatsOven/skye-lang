@@ -8,7 +8,7 @@ namespace build {
         @format(&buf, "{input} --emit-c -o {output}");
         const result = std::os::system(buf.asString());
         
-        if result.kind == core::Result::Kind::Error {
+        if result.isError() {
             return (!void)::Error;
         }
 
@@ -29,7 +29,7 @@ namespace build {
         @format(&buf, "{input} -o {output}");
         const result = std::os::system(buf.asString());
 
-        if result.kind == core::Result::Kind::Error {
+        if result.isError() {
             return (!void)::Error;
         }
 
