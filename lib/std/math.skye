@@ -4,10 +4,10 @@ impl[T] core::Slice[T] {
             return (?T)::None;
         }
 
-        let max = self.ptr[0];
+        let max = self[0];
         for let i = 1usz; i < self.length; i++ {
-            if self.ptr[i] > max {
-                max = self.ptr[i];
+            if self[i] > max {
+                max = self[i];
             }
         }
 
@@ -19,10 +19,10 @@ impl[T] core::Slice[T] {
             return (?T)::None;
         }
 
-        let min = self.ptr[0];
+        let min = self[0];
         for let i = 1usz; i < self.length; i++ {
-            if self.ptr[i] < min {
-                min = self.ptr[i];
+            if self[i] < min {
+                min = self[i];
             }
         }
 
