@@ -923,9 +923,7 @@ impl SkyeType {
                     SkyeValue::new(Rc::clone(from), self.clone(), is_source_const)
                 }
             }
-            _ => {
-                SkyeValue::new(Rc::clone(from), self.clone(), is_source_const)
-            }
+            _ => SkyeValue::new(Rc::clone(from), self.clone(), is_source_const)
         }
     }
 }
