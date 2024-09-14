@@ -186,7 +186,7 @@ impl Parser {
 
         if self.match_(&[TokenType::LeftParen]) {
             let expr = self.expression()?;
-            self.consume(TokenType::RightParen, "Missing ')' after expression")?;
+            self.consume(TokenType::RightParen, "Expecting ')' after expression")?;
             return Some(Expression::Grouping(Box::new(expr)));
         }
 
@@ -203,7 +203,7 @@ impl Parser {
                 }
             }
 
-            self.consume(TokenType::RightBrace, "Missing '}' after slice")?;
+            self.consume(TokenType::RightBrace, "Expecting '}' after slice")?;
             return Some(Expression::Slice(opening_brace, items));
         }
 
@@ -220,7 +220,7 @@ impl Parser {
                 }
             }
 
-            self.consume(TokenType::RightSquare, "Missing ']' after array")?;
+            self.consume(TokenType::RightSquare, "Expecting ']' after array")?;
 
             let mut method_tok = opening_brace.clone();
             method_tok.set_lexeme("core_DOT_Array_DOT_from");
@@ -232,10 +232,10 @@ impl Parser {
             ));
         }
 
-        match_literal!(self, U8);     match_literal!(self, I8);
-        match_literal!(self, U16);    match_literal!(self, I16);
-        match_literal!(self, U32);    match_literal!(self, I32); match_literal!(self, F32);
-        match_literal!(self, U64);    match_literal!(self, I64); match_literal!(self, F64);
+        match_literal!(self, U8);  match_literal!(self, I8);
+        match_literal!(self, U16); match_literal!(self, I16);
+        match_literal!(self, U32); match_literal!(self, I32); match_literal!(self, F32);
+        match_literal!(self, U64); match_literal!(self, I64); match_literal!(self, F64);
         match_literal!(self, Usz);
         match_literal!(self, AnyInt);    match_literal!(self, AnyFloat);
         match_literal!(self, RawString); match_literal!(self, String); match_literal!(self, Char);
