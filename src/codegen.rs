@@ -3129,7 +3129,7 @@ impl CodeGen {
                 self.definitions[tmp_index].push(" {\n");
                 self.definitions[tmp_index].inc_indent();
 
-                let then_branch = ctx.run(|ctx| self.evaluate(&then_branch_expr, index, allow_unknown, ctx)).await?;
+                let then_branch = ctx.run(|ctx| self.evaluate(&then_branch_expr, tmp_index, allow_unknown, ctx)).await?;
 
                 self.definitions[tmp_index].push_indent();
                 self.definitions[tmp_index].push(&tmp_var);
@@ -3142,7 +3142,7 @@ impl CodeGen {
                 self.definitions[tmp_index].push("} else {\n");
                 self.definitions[tmp_index].inc_indent();
 
-                let else_branch = ctx.run(|ctx| self.evaluate(&else_branch_expr, index, allow_unknown, ctx)).await?;
+                let else_branch = ctx.run(|ctx| self.evaluate(&else_branch_expr, tmp_index, allow_unknown, ctx)).await?;
 
                 self.definitions[tmp_index].push_indent();
                 self.definitions[tmp_index].push(&tmp_var);
@@ -3170,7 +3170,7 @@ impl CodeGen {
                 self.definitions[index].push(&tmp_var);
                 self.definitions[index].push(";\n");
 
-                let tmp_code = self.definitions.pop().unwrap();
+                let tmp_code = self.definitions.swap_remove(tmp_index);
                 self.definitions[index].push(&tmp_code.code);
 
                 Ok(SkyeValue::new(Rc::from(tmp_var), then_branch.type_, true))
