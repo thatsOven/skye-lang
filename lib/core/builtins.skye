@@ -70,7 +70,7 @@ namespace core {
                 return core::Ptr::new(ptr, ptr, ptr + amt, self);
             }
 
-            fn realloc[T](self, const ptr: *core::Ptr[T, Self], size: usz) {
+            fn realloc[T](self, const ptr: &core::Ptr[T, Self], size: usz) {
                 const rawptr = @cast(*T, self.reallocRaw(@cast(voidptr, ptr.ptr), size * @sizeOf(T)));
                 ptr.ptr = rawptr;
                 ptr.min = rawptr;
@@ -83,7 +83,7 @@ namespace core {
                 return ptr;
             }
 
-            fn free[T](self, const ptr: *const core::Ptr[T, Self]) {
+            fn free[T](self, const ptr: &const core::Ptr[T, Self]) {
                 self.freeRaw(@cast(voidptr, ptr.ptr));
             }
         }
@@ -100,6 +100,10 @@ namespace core {
     impl[T, U = core::mem::HeapAllocator] core::Ptr[T, U] {
         fn new(ptr: *T, min: *T, max: *T, alloc: *U) Self[T, U] {
             return Self.{ ptr, min, max, alloc };
+        }
+
+        fn from(ptr: *T, alloc: *U) Self[T, U] {
+            return Self.{ ptr, min: ptr, max: ptr, alloc };
         }
 
         fn free(self) {
@@ -127,29 +131,33 @@ macro MIN_ARRAY_CAPACITY 8;
 
 namespace core {
     struct Rc[T, U = core::mem::HeapAllocator] {
-        data: Ptr[T, U],
-        count: u64
+        const data: &T,
+        count: u64,
+        const allocator: *U
     }
 
     impl[T, U = core::mem::HeapAllocator] core::Rc[T, U] {
         fn new(data: T) Self[T, U] {
             return Self.{
-                data: core::mem::heapAllocator.put(data),
-                count: 1
+                data: core::mem::heapAllocator.put(data).ptr,
+                count: 1,
+                allocator: &core::mem::heapAllocator
             };
         }
 
-        fn init(data: T, allocator: U) Self[T, U] {
+        fn init(data: T, allocator: *U) Self[T, U] {
             return Self.{
-                data: allocator.put(data),
-                count: 2
+                data: allocator.put(data).ptr,
+                count: 2,
+                allocator
             };
         }
 
         fn empty() Self[T, U] {
             return Self.{
-                data: core::mem::heapAllocator.alloc[T](1),
-                count: 1
+                data: core::mem::heapAllocator.alloc[T](1).ptr,
+                count: 1,
+                allocator: &core::mem::heapAllocator
             };
         }
 
@@ -165,7 +173,7 @@ namespace core {
 
         fn __destruct__(self) {        
             if --self.count == 0 {
-                self.data.free();
+                self.allocator.freeRaw(@cast(voidptr, self.data));
             }
         }
     }
