@@ -558,8 +558,8 @@ macro variableArgumentsMacro(args*) {
 | Negation | `-x` | ... |
 | Boolean not | `!x` | Can also define a `Result` type with `Ok = void` |
 | Bitwise not | `~x` | ... |
-| Reference | `&x` | Returns a pointer to `x` |
-| Const reference | `&const x` | Returns a const pointer to `x` (`x` cannot be modified through that pointer) |
+| Reference | `&x` | Returns a pointer to `x`. Can also define a reference type if applied to a type |
+| Const reference | `&const x` | Returns a const pointer to `x` (`x` cannot be modified through that pointer). Can also define a const reference type if applied to a type |
 | Dereference | `*x` | Dereferences a pointer. Can also define a pointer type if applied to a type |
 | Const dereference | `*const x` | Dereferences a pointer and returns a `const` value. Can also define a const pointer type if applied to a type |
 | Option | `?x` | Defines an `Option[x]` type where `x` is a type |
