@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use crate::{ast::{Expression, MacroParams, Statement}, environment::Environment, tokens::Token};
+use crate::{ast::{Expression, Generic, MacroParams, Statement}, environment::Environment, tokens::Token};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SkyeFunctionParam {
@@ -31,19 +31,6 @@ pub struct SkyeEnumVariant {
 impl SkyeEnumVariant {
     pub fn new(name: Token, type_: SkyeType) -> Self {
         SkyeEnumVariant { name, type_ }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct SkyeGeneric {
-    pub name: Token,
-    pub bounds: Option<SkyeType>,
-    pub default: Option<SkyeType>
-}
-
-impl SkyeGeneric {
-    pub fn new(name: Token, bounds: Option<SkyeType>, default: Option<SkyeType>) -> Self {
-        SkyeGeneric { name, bounds, default }
     }
 }
 
@@ -132,7 +119,7 @@ pub enum SkyeType {
     Struct(Rc<str>, Option<HashMap<Rc<str>, (SkyeType, bool)>>, Rc<str>), // name fields base_name
     Namespace(Rc<str>), // name
     Enum(Rc<str>, Option<HashMap<Rc<str>, SkyeType>>, Rc<str>), // name variants base_name
-    Template(Rc<str>, Statement, Vec<SkyeGeneric>, Vec<Token>, String, Rc<RefCell<Environment>>), // name definition generics generics_names curr_name environment
+    Template(Rc<str>, Statement, Vec<Generic>, Vec<Token>, String, Rc<RefCell<Environment>>), // name definition generics generics_names curr_name environment
     Union(Rc<str>, Option<HashMap<Rc<str>, SkyeType>>), // name fields
     Bitfield(Rc<str>, Option<HashMap<Rc<str>, SkyeType>>), // name fields
     Macro(Rc<str>, MacroParams, Option<Expression>, Option<Expression>), // name params return_expr return_type

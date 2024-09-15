@@ -324,7 +324,7 @@ namespace core {
             self.array[self.length++] = item;
         }
 
-        fn append(self, const other: core::Array[T]) {
+        fn append(self, const other: *core::Array[T]) {
             for let i = 0usz; i < other.length; i++ {
                 self.push(other.array[i]);
             }
@@ -398,7 +398,7 @@ namespace core {
             return String.{ ptr: self.array.ptr, length: self.length };
         }
 
-        fn pushString(self, const string: String) {
+        fn pushString(self, const string: &String) {
             for let i = 0usz; i < string.length; i++ {
                 self.push(string[i]);
             }

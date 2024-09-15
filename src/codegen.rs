@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, env, ffi::OsString, path::{Path, PathBuf}, rc::Rc};
 
 use crate::{
-    ast::{Expression, FunctionParam, ImportType, LiteralKind, MacroParams, Statement}, ast_error, ast_info, ast_note, ast_warning, environment::{Environment, SkyeVariable}, parse_file, parser::Parser, scanner::Scanner, skye_type::{CastableHow, EqualsLevel, GetResult, ImplementsHow, Operator, SkyeEnumVariant, SkyeFunctionParam, SkyeGeneric, SkyeType, SkyeValue}, token_error, token_note, token_warning, tokens::{Token, TokenType}, utils::{fix_raw_string, get_real_string_length, note}, SKYE_PATH_VAR
+    ast::{Expression, FunctionParam, ImportType, LiteralKind, MacroParams, Statement}, ast_error, ast_info, ast_note, ast_warning, environment::{Environment, SkyeVariable}, parse_file, parser::Parser, scanner::Scanner, skye_type::{CastableHow, EqualsLevel, GetResult, ImplementsHow, Operator, SkyeEnumVariant, SkyeFunctionParam, SkyeType, SkyeValue}, token_error, token_note, token_warning, tokens::{Token, TokenType}, utils::{fix_raw_string, get_real_string_length, note}, SKYE_PATH_VAR
 };
 
 const OUTPUT_INDENT_SPACES: usize = 4;
@@ -1007,6 +1007,7 @@ impl CodeGen {
                         Environment::with_enclosing(Rc::clone(&read_env))
                     ));
 
+                    let mut generics_found_at = HashMap::new();
                     let mut args = String::new();
                     for i in 0 .. arguments_len {
                         let call_evaluated = 'argblock: {
@@ -1075,7 +1076,7 @@ impl CodeGen {
                                             TokenType::BitwiseAnd, Rc::from(""), 
                                             arg_pos.start, arg_pos.end, arg_pos.line
                                         );
-        
+                                        
                                         let ref_expr = Expression::Unary(custom_tok, Box::new(arguments[i - arguments_mod].clone()), true);
                                         ctx.run(|ctx| self.evaluate(&ref_expr, index, allow_unknown, ctx)).await?
                                     } else {
@@ -1100,26 +1101,8 @@ impl CodeGen {
                                 if let Some(inferred) = inner_type.infer_type_from_similar(&new_call_evaluated.type_) {
                                     for (generic_name, generic_type) in inferred {
                                         if generics_to_find.get(&generic_name).unwrap().is_none() {
-                                            let wrapped = SkyeType::Type(Box::new(generic_type));
-                                            let mapped_generic = generics_map.get(&generic_name).unwrap();
-
-                                            if let Some(bounds) = &mapped_generic.bounds {
-                                                if !bounds.is_respected_by(&wrapped) {
-                                                    if i != 0 || arguments_mod != 1 {
-                                                        ast_error!(
-                                                            self, arguments[i - arguments_mod],
-                                                            format!(
-                                                                "Generic bound is not respected by this type (expecting {} but got {})",
-                                                                bounds.stringify_native(), wrapped.stringify_native()
-                                                            ).as_ref()
-                                                        );
-
-                                                        token_note!(mapped_generic.name, "Generic defined here");
-                                                    }
-                                                }
-                                            }
-
-                                            generics_to_find.insert(generic_name, Some(wrapped));
+                                            generics_to_find.insert(Rc::clone(&generic_name), Some(SkyeType::Type(Box::new(generic_type))));
+                                            generics_found_at.insert(generic_name, i);
                                         }
                                     }
                                 } else {
@@ -1204,22 +1187,109 @@ impl CodeGen {
                         let mapped = generics_map.get(&name).unwrap();
 
                         let type_ = {
-                            if let Some(type_) = generic_type {
-                                Some(type_)
+                            if let Some(t) = generic_type {
+                                Some(t)
+                            } else if let Some(default) = &mapped.default {
+                                let previous = Rc::clone(&self.environment);
+                                self.environment = Rc::clone(&tmp_env);
+
+                                let evaluated = {
+                                    match ctx.run(|ctx| self.evaluate(&default, index, false, ctx)).await {
+                                        Ok(item) => item,
+                                        Err(_) => {
+                                            self.environment = previous;
+                                            continue;
+                                        }
+                                    }
+                                };
+
+                                self.environment = previous;
+        
+                                if matches!(evaluated.type_, SkyeType::Type(_) | SkyeType::Void) {
+                                    if evaluated.type_.check_completeness() {
+                                        Some(evaluated.type_)
+                                    } else {
+                                        ast_error!(self, default, "Cannot use incomplete type directly");
+                                        ast_note!(default, "Define this type or reference it through a pointer");
+                                        None
+                                    }
+                                } else {
+                                    ast_error!(
+                                        self, default,
+                                        format!(
+                                            "Expecting type as default generic (got {})",
+                                            evaluated.type_.stringify_native()
+                                        ).as_ref()
+                                    );
+        
+                                    None
+                                }
                             } else {
-                                mapped.default.clone()
+                                None
                             }
                         };
 
                         if let Some(inner_type) = type_ {
-                            let mut env = tmp_env.borrow_mut();
-                            env.define(
-                                Rc::clone(&name),
-                                SkyeVariable::new(
-                                    inner_type, true,
-                                    Some(Box::new(mapped.name.clone()))
-                                )
-                            );
+                            if let Some(bounds) = &mapped.bounds {
+                                let previous = Rc::clone(&self.environment);
+                                self.environment = Rc::clone(&tmp_env);
+
+                                let evaluated = {
+                                    match ctx.run(|ctx| self.evaluate(&bounds, index, false, ctx)).await {
+                                        Ok(item) => item,
+                                        Err(_) => {
+                                            self.environment = previous;
+                                            continue;
+                                        }
+                                    }
+                                };
+
+                                self.environment = previous;
+        
+                                if evaluated.type_.is_type() || matches!(evaluated.type_, SkyeType::Void) {
+                                    if evaluated.type_.is_respected_by(&inner_type) {
+                                        let mut env = tmp_env.borrow_mut();
+                                        env.define(
+                                            Rc::clone(&name),
+                                            SkyeVariable::new(
+                                                inner_type, true,
+                                                Some(Box::new(mapped.name.clone()))
+                                            )
+                                        );
+                                    } else {
+                                        let at = *generics_found_at.get(&name).unwrap();
+
+                                        if at != 0 || arguments_mod != 1 {
+                                            ast_error!(
+                                                self, arguments[at - arguments_mod],
+                                                format!(
+                                                    "Generic bound is not respected by this type (expecting {} but got {})",
+                                                    evaluated.type_.stringify_native(), inner_type.stringify_native()
+                                                ).as_ref()
+                                            );
+        
+                                            token_note!(mapped.name, "Generic defined here");
+                                        }
+                                    }
+                                } else {
+                                    ast_error!(
+                                        self, bounds,
+                                        format!(
+                                            "Expecting type or group as generic bound (got {})",
+                                            evaluated.type_.stringify_native()
+                                        ).as_ref()
+                                    );
+                                }
+                            } else {
+                                let mut env = tmp_env.borrow_mut();
+                                env.define(
+                                    Rc::clone(&name),
+                                    SkyeVariable::new(
+                                        inner_type, true,
+                                        Some(Box::new(mapped.name.clone()))
+                                    )
+                                );
+                            }
                         } else {
                             if !self.had_error { // avoids having inference errors caused by other errors
                                 ast_error!(self, callee_expr, "Skye cannot infer the generic types for this function");
@@ -1238,7 +1308,17 @@ impl CodeGen {
                     self.curr_name = curr_name.clone();
 
                     let return_evaluated = {
-                        let ret_type = ctx.run(|ctx| self.evaluate(&return_type_expr, index, false, ctx)).await?.type_;
+                        let ret_type = {
+                            match ctx.run(|ctx| self.evaluate(&return_type_expr, index, false, ctx)).await {
+                                Ok(item) => item.type_,
+                                Err(e) => {
+                                    self.curr_name   = previous_name;
+                                    self.environment = previous;
+                                    return Err(e);
+                                }
+                            }
+                        };
+                        
                         match ret_type {
                             SkyeType::Type(inner_type) => {
                                 if inner_type.check_completeness() {
@@ -1248,6 +1328,8 @@ impl CodeGen {
                                     ast_note!(return_type_expr, "Define this type or reference it through a pointer");
                                     ast_note!(expr, "This error is a result of template generation originating from this call");
 
+                                    self.curr_name   = previous_name;
+                                    self.environment = previous;
                                     return Err(ExecutionInterrupt::Error);
                                 }
                             }
@@ -1262,23 +1344,37 @@ impl CodeGen {
                                 );
 
                                 ast_note!(expr, "This error is a result of template generation originating from this call");
+
+                                self.curr_name   = previous_name;
+                                self.environment = previous;
                                 return Err(ExecutionInterrupt::Error);
                             }
                         }
                     };
 
-                    let final_name = self.get_generics(&name, &generics_names, &self.environment)?;
+                    let final_name = {
+                        match self.get_generics(&name, &generics_names, &self.environment) {
+                            Ok(item) => item,
+                            Err(e) => {
+                                self.curr_name   = previous_name;
+                                self.environment = previous;
+                                return Err(e);
+                            }
+                        }
+                    };
+
                     let search_tok = Token::dummy(Rc::clone(&final_name));
 
                     let mut env = self.globals.borrow_mut();
                     if let Some(existing) = env.get(&search_tok) {
                         if let SkyeType::Function(.., has_body) = existing.type_ {
                             if has_body {
-                                env = tmp_env.borrow_mut();
+                                env = self.environment.borrow_mut();
                                 for generic in generics {
                                     env.undef(Rc::clone(&generic.name.lexeme));
                                 }
 
+                                drop(env);
                                 self.curr_name   = previous_name;
                                 self.environment = previous;
 
@@ -1299,10 +1395,19 @@ impl CodeGen {
 
                     let old_had_error = self.had_error;
                     
-                    let type_ = ctx.run(|ctx| self.execute(&definition, 0, ctx)).await?.unwrap_or_else(|| {
-                        ast_error!(self, expr, "Could not process template generation for this expression");
-                        SkyeType::Void
-                    });
+                    let type_ = {
+                        match ctx.run(|ctx| self.execute(&definition, 0, ctx)).await {
+                            Ok(item) => item.unwrap_or_else(|| {
+                                ast_error!(self, expr, "Could not process template generation for this expression");
+                                SkyeType::Void
+                            }),
+                            Err(e) => {
+                                self.curr_name   = previous_name;
+                                self.environment = previous;
+                                return Err(e);
+                            }
+                        }
+                    };
 
                     if self.had_error && !old_had_error {
                         ast_note!(expr, "This error is a result of template generation originating from this call");
@@ -1456,7 +1561,15 @@ impl CodeGen {
                         let previous = Rc::clone(&self.environment);
                         self.environment = tmp_env;
 
-                        let call_return_type = ctx.run(|ctx| self.evaluate(&return_type.as_ref().unwrap(), index, allow_unknown, ctx)).await?;
+                        let call_return_type = {
+                            match ctx.run(|ctx| self.evaluate(&return_type.as_ref().unwrap(), index, allow_unknown, ctx)).await {
+                                Ok(item) => item,
+                                Err(e) => {
+                                    self.environment = previous;
+                                    return Err(e);
+                                }
+                            }
+                        };
 
                         self.environment = previous;
 
@@ -1842,6 +1955,7 @@ impl CodeGen {
                         Some(Box::new(type_tok.clone()))
                     )
                 );
+
                 drop(env);
 
                 let subscript_expr = Expression::Subscript(
@@ -3375,6 +3489,7 @@ impl CodeGen {
                                 Environment::with_enclosing(Rc::clone(&read_env))
                             ));
 
+                            let mut generics_found_at = HashMap::new();
                             let mut fields_output = String::new();
                             for (i, field) in fields.iter().enumerate() {
                                 if let Some(def_field_expr) = fields_map.get(&field.name.lexeme) {
@@ -3419,24 +3534,8 @@ impl CodeGen {
                                             if let Some(inferred) = inner_type.infer_type_from_similar(&literal_evaluated.type_) {
                                                 for (generic_name, generic_type) in inferred {
                                                     if generics_to_find.get(&generic_name).unwrap().is_none() {
-                                                        let wrapped = SkyeType::Type(Box::new(generic_type));
-                                                        let mapped_generic = generics_map.get(&generic_name).unwrap();
-
-                                                        if let Some(bounds) = &mapped_generic.bounds {
-                                                            if !bounds.is_respected_by(&wrapped) {
-                                                                ast_error!(
-                                                                    self, field.expr,
-                                                                    format!(
-                                                                        "Generic bound is not respected by this type (expecting {} but got {})",
-                                                                        bounds.stringify_native(), wrapped.stringify_native()
-                                                                    ).as_ref()
-                                                                );
-
-                                                                token_note!(mapped_generic.name, "Generic defined here");
-                                                            }
-                                                        }
-
-                                                        generics_to_find.insert(generic_name, Some(wrapped));
+                                                        generics_to_find.insert(Rc::clone(&generic_name), Some(SkyeType::Type(Box::new(generic_type))));
+                                                        generics_found_at.insert(generic_name, i);
                                                     }
                                                 }
                                             } else {
@@ -3484,22 +3583,106 @@ impl CodeGen {
                                 let mapped = generics_map.get(&name).unwrap();
 
                                 let type_ = {
-                                    if let Some(type_) = generic_type {
-                                        Some(type_)
+                                    if let Some(t) = generic_type {
+                                        Some(t)
+                                    } else if let Some(default) = &mapped.default {
+                                        let previous = Rc::clone(&self.environment);
+                                        self.environment = Rc::clone(&tmp_env);
+
+                                        let evaluated = {
+                                            match ctx.run(|ctx| self.evaluate(&default, index, false, ctx)).await {
+                                                Ok(item) => item,
+                                                Err(_) => {
+                                                    self.environment = previous;
+                                                    continue;
+                                                }
+                                            }
+                                        };
+
+                                        self.environment = previous;
+                
+                                        if matches!(evaluated.type_, SkyeType::Type(_) | SkyeType::Void) {
+                                            if evaluated.type_.check_completeness() {
+                                                Some(evaluated.type_)
+                                            } else {
+                                                ast_error!(self, default, "Cannot use incomplete type directly");
+                                                ast_note!(default, "Define this type or reference it through a pointer");
+                                                None
+                                            }
+                                        } else {
+                                            ast_error!(
+                                                self, default,
+                                                format!(
+                                                    "Expecting type as default generic (got {})",
+                                                    evaluated.type_.stringify_native()
+                                                ).as_ref()
+                                            );
+                
+                                            None
+                                        }
                                     } else {
-                                        mapped.default.clone()
+                                        None
                                     }
                                 };
 
                                 if let Some(inner_type) = type_ {
-                                    let mut env = tmp_env.borrow_mut();
-                                    env.define(
-                                        Rc::clone(&name),
-                                        SkyeVariable::new(
-                                            inner_type, true,
-                                            Some(Box::new(mapped.name.clone()))
-                                        )
-                                    );
+                                    if let Some(bounds) = &mapped.bounds {
+                                        let previous = Rc::clone(&self.environment);
+                                        self.environment = Rc::clone(&tmp_env);
+
+                                        let evaluated = {
+                                            match ctx.run(|ctx| self.evaluate(&bounds, index, false, ctx)).await {
+                                                Ok(item) => item,
+                                                Err(_) => {
+                                                    self.environment = previous;
+                                                    continue;
+                                                }
+                                            }
+                                        };
+
+                                        self.environment = previous;
+                
+                                        if evaluated.type_.is_type() || matches!(evaluated.type_, SkyeType::Void) {
+                                            if evaluated.type_.is_respected_by(&inner_type) {
+                                                let mut env = self.environment.borrow_mut();
+                                                env.define(
+                                                    Rc::clone(&name),
+                                                    SkyeVariable::new(
+                                                        inner_type, true,
+                                                        Some(Box::new(mapped.name.clone()))
+                                                    )
+                                                );
+                                            } else {
+                                                let at = *generics_found_at.get(&name).unwrap();
+                                                ast_error!(
+                                                    self, fields[at].expr,
+                                                    format!(
+                                                        "Generic bound is not respected by this type (expecting {} but got {})",
+                                                        evaluated.type_.stringify_native(), inner_type.stringify_native()
+                                                    ).as_ref()
+                                                );
+            
+                                                token_note!(mapped.name, "Generic defined here");
+                                            }
+                                        } else {
+                                            ast_error!(
+                                                self, bounds,
+                                                format!(
+                                                    "Expecting type or group as generic bound (got {})",
+                                                    evaluated.type_.stringify_native()
+                                                ).as_ref()
+                                            );
+                                        }
+                                    } else {
+                                        let mut env = self.environment.borrow_mut();
+                                        env.define(
+                                            Rc::clone(&name),
+                                            SkyeVariable::new(
+                                                inner_type, true,
+                                                Some(Box::new(mapped.name.clone()))
+                                            )
+                                        );
+                                    }
                                 } else {
                                     if !self.had_error { // avoids having inference errors caused by other errors
                                         ast_error!(self, identifier_expr, "Skye cannot infer the generic types for this struct literal");
@@ -3540,10 +3723,19 @@ impl CodeGen {
                             let previous_name = self.curr_name.clone();
                             self.curr_name = curr_name.clone();
 
-                            let type_ = ctx.run(|ctx| self.execute(&definition, 0, ctx)).await?.unwrap_or_else(|| {
-                                ast_error!(self, expr, "Could not process template generation for this expression");
-                                SkyeType::Void
-                            });
+                            let type_ = {
+                                match ctx.run(|ctx| self.execute(&definition, 0, ctx)).await {
+                                    Ok(item) => item.unwrap_or_else(|| {
+                                        ast_error!(self, expr, "Could not process template generation for this expression");
+                                        SkyeType::Void
+                                    }),
+                                    Err(e) => {
+                                        self.curr_name   = previous_name;
+                                        self.environment = previous;
+                                        return Err(e);
+                                    }
+                                }
+                            };
 
                             self.curr_name   = previous_name;
                             self.environment = previous;
@@ -3647,10 +3839,6 @@ impl CodeGen {
                             }
                         }
 
-                        let tmp_env = Rc::new(RefCell::new(
-                            Environment::with_enclosing(Rc::clone(&read_env))
-                        ));
-
                         let offs = {
                             if generics.len() > 1 && generics.first().unwrap().default.is_some() && generics.last().unwrap().default.is_none() {
                                 generics.len() - arguments.len()
@@ -3659,12 +3847,30 @@ impl CodeGen {
                             }
                         };
 
+                        let tmp_env = Rc::new(RefCell::new(
+                            Environment::with_enclosing(Rc::clone(&read_env))
+                        ));
+
                         for (i, generic) in generics.iter().enumerate() {
                             let evaluated = {
-                                if i >= offs && i - offs < arguments.len() {
-                                    ctx.run(|ctx| self.evaluate(&arguments[i - offs], index, allow_unknown, ctx)).await?.type_
-                                } else {
-                                    generic.default.as_ref().unwrap().clone()
+                                let r = {
+                                    if i >= offs && i - offs < arguments.len() {
+                                        ctx.run(|ctx| self.evaluate(&arguments[i - offs], index, allow_unknown, ctx)).await
+                                    } else {
+                                        let previous = Rc::clone(&self.environment);
+                                        self.environment = Rc::clone(&tmp_env);
+
+                                        let ret = ctx.run(|ctx| self.evaluate(generic.default.as_ref().unwrap(), index, allow_unknown, ctx)).await;
+
+                                        self.environment = previous;
+
+                                        ret
+                                    }
+                                };
+
+                                match r {
+                                    Ok(item) => item.type_,
+                                    Err(_) => continue
                                 }
                             };
 
@@ -3690,16 +3896,41 @@ impl CodeGen {
                             }
 
                             if let Some(bounds) = &generic.bounds {
-                                if !bounds.is_respected_by(&evaluated) {
+                                let previous = Rc::clone(&self.environment);
+                                self.environment = Rc::clone(&tmp_env);
+
+                                let evaluated_bound = {
+                                    match ctx.run(|ctx| self.evaluate(&bounds, index, false, ctx)).await {
+                                        Ok(item) => item,
+                                        Err(_) => {
+                                            self.environment = previous;
+                                            continue
+                                        }
+                                    }
+                                };
+            
+                                self.environment = previous;
+                                
+                                if evaluated_bound.type_.is_type() || matches!(evaluated_bound.type_, SkyeType::Void) {
+                                    if !evaluated_bound.type_.is_respected_by(&evaluated) {
+                                        ast_error!(
+                                            self, arguments[i - offs],
+                                            format!(
+                                                "Generic bound is not respected by this type (expecting {} but got {})",
+                                                evaluated_bound.type_.stringify_native(), evaluated.stringify_native()
+                                            ).as_ref()
+                                        );
+    
+                                        token_note!(generic.name, "Generic defined here");
+                                    } 
+                                } else {
                                     ast_error!(
-                                        self, arguments[i - offs],
+                                        self, bounds,
                                         format!(
-                                            "Generic bound is not respected by this type (expecting {} but got {})",
-                                            bounds.stringify_native(), evaluated.stringify_native()
+                                            "Expecting type or group as generic bound (got {})",
+                                            evaluated_bound.type_.stringify_native()
                                         ).as_ref()
                                     );
-
-                                    token_note!(generic.name, "Generic defined here");
                                 }
                             }
 
@@ -3755,10 +3986,19 @@ impl CodeGen {
                         let previous_name = self.curr_name.clone();
                         self.curr_name = curr_name;
 
-                        let type_ = ctx.run(|ctx| self.execute(&definition, index, ctx)).await?.unwrap_or_else(|| {
-                            ast_error!(self, expr, "Could not process template generation for this expression");
-                            SkyeType::Void
-                        });
+                        let type_ = {
+                            match ctx.run(|ctx| self.execute(&definition, 0, ctx)).await {
+                                Ok(item) => item.unwrap_or_else(|| {
+                                    ast_error!(self, expr, "Could not process template generation for this expression");
+                                    SkyeType::Void
+                                }),
+                                Err(e) => {
+                                    self.curr_name   = previous_name;
+                                    self.environment = previous;
+                                    return Err(e);
+                                }
+                            }
+                        };
 
                         self.curr_name   = previous_name;
                         self.environment = previous;
@@ -5784,62 +6024,6 @@ impl CodeGen {
             }
             Statement::Template(name, definition, generics, generics_names) => {
                 let full_name = self.get_name(&name.lexeme);
-
-                let mut generics_evaluated = Vec::new();
-                for generic in generics {
-                    let bounds_type = {
-                        if let Some(bounds) = &generic.bounds {
-                            let evaluated = ctx.run(|ctx| self.evaluate(&bounds, index, false, ctx)).await?;
-
-                            if evaluated.type_.is_type() || matches!(evaluated.type_, SkyeType::Void) {
-                                Some(evaluated.type_)
-                            } else {
-                                ast_error!(
-                                    self, bounds,
-                                    format!(
-                                        "Expecting type or group as generic bound (got {})",
-                                        evaluated.type_.stringify_native()
-                                    ).as_ref()
-                                );
-
-                                None
-                            }
-                        } else {
-                            None
-                        }
-                    };
-
-                    let default_type = {
-                        if let Some(default) = &generic.default {
-                            let evaluated = ctx.run(|ctx| self.evaluate(&default, index, false, ctx)).await?;
-
-                            if matches!(evaluated.type_, SkyeType::Type(_) | SkyeType::Void) {
-                                if evaluated.type_.check_completeness() {
-                                    Some(evaluated.type_)
-                                } else {
-                                    ast_error!(self, default, "Cannot use incomplete type directly");
-                                    ast_note!(default, "Define this type or reference it through a pointer");
-                                    None
-                                }
-                            } else {
-                                ast_error!(
-                                    self, default,
-                                    format!(
-                                        "Expecting type as default generic (got {})",
-                                        evaluated.type_.stringify_native()
-                                    ).as_ref()
-                                );
-
-                                None
-                            }
-                        } else {
-                            None
-                        }
-                    };
-
-                    generics_evaluated.push(SkyeGeneric::new(generic.name.clone(), bounds_type, default_type));
-                }
-
                 let mut env = self.globals.borrow_mut();
                 let cloned_globals = Rc::new(RefCell::new(env.clone()));
                 env.define(
@@ -5847,7 +6031,7 @@ impl CodeGen {
                     SkyeVariable::new(
                         SkyeType::Template(
                             full_name, *definition.clone(),
-                            generics_evaluated, generics_names.clone(),
+                            generics.clone(), generics_names.clone(),
                             self.curr_name.clone(), cloned_globals
                         ),
                         true,

@@ -71,7 +71,7 @@ pub fn info(source: &Rc<str>, msg: &str, filename: &Rc<str>, pos: usize, len: us
 macro_rules! token_error {
     ($slf: expr, $token: expr, $msg: expr) => {
         {
-            crate::utils::error(&$token.source, $msg, &$token.filename, $token.pos, $token.lexeme.len(), $token.line);
+            crate::utils::error(&$token.source, $msg, &$token.filename, $token.pos, $token.end - $token.pos, $token.line);
             $slf.had_error = true;
         }
     };
@@ -80,14 +80,14 @@ macro_rules! token_error {
 #[macro_export]
 macro_rules! token_warning {
     ($token: expr, $msg: expr) => {
-        crate::utils::warning(&$token.source, $msg, &$token.filename, $token.pos, $token.lexeme.len(), $token.line);
+        crate::utils::warning(&$token.source, $msg, &$token.filename, $token.pos, $token.end - $token.pos, $token.line);
     };
 }
 
 #[macro_export]
 macro_rules! token_note {
     ($token: expr, $msg: expr) => {
-        crate::utils::note(&$token.source, $msg, &$token.filename, $token.pos, $token.lexeme.len(), $token.line);
+        crate::utils::note(&$token.source, $msg, &$token.filename, $token.pos, $token.end - $token.pos, $token.line);
     };
 }
 
