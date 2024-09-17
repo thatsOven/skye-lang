@@ -1686,7 +1686,7 @@ impl CodeGen {
                 let search_tok = Token::dummy(Rc::from(op_method));
                 if let Some(value) = self.get_method(&inner, &search_tok, true) {
                     let v = Vec::new();
-                    let _ = ctx.run(|ctx| self.call(&value, expr, inner_expr, &v, index, allow_unknown, ctx)).await?;
+                    let _ = ctx.run(|ctx| self.call(&value, expr, inner_expr, &v, index, allow_unknown, ctx)).await;
                     Ok(SkyeValue::new(Rc::from(tmp_var), inner.type_, false))
                 } else {
                     token_error!(
@@ -4463,7 +4463,7 @@ impl CodeGen {
                     self.definitions[index].push("{\n");
                     self.definitions[index].inc_indent();
 
-                    let _ = ctx.run(|ctx| self.execute_block(
+                    ctx.run(|ctx| self.execute_block(
                         statements,
                         Rc::new(RefCell::new(
                             Environment::with_enclosing(
@@ -4678,7 +4678,7 @@ impl CodeGen {
                     self.definitions[new_index].push(" {\n");
                     self.definitions[new_index].inc_indent();
 
-                    let _ = ctx.run(|ctx| self.execute_block(
+                    ctx.run(|ctx| self.execute_block(
                         body.as_ref().unwrap(),
                         Rc::new(RefCell::new(fn_environment.unwrap())),
                         new_index, false, ctx
@@ -4741,7 +4741,7 @@ impl CodeGen {
                     self.definitions[index].inc_indent();
 
                     let stmts = vec![*then_branch.clone()];
-                    let _ = ctx.run(|ctx| self.execute_block(
+                    ctx.run(|ctx| self.execute_block(
                         &stmts,
                         Rc::new(RefCell::new(Environment::with_enclosing(
                             Rc::clone(&self.environment)
@@ -4770,7 +4770,7 @@ impl CodeGen {
                         self.definitions[index].inc_indent();
 
                         let stmts = vec![*else_branch_statement.clone()];
-                        let _ = ctx.run(|ctx| self.execute_block(
+                        ctx.run(|ctx| self.execute_block(
                             &stmts,
                             Rc::new(RefCell::new(Environment::with_enclosing(
                                 Rc::clone(&self.environment)
@@ -4841,7 +4841,7 @@ impl CodeGen {
 
                 if not_block {
                     let stmts = vec![*body.clone()];
-                    let _ = ctx.run(|ctx| self.execute_block(
+                    ctx.run(|ctx| self.execute_block(
                         &stmts,
                         Rc::new(RefCell::new(Environment::with_enclosing(
                             Rc::clone(&self.environment)
@@ -4923,7 +4923,7 @@ impl CodeGen {
 
                 if not_block {
                     let stmts = vec![*body.clone()];
-                    let _ = ctx.run(|ctx| self.execute_block(
+                    ctx.run(|ctx| self.execute_block(
                         &stmts,
                         Rc::new(RefCell::new(Environment::with_enclosing(
                             Rc::clone(&self.environment)
@@ -4974,7 +4974,7 @@ impl CodeGen {
 
                 if not_block {
                     let stmts = vec![*body.clone()];
-                    let _ = ctx.run(|ctx| self.execute_block(
+                    ctx.run(|ctx| self.execute_block(
                         &stmts,
                         Rc::new(RefCell::new(Environment::with_enclosing(
                             Rc::clone(&self.environment)
@@ -5288,7 +5288,7 @@ impl CodeGen {
                                 let previous_name = self.curr_name.clone();
                                 self.curr_name = struct_name.value.to_string();
 
-                                let _ = ctx.run(|ctx| self.execute_block(
+                                ctx.run(|ctx| self.execute_block(
                                     statements, Rc::clone(&self.globals), index, true, ctx
                                 )).await;
 
@@ -5327,7 +5327,7 @@ impl CodeGen {
                                 let previous_name = self.curr_name.clone();
                                 self.curr_name = struct_name.value.to_string();
 
-                                let _ = ctx.run(|ctx| self.execute_block(
+                                ctx.run(|ctx| self.execute_block(
                                     statements, Rc::clone(&self.globals), index, true, ctx
                                 )).await;
 
@@ -5399,7 +5399,7 @@ impl CodeGen {
                     let previous_name = self.curr_name.clone();
                     self.curr_name = full_name.to_string();
 
-                    let _ = ctx.run(|ctx| self.execute_block(
+                    ctx.run(|ctx| self.execute_block(
                         statements, Rc::clone(&self.globals), index, true, ctx
                     )).await;
 
@@ -6021,7 +6021,7 @@ impl CodeGen {
                         } else if !entered_case {
                             // use code from the default case if other cases weren't hit
 
-                            let _ = ctx.run(|ctx| self.execute_block(
+                            ctx.run(|ctx| self.execute_block(
                                 &case.code,
                                 Rc::new(RefCell::new(
                                     Environment::with_enclosing(
@@ -6055,7 +6055,7 @@ impl CodeGen {
                         }
                     }
                     
-                    let _ = ctx.run(|ctx| self.execute_block(
+                    ctx.run(|ctx| self.execute_block(
                         &case.code,
                         Rc::new(RefCell::new(
                             Environment::with_enclosing(
@@ -6686,7 +6686,7 @@ impl CodeGen {
 
                 if matches!(**body, Statement::Block(..)) {
                     let stmts = vec![*body.clone()];
-                    let _ = ctx.run(|ctx| self.execute_block(
+                    ctx.run(|ctx| self.execute_block(
                         &stmts,
                         Rc::new(RefCell::new(Environment::with_enclosing(
                             Rc::clone(&self.environment)
