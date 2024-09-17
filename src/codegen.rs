@@ -5363,7 +5363,7 @@ impl CodeGen {
                 }
             }
             Statement::Namespace(name, statements) => {
-                if !matches!(self.curr_function, CurrentFn::None) {
+                if matches!(self.curr_function, CurrentFn::Some(..)) {
                     token_error!(self, name, "Namespaces are only allowed in the global scope");
                 }
 
@@ -5371,9 +5371,7 @@ impl CodeGen {
 
                 let mut env = self.globals.borrow_mut();
                 if let Some(var) = env.get(name) {
-                    if let SkyeType::Namespace(_) = var.type_ {
-                        ()
-                    } else {
+                    if !matches!(var.type_, SkyeType::Namespace(_)) { 
                         token_error!(self, name, "Cannot declare namespace with same name as existing symbol");
 
                         if let Some(token) = &var.tok {
@@ -5443,7 +5441,8 @@ impl CodeGen {
                     }
 
                     env.define(
-                        Rc::clone(&identifier.lexeme), SkyeVariable::new(
+                        Rc::clone(&identifier.lexeme), 
+                        SkyeVariable::new(
                             use_value.type_, use_value.is_const,
                             Some(Box::new(identifier.clone()))
                         )
