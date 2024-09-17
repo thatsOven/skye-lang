@@ -178,6 +178,8 @@ switch a {
     }
 }
 ```
+
+Using types as conditions for a switch statement allows you to compare a type against other types at compile time. An example of this is in the section about [generics](#generics);
 # Functions
 To create a function, you can use the `fn` keyword, like so:
 ```
