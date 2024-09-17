@@ -165,10 +165,10 @@ All loops can use `continue` and `break` statements.
 let a: u8 = 2;
 switch a {
     3 | 4 | 5 {
-        @println("Still nope");
+        @println("Nope!");
     }
     // you can use an arrow instead of a block if you want to use a single statement for a case
-    0 -> @println("Nope!"); 
+    0 -> @println("Still nope"); 
     2 -> @println("Here!");
     default {
         @println("Something else");
