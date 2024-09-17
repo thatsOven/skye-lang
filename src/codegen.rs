@@ -5965,6 +5965,7 @@ impl CodeGen {
                     self.definitions[index].inc_indent();
                 }
 
+                let mut entered_case = false;
                 for case in cases {
                     let mut case_types = Vec::new();
 
@@ -6014,9 +6015,24 @@ impl CodeGen {
                                 case_types.push(real_case_evaluated.type_);
                             }
                         }
-                    } else if is_classic {
-                        self.definitions[index].push_indent();
-                        self.definitions[index].push("default: ");
+                    } else {
+                        if is_classic {
+                            self.definitions[index].push_indent();
+                            self.definitions[index].push("default: ");
+                        } else if !entered_case {
+                            // use code from the default case if other cases weren't hit
+
+                            let _ = ctx.run(|ctx| self.execute_block(
+                                &case.code,
+                                Rc::new(RefCell::new(
+                                    Environment::with_enclosing(
+                                        Rc::clone(&self.environment)
+                                    )
+                                )),
+                                index, false, ctx
+                            )).await;
+                            continue;
+                        }
                     }
 
                     if is_classic {
@@ -6035,6 +6051,8 @@ impl CodeGen {
 
                         if no_exec {
                             continue;
+                        } else {
+                            entered_case = true;
                         }
                     }
                     
