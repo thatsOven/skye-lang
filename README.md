@@ -164,15 +164,12 @@ All loops can use `continue` and `break` statements.
 ```
 let a: u8 = 2;
 switch a {
-    0 {
-        @println("Nope!");
-    }
-    2 {
-        @println("Here!");
-    }
     3 | 4 | 5 {
         @println("Still nope");
     }
+    // you can use an arrow instead of a block if you want to use a single statement for a case
+    0 -> @println("Nope!"); 
+    2 -> @println("Here!");
     default {
         @println("Something else");
     }
@@ -486,18 +483,10 @@ You can use generics to give the function different behaviors depending on types
 ```
 fn which32[T: u32 | i32 | f32](x: T) {
     switch T {
-        u32 {
-            @println("got a u32");
-        }
-        i32 {
-            @println("got a i32");
-        }
-        f32 {
-            @println("got a f32");
-        }
-        default {
-            @unreachable;
-        }
+        u32 -> @println("got a u32");
+        i32 -> @println("got a i32");
+        f32 -> @println("got a f32");
+        default -> @unreachable;
     }
 }
 ```

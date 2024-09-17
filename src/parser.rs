@@ -653,8 +653,12 @@ impl Parser {
                     }
                 };
 
-                self.consume(TokenType::LeftBrace, "Expecting '{' after case body")?;
-                cases.push(SwitchCase::new(expressions, self.block()?));
+                if self.match_(&[TokenType::Arrow]) {
+                    cases.push(SwitchCase::new(expressions, vec![self.statement()?]));
+                } else {
+                    self.consume(TokenType::LeftBrace, "Expecting '{' after case expression")?;
+                    cases.push(SwitchCase::new(expressions, self.block()?));
+                }
 
                 if self.check(TokenType::RightBrace) {
                     break;
