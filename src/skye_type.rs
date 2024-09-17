@@ -217,7 +217,7 @@ impl SkyeType {
             SkyeType::Char => String::from("char"),
             SkyeType::Void => String::from("void"),
 
-            SkyeType::Unknown(name) => format!("unknown \"{}\"", name),
+            SkyeType::Unknown(name) => format!("any \"{}\"", name),
             SkyeType::Group(left, right) => format!("{} | {}", left.stringify_native(), right.stringify_native()),
             SkyeType::Template(name, ..) => format!("template \"{}\"", name.replace("_DOT_", "::")),
             SkyeType::Namespace(name) => format!("namespace \"{}\"", name.replace("_DOT_", "::")),

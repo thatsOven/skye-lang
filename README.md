@@ -327,6 +327,13 @@ enum ClassicEnum {
     Variant2
 }
 
+// by default, enum variants are typed `i32`, 
+// but you can specify a custom time using the `as` keyword
+enum U64Enum as u64 { 
+    Variant1,
+    Variant2
+}
+
 enum SumTypeEnum {
     Variant1(i32),
     Variant2(f64)
@@ -384,7 +391,7 @@ let myBitfieldInstance = MyBitfieldBinding.{ a, b: 1 };
 let myUnionInstance = MyUnionBinding.{ a }; // only one field of a union can be initialized
 ```
 # Impl
-Structs and Enums can have methods, and they can be implemented using the `impl` keyword.
+Structs and sum type enums can have methods, and they can be implemented using the `impl` keyword.
 ```
 struct MyStruct {
     myField: i32,
@@ -418,7 +425,7 @@ let result = instance.add();
 instance::setMyField(&instance, result);
 ```
 # Namespaces
-Namespaces can be created to avoid name conflicts and organize code. The can be accessed through the `::` operator and defined like this:
+Namespaces can be created to avoid name conflicts and organize code. They can be accessed through the `::` operator and defined like this:
 ```
 namespace myNamespace {
     fn test() {
@@ -444,7 +451,7 @@ import <"math.h">; // using angular brackets is equivalent to doing the same in 
 import <<"core/internals.h">>; // using double angular brackets forces the import to address to the installed packages
 ```
 # Generics
-Structs, enums, and functions can use generics to accept multiple types
+Structs, sum type enums, and functions can use generics to accept multiple types
 ```
 struct MyStruct[T] {
     a: T,
@@ -476,12 +483,19 @@ You can use generics to give the function different behaviors depending on types
 
 ```
 fn which32[T: u32 | i32 | f32](x: T) {
-    if T == u32 {
-        @println("got a u32");
-    } else if T == i32 {
-        @println("got a i32");
-    } else {
-        @println("got a f32");
+    switch T {
+        u32 {
+            @println("got a u32");
+        }
+        i32 {
+            @println("got a i32");
+        }
+        f32 {
+            @println("got a f32");
+        }
+        default {
+            @unreachable;
+        }
     }
 }
 ```
@@ -610,8 +624,8 @@ Here is a list of operators that can be overloaded
 | `-{}` | `__neg__` | 0 | any |
 | `!{}` | `__not__` | 0 | any |
 | `~{}` | `__inv__` | 0 | any |
-| `*{}` | `__deref__` | 0 | any |
-| `*const {}` | `__constderef__` | 0 | any |
+| `*{}` | `__deref__` [*2](#additional-information) | 0 | any |
+| `*const {}` | `__constderef__` [*2](#additional-information) | 0 | any |
 | `{} + {}` | `__add__` | 1 | any |
 | `{} - {}` | `__sub__` | 1 | any |
 | `{} / {}` | `__div__` | 1 | any |
@@ -640,9 +654,10 @@ Here is a list of operators that can be overloaded
 | `{} ^= {}` | `__setxor__` | 1 | any |
 | <code>{} &#124;= {}</code> | `__setor__` | 1 | any |
 | `{} &= {}` | `__setand__` | 1 | any |
-| `{}[{}]` | `__subscript__` | any | any |
+| `{}[{}]` | `__subscript__` | any | pointer to any |
 
 Additionally, Skye offers you copy constructors and destructors, mostly used for special types like smart pointers. They are respectively the `__copy__` method and the `__destruct__` method. The Skye compiler will warn you when it inserts calls to those methods inside the code, so that eventual debugging is easier.
 
 ### Additional information
 1) Prefix and suffix increments and decrements are handled by the Skye compiler, and thus prevent undefined behavior for cases where multiple increments are used in the same expression or statement. Every expression is evaluated from left to right, and the outcome is always predictable.
+2) The `__deref__` and `__constderef__` methods are used to bind the unary `*` and `*const` operators to a different behavior. This means, for example, that dereferencing the type and assigning to the dereferenced output will not be possible with the standard syntax. To achieve that kind of behavior, a `__asptr__` method, taking no arguments and returning a pointer to any type, has to be implemented.

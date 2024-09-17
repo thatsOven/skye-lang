@@ -997,10 +997,8 @@ impl CodeGen {
                     }
 
                     let mut generics_to_find = HashMap::new();
-                    let mut generics_map = HashMap::new();
                     for generic in generics {
                         generics_to_find.insert(Rc::clone(&generic.name.lexeme), None);
-                        generics_map.insert(Rc::clone(&generic.name.lexeme), generic.clone());
                     }
 
                     let tmp_env = Rc::new(RefCell::new(
@@ -1183,13 +1181,13 @@ impl CodeGen {
                         }
                     }
 
-                    for (name, generic_type) in generics_to_find {
-                        let mapped = generics_map.get(&name).unwrap();
+                    for expr_generic in generics {
+                        let generic_type = generics_to_find.get(&expr_generic.name.lexeme).unwrap();
 
                         let type_ = {
                             if let Some(t) = generic_type {
-                                Some(t)
-                            } else if let Some(default) = &mapped.default {
+                                Some(t.clone())
+                            } else if let Some(default) = &expr_generic.default {
                                 let previous = Rc::clone(&self.environment);
                                 self.environment = Rc::clone(&tmp_env);
 
@@ -1230,7 +1228,7 @@ impl CodeGen {
                         };
 
                         if let Some(inner_type) = type_ {
-                            if let Some(bounds) = &mapped.bounds {
+                            if let Some(bounds) = &expr_generic.bounds {
                                 let previous = Rc::clone(&self.environment);
                                 self.environment = Rc::clone(&tmp_env);
 
@@ -1250,14 +1248,14 @@ impl CodeGen {
                                     if evaluated.type_.is_respected_by(&inner_type) {
                                         let mut env = tmp_env.borrow_mut();
                                         env.define(
-                                            Rc::clone(&name),
+                                            Rc::clone(&expr_generic.name.lexeme),
                                             SkyeVariable::new(
                                                 inner_type, true,
-                                                Some(Box::new(mapped.name.clone()))
+                                                Some(Box::new(expr_generic.name.clone()))
                                             )
                                         );
                                     } else {
-                                        let at = *generics_found_at.get(&name).unwrap();
+                                        let at = *generics_found_at.get(&expr_generic.name.lexeme).unwrap();
 
                                         if at != 0 || arguments_mod != 1 {
                                             ast_error!(
@@ -1268,7 +1266,7 @@ impl CodeGen {
                                                 ).as_ref()
                                             );
         
-                                            token_note!(mapped.name, "Generic defined here");
+                                            token_note!(expr_generic.name, "Generic defined here");
                                         }
                                     }
                                 } else {
@@ -1283,10 +1281,10 @@ impl CodeGen {
                             } else {
                                 let mut env = tmp_env.borrow_mut();
                                 env.define(
-                                    Rc::clone(&name),
+                                    Rc::clone(&expr_generic.name.lexeme),
                                     SkyeVariable::new(
                                         inner_type, true,
-                                        Some(Box::new(mapped.name.clone()))
+                                        Some(Box::new(expr_generic.name.clone()))
                                     )
                                 );
                             }
@@ -3470,10 +3468,8 @@ impl CodeGen {
                             }
 
                             let mut generics_to_find = HashMap::new();
-                            let mut generics_map = HashMap::new();
                             for generic in generics {
                                 generics_to_find.insert(Rc::clone(&generic.name.lexeme), None);
-                                generics_map.insert(Rc::clone(&generic.name.lexeme), generic.clone());
                             }
 
                             let mut fields_map = HashMap::new();
@@ -3579,13 +3575,13 @@ impl CodeGen {
                                 }
                             }
 
-                            for (name, generic_type) in generics_to_find {
-                                let mapped = generics_map.get(&name).unwrap();
+                            for expr_generic in generics {
+                                let generic_type = generics_to_find.get(&expr_generic.name.lexeme).unwrap();
 
                                 let type_ = {
                                     if let Some(t) = generic_type {
-                                        Some(t)
-                                    } else if let Some(default) = &mapped.default {
+                                        Some(t.clone())
+                                    } else if let Some(default) = &expr_generic.default {
                                         let previous = Rc::clone(&self.environment);
                                         self.environment = Rc::clone(&tmp_env);
 
@@ -3626,7 +3622,7 @@ impl CodeGen {
                                 };
 
                                 if let Some(inner_type) = type_ {
-                                    if let Some(bounds) = &mapped.bounds {
+                                    if let Some(bounds) = &expr_generic.bounds {
                                         let previous = Rc::clone(&self.environment);
                                         self.environment = Rc::clone(&tmp_env);
 
@@ -3646,14 +3642,15 @@ impl CodeGen {
                                             if evaluated.type_.is_respected_by(&inner_type) {
                                                 let mut env = self.environment.borrow_mut();
                                                 env.define(
-                                                    Rc::clone(&name),
+                                                    Rc::clone(&expr_generic.name.lexeme),
                                                     SkyeVariable::new(
                                                         inner_type, true,
-                                                        Some(Box::new(mapped.name.clone()))
+                                                        Some(Box::new(expr_generic.name.clone()))
                                                     )
                                                 );
                                             } else {
-                                                let at = *generics_found_at.get(&name).unwrap();
+                                                let at = *generics_found_at.get(&expr_generic.name.lexeme).unwrap();
+                                                
                                                 ast_error!(
                                                     self, fields[at].expr,
                                                     format!(
@@ -3662,7 +3659,7 @@ impl CodeGen {
                                                     ).as_ref()
                                                 );
             
-                                                token_note!(mapped.name, "Generic defined here");
+                                                token_note!(expr_generic.name, "Generic defined here");
                                             }
                                         } else {
                                             ast_error!(
@@ -3676,10 +3673,10 @@ impl CodeGen {
                                     } else {
                                         let mut env = self.environment.borrow_mut();
                                         env.define(
-                                            Rc::clone(&name),
+                                            Rc::clone(&expr_generic.name.lexeme),
                                             SkyeVariable::new(
                                                 inner_type, true,
-                                                Some(Box::new(mapped.name.clone()))
+                                                Some(Box::new(expr_generic.name.clone()))
                                             )
                                         );
                                     }
@@ -5920,17 +5917,20 @@ impl CodeGen {
 
                 let is_not_grouping = !matches!(switch_expr, Expression::Grouping(_));
                 let switch = ctx.run(|ctx| self.evaluate(&switch_expr, index, false, ctx)).await?;
+                let mut is_classic = true;
+
                 match &switch.type_ {
                     SkyeType::U8  | SkyeType::I8  | SkyeType::U16 | SkyeType::I16 |
                     SkyeType::U32 | SkyeType::I32 | SkyeType::U64 | SkyeType::I64 |
                     SkyeType::Usz | SkyeType::F32 | SkyeType::F64 | SkyeType::AnyInt |
                     SkyeType::AnyFloat | SkyeType::Char => (),
+                    SkyeType::Type(_) => is_classic = false,
                     SkyeType::Enum(_, variants, _) => {
                         if variants.is_some() {
                             ast_error!(
                                 self, switch_expr,
                                 format!(
-                                    "Expecting expression of primitive arithmetic type or simple enum for switch condition (got {})",
+                                    "Expecting expression of primitive arithmetic type, simple enum or type for switch condition (got {})",
                                     switch.type_.stringify_native()
                                 ).as_ref()
                             );
@@ -5940,69 +5940,104 @@ impl CodeGen {
                         ast_error!(
                             self, switch_expr,
                             format!(
-                                "Expecting expression of primitive arithmetic type or simple enum for switch condition (got {})",
+                                "Expecting expression of primitive arithmetic type, simple enum or type for switch condition (got {})",
                                 switch.type_.stringify_native()
                             ).as_ref()
                         );
                     }
                 }
 
-                self.definitions[index].push_indent();
-                self.definitions[index].push("switch ");
+                if is_classic {
+                    self.definitions[index].push_indent();
+                    self.definitions[index].push("switch ");
 
-                if is_not_grouping {
-                    self.definitions[index].push("(");
+                    if is_not_grouping {
+                        self.definitions[index].push("(");
+                    }
+
+                    self.definitions[index].push(&switch.value);
+
+                    if is_not_grouping {
+                        self.definitions[index].push(")");
+                    }
+
+                    self.definitions[index].push(" {\n");
+                    self.definitions[index].inc_indent();
                 }
-
-                self.definitions[index].push(&switch.value);
-
-                if is_not_grouping {
-                    self.definitions[index].push(")");
-                }
-
-                self.definitions[index].push(" {\n");
-                self.definitions[index].inc_indent();
 
                 for case in cases {
+                    let mut case_types = Vec::new();
+
                     if let Some(real_cases) = &case.cases {
                         for (i, real_case) in real_cases.iter().enumerate() {
-                            self.definitions[index].push_indent();
-                            self.definitions[index].push("case ");
-
-                            let real_case_evaluated = ctx.run(|ctx| self.evaluate(&real_case, index, false, ctx)).await?;
-                            match real_case_evaluated.type_ {
-                                SkyeType::U8  | SkyeType::I8  | SkyeType::U16 | SkyeType::I16 |
-                                SkyeType::U32 | SkyeType::I32 | SkyeType::U64 | SkyeType::I64 |
-                                SkyeType::Usz | SkyeType::F32 | SkyeType::F64 | SkyeType::AnyInt |
-                                SkyeType::AnyFloat | SkyeType::Char => (),
-                                _ => {
-                                    ast_error!(
-                                        self, real_case,
-                                        format!(
-                                            "Expecting expression of primitive arithmetic type for case expression (got {})",
-                                            real_case_evaluated.type_.stringify_native()
-                                        ).as_ref()
-                                    );
-                                }
+                            if is_classic {
+                                self.definitions[index].push_indent();
+                                self.definitions[index].push("case ");
                             }
+                            
+                            let real_case_evaluated = ctx.run(|ctx| self.evaluate(&real_case, index, false, ctx)).await?;
+                            
+                            if is_classic {
+                                match real_case_evaluated.type_ {
+                                    SkyeType::U8  | SkyeType::I8  | SkyeType::U16 | SkyeType::I16 |
+                                    SkyeType::U32 | SkyeType::I32 | SkyeType::U64 | SkyeType::I64 |
+                                    SkyeType::Usz | SkyeType::F32 | SkyeType::F64 | SkyeType::AnyInt |
+                                    SkyeType::AnyFloat | SkyeType::Char => (),
+                                    _ => {
+                                        ast_error!(
+                                            self, real_case,
+                                            format!(
+                                                "Expecting expression of primitive arithmetic type for case expression (got {})",
+                                                real_case_evaluated.type_.stringify_native()
+                                            ).as_ref()
+                                        );
+                                    }
+                                }
 
-                            self.definitions[index].push(&real_case_evaluated.value);
-                            self.definitions[index].push(":");
+                                self.definitions[index].push(&real_case_evaluated.value);
+                                self.definitions[index].push(":");
 
-                            if i != real_cases.len() - 1 {
-                                self.definitions[index].push("\n");
+                                if i != real_cases.len() - 1 {
+                                    self.definitions[index].push("\n");
+                                } else {
+                                    self.definitions[index].push(" ");
+                                }
+                            } else if !matches!(real_case_evaluated.type_, SkyeType::Type(_)) {
+                                ast_error!(
+                                    self, real_case,
+                                    format!(
+                                        "Expecting type for case expression (got {})",
+                                        real_case_evaluated.type_.stringify_native()
+                                    ).as_ref()
+                                );
                             } else {
-                                self.definitions[index].push(" ");
+                                case_types.push(real_case_evaluated.type_);
                             }
                         }
-                    } else {
+                    } else if is_classic {
                         self.definitions[index].push_indent();
                         self.definitions[index].push("default: ");
                     }
 
-                    self.definitions[index].push("{\n");
-                    self.definitions[index].inc_indent();
+                    if is_classic {
+                        self.definitions[index].push("{\n");
+                        self.definitions[index].inc_indent();
+                    } else {
+                        let no_exec = 'no_exec_block: {
+                            for type_ in case_types {
+                                if switch.type_.equals(&type_, EqualsLevel::Typewise) {
+                                    break 'no_exec_block false;
+                                }
+                            } 
 
+                            true
+                        };
+
+                        if no_exec {
+                            continue;
+                        }
+                    }
+                    
                     let _ = ctx.run(|ctx| self.execute_block(
                         &case.code,
                         Rc::new(RefCell::new(
@@ -6013,14 +6048,18 @@ impl CodeGen {
                         index, false, ctx
                     )).await;
 
-                    self.definitions[index].dec_indent();
-                    self.definitions[index].push_indent();
-                    self.definitions[index].push("} break;\n");
+                    if is_classic {
+                        self.definitions[index].dec_indent();
+                        self.definitions[index].push_indent();
+                        self.definitions[index].push("} break;\n");
+                    }
                 }
 
-                self.definitions[index].dec_indent();
-                self.definitions[index].push_indent();
-                self.definitions[index].push("}\n");
+                if is_classic {
+                    self.definitions[index].dec_indent();
+                    self.definitions[index].push_indent();
+                    self.definitions[index].push("}\n");
+                }
             }
             Statement::Template(name, definition, generics, generics_names) => {
                 let full_name = self.get_name(&name.lexeme);
