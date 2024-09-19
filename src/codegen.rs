@@ -3243,11 +3243,23 @@ impl CodeGen {
 
                 let then_branch = ctx.run(|ctx| self.evaluate(&then_branch_expr, tmp_index, allow_unknown, ctx)).await?;
 
-                self.definitions[tmp_index].push_indent();
-                self.definitions[tmp_index].push(&tmp_var);
-                self.definitions[tmp_index].push(" = ");
-                self.definitions[tmp_index].push(&then_branch.value);
-                self.definitions[tmp_index].push(";\n");
+                let is_not_void = !matches!(then_branch.type_, SkyeType::Void);
+                let value_is_not_empty = then_branch.value.as_ref() != "";
+
+                if is_not_void || value_is_not_empty {
+                    self.definitions[tmp_index].push_indent();
+                }
+
+                if is_not_void {
+                    self.definitions[tmp_index].push(&tmp_var);
+                    self.definitions[tmp_index].push(" = ");
+                }
+                
+                if value_is_not_empty {
+                    self.definitions[tmp_index].push(&then_branch.value);
+                    self.definitions[tmp_index].push(";\n");
+                }
+                
                 self.definitions[tmp_index].dec_indent();
 
                 self.definitions[tmp_index].push_indent();
@@ -3256,11 +3268,23 @@ impl CodeGen {
 
                 let else_branch = ctx.run(|ctx| self.evaluate(&else_branch_expr, tmp_index, allow_unknown, ctx)).await?;
 
-                self.definitions[tmp_index].push_indent();
-                self.definitions[tmp_index].push(&tmp_var);
-                self.definitions[tmp_index].push(" = ");
-                self.definitions[tmp_index].push(&else_branch.value);
-                self.definitions[tmp_index].push(";\n");
+                let is_not_void = !matches!(then_branch.type_, SkyeType::Void);
+                let value_is_not_empty = else_branch.value.as_ref() != "";
+
+                if is_not_void || value_is_not_empty {
+                    self.definitions[tmp_index].push_indent();
+                }
+
+                if is_not_void {
+                    self.definitions[tmp_index].push(&tmp_var);
+                    self.definitions[tmp_index].push(" = ");
+                }
+
+                if value_is_not_empty {
+                    self.definitions[tmp_index].push(&else_branch.value);
+                    self.definitions[tmp_index].push(";\n");
+                }
+
                 self.definitions[tmp_index].dec_indent();
 
                 self.definitions[tmp_index].push_indent();
@@ -3276,11 +3300,13 @@ impl CodeGen {
                     );
                 }
 
-                self.definitions[index].push_indent();
-                self.definitions[index].push(&then_branch.type_.stringify());
-                self.definitions[index].push(" ");
-                self.definitions[index].push(&tmp_var);
-                self.definitions[index].push(";\n");
+                if is_not_void {
+                    self.definitions[index].push_indent();
+                    self.definitions[index].push(&then_branch.type_.stringify());
+                    self.definitions[index].push(" ");
+                    self.definitions[index].push(&tmp_var);
+                    self.definitions[index].push(";\n");
+                }
 
                 let tmp_code = self.definitions.swap_remove(tmp_index);
                 self.definitions[index].push(&tmp_code.code);
