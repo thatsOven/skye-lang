@@ -7,10 +7,15 @@ use skye::{compile_file_to_c, compile_file_to_exec, copy_dir_recursive, get_pack
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
 
 // TODO
-// - check that copy constructors and destructors are working properly
+// - support % operator for floats (reimplement or bind fmod and call it implictly)
+// - panic when performing division by zero (avoids undefined behavior, disabled in release mode)
+// - ideally, panic if dereferencing null pointers (same as above)
+// - implement downloading packages via http
+// - check that copy constructors and destructors are implemented properly
 // - windows support!
 // - optional warnings and notes
 // - extend standard library (still needs A LOT of work)
+// - some compile time evaluation and more warnings: unused variables/parameters, better unreachable code detection, and so on
 // - unicode support!
 
 const BUILD_FILE_INIT: &[u8] = concat!(
