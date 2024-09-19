@@ -185,7 +185,7 @@ namespace core {
 
     impl[T] core::ArrayIterator[T] {
         fn new(const array: *const Array[T]) Self[T] {
-            return core::SliceIterator.{ array, idx: 0 };
+            return core::ArrayIterator.{ array, idx: 0 };
         } 
 
         fn next(self) ?T {
