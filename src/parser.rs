@@ -625,7 +625,22 @@ impl Parser {
 
     fn defer_statement(&mut self) -> Option<Statement> {
         let kw = self.previous().clone();
-        Some(Statement::Defer(kw, Box::new(self.statement()?)))
+
+        if self.match_(&[TokenType::Let]) {
+            let tok = self.consume(TokenType::Identifier, "Expecting '_' after defer let")?.clone();
+
+            if tok.lexeme.as_ref() != "_" {
+                token_error!(self, self.previous(), "Expecting '_' after defer let")
+            }
+
+            self.consume(TokenType::Equal, "Expecting '=' before defer let expression")?;
+            let expr = self.expression()?;
+            self.consume(TokenType::Semicolon, "Expecting ';' after expression")?;
+
+            Some(Statement::Defer(kw, Box::new(Statement::VarDecl(tok, Some(expr), None, false, Vec::new()))))
+        } else {
+            Some(Statement::Defer(kw, Box::new(self.statement()?)))
+        }        
     }
 
     fn switch_statement(&mut self) -> Option<Statement> {
