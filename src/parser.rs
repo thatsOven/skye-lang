@@ -630,7 +630,14 @@ impl Parser {
             let tok = self.consume(TokenType::Identifier, "Expecting '_' after defer let")?.clone();
 
             if tok.lexeme.as_ref() != "_" {
-                token_error!(self, self.previous(), "Expecting '_' after defer let")
+                token_error!(self, self.previous(), "Expecting '_' after defer let");
+                token_note!(
+                    self.previous(), 
+                    concat!(
+                        "Variable declaration is not possible in defer statements. ",
+                        "The \"let\" keyword in this context is used for discarding errors"
+                    )
+                );
             }
 
             self.consume(TokenType::Equal, "Expecting '=' before defer let expression")?;
