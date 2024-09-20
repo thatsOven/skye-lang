@@ -3963,7 +3963,7 @@ impl CodeGen {
                                 ast_error!(
                                     self, expr,
                                     format!(
-                                        "Expecting at least {} arguments and {} at most for template generation but got {}",
+                                        "Expecting at least {} generic arguments and {} at most but got {}",
                                         needed_cnt, generics.len(), arguments.len()
                                     ).as_str()
                                 );
