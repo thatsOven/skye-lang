@@ -500,10 +500,8 @@ namespace core {
     impl[T, U = core::mem::HeapAllocator] core::Array[T, U] {
         fn __setadd__[S: T | Self[T, U] | Slice[T]](self, const other: &const S) Self[T, U] {
             switch S {
-                T {
-                    self.push(*other);
-                }
-                Self[T, U] | Slice[T]{
+                T -> self.push(*other);
+                Self[T, U] | Slice[T] {
                     self.append(other);
                 }
             }
