@@ -7,6 +7,7 @@ use skye::{compile_file_to_c, compile_file_to_exec, copy_dir_recursive, get_pack
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
 
 // TODO
+// - args array should automatically be freed through C main
 // - support % operator for floats (reimplement or bind fmod and call it implictly)
 // - ideally, panic if dereferencing null pointers (avoids undefined behavior, disabled in release mode)
 // - implement downloading packages via http
