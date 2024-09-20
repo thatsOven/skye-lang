@@ -634,7 +634,7 @@ impl Parser {
                 token_note!(
                     self.previous(), 
                     concat!(
-                        "Variable declaration is not possible in defer statements. ",
+                        "Variable declaration is not allowed in defer statements. ",
                         "The \"let\" keyword in this context is used for discarding errors"
                     )
                 );
