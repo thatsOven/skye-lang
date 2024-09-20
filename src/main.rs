@@ -8,8 +8,7 @@ use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
 
 // TODO
 // - support % operator for floats (reimplement or bind fmod and call it implictly)
-// - panic when performing division by zero (avoids undefined behavior, disabled in release mode)
-// - ideally, panic if dereferencing null pointers (same as above)
+// - ideally, panic if dereferencing null pointers (avoids undefined behavior, disabled in release mode)
 // - implement downloading packages via http
 // - check that copy constructors and destructors are implemented properly
 // - windows support!

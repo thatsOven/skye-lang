@@ -1876,6 +1876,116 @@ impl CodeGen {
         }
     }
 
+    async fn binary_operator_with_zero_check(
+        &mut self, left: SkyeValue, forced_return_type: Option<SkyeType>,
+        left_expr: &Expression, right_expr: &Expression, expr: &Expression,
+        op_stringified: &str, op: &Token, op_method: &str, op_type: Operator,
+        index: usize, allow_unknown: bool, ctx: &mut reblessive::Stk
+    ) -> Result<SkyeValue, ExecutionInterrupt> {
+        let new_left = left.follow_reference();
+
+        match new_left.type_.implements_op(op_type) {
+            ImplementsHow::Native(compatible_types) => {
+                let right = ctx.run(|ctx| self.evaluate(&right_expr, index, allow_unknown, ctx)).await?.follow_reference();
+
+                if matches!(new_left.type_, SkyeType::Unknown(_)) ||
+                    new_left.type_.equals(&right.type_, EqualsLevel::Typewise) ||
+                    compatible_types.contains(&right.type_)
+                {
+                    let right_value = {
+                        if self.debug {
+                            let tmp_var = self.get_temporary_var();
+    
+                            self.definitions[index].push_indent();
+                            self.definitions[index].push(&right.type_.stringify());
+                            self.definitions[index].push(" ");
+                            self.definitions[index].push(&tmp_var);
+                            self.definitions[index].push(" = ");
+                            self.definitions[index].push(&right.value);
+                            self.definitions[index].push(";\n");
+    
+                            self.definitions[index].push_indent();
+                            self.definitions[index].push("if (");
+                            self.definitions[index].push(&tmp_var);
+                            self.definitions[index].push(" == 0) {\n");
+                            self.definitions[index].inc_indent();
+    
+                            let mut at_tok = op.clone();
+                            at_tok.set_type(TokenType::At);
+    
+                            let mut panic_tok = op.clone();
+                            panic_tok.set_lexeme("panic");
+    
+                            let panic_stmt = Statement::Expression(Expression::Call(
+                                Box::new(Expression::Unary(
+                                    at_tok, 
+                                    Box::new(Expression::Variable(panic_tok)),
+                                    true
+                                )),
+                                op.clone(),
+                                vec![Expression::Literal(Rc::from("Division by zero"), op.clone(), LiteralKind::String)]
+                            ));
+    
+                            let _ = ctx.run(|ctx| self.execute(&panic_stmt, index, ctx)).await;
+    
+                            self.definitions[index].dec_indent();
+                            self.definitions[index].push_indent();
+                            self.definitions[index].push("}\n");
+
+                            Rc::from(tmp_var)
+                        } else {
+                            right.value
+                        }
+                    };
+
+                    if let Some(type_) = forced_return_type {
+                        Ok(SkyeValue::new(Rc::from(format!("{} {} {}", new_left.value, op_stringified, right_value)), type_, false))
+                    } else {
+                        Ok(SkyeValue::new(Rc::from(format!("{} {} {}", new_left.value, op_stringified, right_value)), new_left.type_, false))
+                    }
+                } else {
+                    ast_error!(
+                        self, right_expr,
+                        format!(
+                            "Left operand type ({}) does not match right operand type ({})",
+                            new_left.type_.stringify_native(), right.type_.stringify_native()
+                        ).as_ref()
+                    );
+
+                    Err(ExecutionInterrupt::Error)
+                }
+            }
+            ImplementsHow::ThirdParty => {
+                let search_tok = Token::dummy(Rc::from(op_method));
+                if let Some(value) = self.get_method(&new_left, &search_tok, true) {
+                    let args = vec![right_expr.clone()];
+                    ctx.run(|ctx| self.call(&value, expr, left_expr, &args, index, allow_unknown, ctx)).await
+                } else {
+                    ast_error!(
+                        self, left_expr,
+                        format!(
+                            "Binary '{}' operator is not implemented for type {}",
+                            op_stringified, new_left.type_.stringify_native()
+                        ).as_ref()
+                    );
+
+                    Err(ExecutionInterrupt::Error)
+                }
+            }
+            ImplementsHow::No => {
+                ast_error!(
+                    self, left_expr,
+                    format!(
+                        "Type {} cannot use binary '{}' operator",
+                        new_left.type_.stringify_native(), op_stringified
+                    ).as_ref()
+                );
+
+                Err(ExecutionInterrupt::Error)
+            }
+        }
+    }
+
     async fn get_type_equality(&mut self, inner_left: &SkyeType, right_expr: &Expression, index: usize, allow_unknown: bool, reversed: bool, ctx: &mut reblessive::Stk) -> Result<SkyeValue, ExecutionInterrupt> {
         let right = ctx.run(|ctx| self.evaluate(&right_expr, index, allow_unknown, ctx)).await?;
 
@@ -2699,9 +2809,9 @@ impl CodeGen {
                         )).await
                     }
                     TokenType::Slash => {
-                        ctx.run(|ctx| self.binary_operator(
+                        ctx.run(|ctx| self.binary_operator_with_zero_check(
                             left, None, &left_expr, &right_expr,
-                            expr, "/", "__div__", Operator::Div,
+                            expr, "/", op, "__div__", Operator::Div,
                             index, allow_unknown, ctx
                         )).await
                     }
@@ -2713,9 +2823,9 @@ impl CodeGen {
                         )).await
                     }
                     TokenType::Mod => {
-                        ctx.run(|ctx| self.binary_operator(
+                        ctx.run(|ctx| self.binary_operator_with_zero_check(
                             left, None, &left_expr, &right_expr,
-                            expr, "%", "__mod__", Operator::Mod,
+                            expr, "%", op, "__mod__", Operator::Mod,
                             index, allow_unknown, ctx
                         )).await
                     }
@@ -3132,16 +3242,16 @@ impl CodeGen {
                         )).await
                     }
                     TokenType::SlashEquals => {
-                        ctx.run(|ctx| self.binary_operator(
+                        ctx.run(|ctx| self.binary_operator_with_zero_check(
                             target, None, &target_expr, &value_expr,
-                            expr, "/=", "__setdiv__", Operator::SetDiv,
+                            expr, "/=", op, "__setdiv__", Operator::SetDiv,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::ModEquals => {
-                        ctx.run(|ctx| self.binary_operator(
+                        ctx.run(|ctx| self.binary_operator_with_zero_check(
                             target, None, &target_expr, &value_expr,
-                            expr, "%=", "__setmod__", Operator::SetMod,
+                            expr, "%=", op, "__setmod__", Operator::SetMod,
                             index, allow_unknown, ctx
                         )).await
                     }

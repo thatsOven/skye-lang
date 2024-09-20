@@ -23,8 +23,6 @@ macro stdout -> *CFile;
 macro stderr -> *CFile;
 macro stdin  -> *CFile;
 
-fn __panicHandler(const at: String, const msg: String);
-
 namespace core {
     namespace mem {
         struct HeapAllocator {}

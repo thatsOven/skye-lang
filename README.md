@@ -572,8 +572,8 @@ macro variableArgumentsMacro(args*) {
 | Addition | `x + y` `x += y` | ... |
 | Subtraction | `x - y` `x -= y` | ... |
 | Multiplication | `x * y` `x *= y` | ... |
-| Division | `x / y` `x /= y` | ... |
-| Modulo | `x % y` `x %= y` | ... |
+| Division | `x / y` `x /= y` | [*3](#additional-information) |
+| Modulo | `x % y` `x %= y` | [*3](#additional-information) |
 | Shift left | `x << y` `x <<= y` | Shifts `x` left `y` times |
 | Shift right | `x >> y` `x >>= y` | Shifts `x` right `y` times |
 | Boolean or | <code>x &#124;&#124; y</code> | ... |
@@ -652,3 +652,4 @@ Additionally, Skye offers you copy constructors and destructors, mostly used for
 ### Additional information
 1) Prefix and suffix increments and decrements are handled by the Skye compiler, and thus prevent undefined behavior for cases where multiple increments are used in the same expression or statement. Every expression is evaluated from left to right, and the outcome is always predictable.
 2) The `__deref__` and `__constderef__` methods are used to bind the unary `*` and `*const` operators to a different behavior. This means, for example, that dereferencing the type and assigning to the dereferenced output will not be possible with the standard syntax. To achieve that kind of behavior, a `__asptr__` method, taking no arguments and returning a pointer to any type, has to be implemented.
+3) In debug mode (the default compilation mode), division and modulo operators do not cause undefined behavior, but rather they panic the program if division by zero is performed. This check is disabled when debug mode is disabled for performance reasons.
