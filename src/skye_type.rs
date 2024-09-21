@@ -344,17 +344,17 @@ impl SkyeType {
 
     pub fn equals(&self, other: &SkyeType, level: EqualsLevel) -> bool {
         match self {
-            SkyeType::U8  => matches!(other, SkyeType::U8)  || matches!(other, SkyeType::AnyInt),
-            SkyeType::I8  => matches!(other, SkyeType::I8)  || matches!(other, SkyeType::AnyInt),
-            SkyeType::U16 => matches!(other, SkyeType::U16) || matches!(other, SkyeType::AnyInt),
-            SkyeType::I16 => matches!(other, SkyeType::I16) || matches!(other, SkyeType::AnyInt),
-            SkyeType::U32 => matches!(other, SkyeType::U32) || matches!(other, SkyeType::AnyInt),
-            SkyeType::I32 => matches!(other, SkyeType::I32) || matches!(other, SkyeType::AnyInt),
-            SkyeType::U64 => matches!(other, SkyeType::U64) || matches!(other, SkyeType::AnyInt),
-            SkyeType::I64 => matches!(other, SkyeType::I64) || matches!(other, SkyeType::AnyInt),
-            SkyeType::Usz => matches!(other, SkyeType::Usz) || matches!(other, SkyeType::AnyInt),
-            SkyeType::F32 => matches!(other, SkyeType::F32) || matches!(other, SkyeType::AnyFloat),
-            SkyeType::F64 => matches!(other, SkyeType::F64) || matches!(other, SkyeType::AnyFloat),
+            SkyeType::U8  => matches!(other, SkyeType::U8  | SkyeType::AnyInt),
+            SkyeType::I8  => matches!(other, SkyeType::I8  | SkyeType::AnyInt),
+            SkyeType::U16 => matches!(other, SkyeType::U16 | SkyeType::AnyInt),
+            SkyeType::I16 => matches!(other, SkyeType::I16 | SkyeType::AnyInt),
+            SkyeType::U32 => matches!(other, SkyeType::U32 | SkyeType::AnyInt),
+            SkyeType::I32 => matches!(other, SkyeType::I32 | SkyeType::AnyInt),
+            SkyeType::U64 => matches!(other, SkyeType::U64 | SkyeType::AnyInt),
+            SkyeType::I64 => matches!(other, SkyeType::I64 | SkyeType::AnyInt),
+            SkyeType::Usz => matches!(other, SkyeType::Usz | SkyeType::AnyInt),
+            SkyeType::F32 => matches!(other, SkyeType::F32 | SkyeType::AnyFloat),
+            SkyeType::F64 => matches!(other, SkyeType::F64 | SkyeType::AnyFloat),
             SkyeType::AnyInt   => matches!(other, SkyeType::AnyInt)   || other.equals(self, level),
             SkyeType::AnyFloat => matches!(other, SkyeType::AnyFloat) || other.equals(self, level),
 
