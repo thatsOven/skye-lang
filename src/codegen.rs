@@ -23,7 +23,9 @@ const VOID_MAIN_PLUS_STD_ARGS: &str = concat!(
 const VOID_MAIN_PLUS_ARGS: &str = concat!(
     "int main(int argc, char** argv) {\n",
     "    _SKYE_INIT();\n",
-    "    _SKYE_MAIN(_SKYE_CONVERT_ARGS(argc, argv));\n",
+    "    core_DOT_Array_GENOF_core_DOT_Slice_GENOF_char_GENEND__GENAND_core_DOT_mem_DOT_HeapAllocator_GENEND_ args = _SKYE_CONVERT_ARGS(argc, argv);\n",
+    "    _SKYE_MAIN(args);\n",
+    "    core_DOT_Array_DOT_free_GENOF_core_DOT_Slice_GENOF_char_GENEND__GENAND_core_DOT_mem_DOT_HeapAllocator_GENEND_(&args);\n",
     "    return 0;\n",
     "}\n\n"
 );
@@ -44,7 +46,9 @@ const RESULT_VOID_MAIN_PLUS_STD_ARGS: &str = concat!(
 const RESULT_VOID_MAIN_PLUS_ARGS: &str = concat!(
     "int main(int argc, char** argv) {\n",
     "    _SKYE_INIT();\n",
-    "    core_DOT_Result_GENOF_void_GENAND_void_GENEND_ result = _SKYE_MAIN(_SKYE_CONVERT_ARGS(argc, argv));\n",
+    "    core_DOT_Array_GENOF_core_DOT_Slice_GENOF_char_GENEND__GENAND_core_DOT_mem_DOT_HeapAllocator_GENEND_ args = _SKYE_CONVERT_ARGS(argc, argv);\n",
+    "    core_DOT_Result_GENOF_void_GENAND_void_GENEND_ result = _SKYE_MAIN(args);\n",
+    "    core_DOT_Array_DOT_free_GENOF_core_DOT_Slice_GENOF_char_GENEND__GENAND_core_DOT_mem_DOT_HeapAllocator_GENEND_(&args);\n",
     "    return result.kind != core_DOT_Result_DOT_Kind_DOT_Ok;\n",
     "}\n\n"
 );
@@ -67,7 +71,9 @@ const RESULT_I32_MAIN_PLUS_STD_ARGS: &str = concat!(
 const RESULT_I32_MAIN_PLUS_ARGS: &str = concat!(
     "int main(int argc, char** argv) {\n",
     "    _SKYE_INIT();\n",
-    "    core_DOT_Result_GENOF_void_GENAND_i32_GENEND_ result = _SKYE_MAIN(_SKYE_CONVERT_ARGS(argc, argv));\n",
+    "    core_DOT_Array_GENOF_core_DOT_Slice_GENOF_char_GENEND__GENAND_core_DOT_mem_DOT_HeapAllocator_GENEND_ args = _SKYE_CONVERT_ARGS(argc, argv);\n",
+    "    core_DOT_Result_GENOF_void_GENAND_i32_GENEND_ result = _SKYE_MAIN(args);\n",
+    "    core_DOT_Array_DOT_free_GENOF_core_DOT_Slice_GENOF_char_GENEND__GENAND_core_DOT_mem_DOT_HeapAllocator_GENEND_(&args);\n",
     "    if (result.kind == core_DOT_Result_DOT_Kind_DOT_Ok) return 0;\n",
     "    return result.error;\n",
     "}\n\n"
@@ -87,7 +93,10 @@ const I32_MAIN_PLUS_STD_ARGS: &str = concat!(
 const I32_MAIN_PLUS_ARGS: &str = concat!(
     "int main(int argc, char** argv) {\n",
     "    _SKYE_INIT();\n",
-    "    return _SKYE_MAIN(_SKYE_CONVERT_ARGS(argc, argv));\n",
+    "    core_DOT_Array_GENOF_core_DOT_Slice_GENOF_char_GENEND__GENAND_core_DOT_mem_DOT_HeapAllocator_GENEND_ args = _SKYE_CONVERT_ARGS(argc, argv);\n",
+    "    i32 result = _SKYE_MAIN(args);\n",
+    "    core_DOT_Array_DOT_free_GENOF_core_DOT_Slice_GENOF_char_GENEND__GENAND_core_DOT_mem_DOT_HeapAllocator_GENEND_(&args);\n",
+    "    return result;\n",
     "}\n\n"
 );
 
