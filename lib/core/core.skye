@@ -32,10 +32,6 @@ macro sizeOf(E) -> usz;
 
 macro nullptr 0;
 
-macro returnNone {
-    try (?void)::None // trick that uses the way the try operator works to let the compiler infer the return type
-}
-
 use (
     u8  | i8  | u16 | i16 | 
     u32 | i32 | u64 | i64 | 
