@@ -19,7 +19,7 @@ use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
 const BUILD_FILE_INIT: &[u8] = concat!(
     "import \"build\";\n\n",
     "fn main() !void {\n",
-    "    try build::compileSkye(\"src/main.skye\", \"tmp.c\");\n",
+    "    try build::compileSkye(\"src/main.skye\", \"tmp.c\", false);\n",
     "    try build::compileCDefault(\"tmp.c\", \"helloworld\");\n",
     "    try std::os::removeFile(\"tmp.c\");\n\n",
     "    return (!void)::Ok;\n",

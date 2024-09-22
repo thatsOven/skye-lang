@@ -1,11 +1,16 @@
 import "std/os";
 
 namespace build {
-    fn compileSkye(const input: String, const output: String) !void {
+    fn compileSkye(const input: String, const output: String, const release: u8) !void {
         let buf = core::Array::from("skye compile ");
         defer buf.free();
 
         @format(&buf, "{input} --emit-c -o {output}");
+        
+        if release {
+            @format(&buf, " --release");
+        }
+
         const result = std::os::system(buf.asString());
         
         if result.isError() {
