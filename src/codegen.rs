@@ -803,33 +803,28 @@ impl CodeGen {
             }
             "concat" => {
                 if arguments.len() == 1 {
-                    if let Expression::Literal(.., kind) = &arguments[0] {
-                        if matches!(kind, LiteralKind::String) {
-                            ast_warning!(arguments[0], "@concat macro is being used with no effect"); // +W-useless-concat
-                            ast_note!(callee_expr, "The @concat macro is used to concatenate multiple strings together. Calling it with one argument is unnecessary");
-                            ast_note!(callee_expr, "Remove this macro call");
-                        } else {
-                            ast_error!(self, arguments[0], "Arguments to @concat macro must be strings");
-                        }
+                    if let Expression::Literal(value, tok, _) = &arguments[0] {
+                        ast_warning!(arguments[0], "@concat macro is being used with no effect"); // +W-useless-concat
+                        ast_note!(callee_expr, "The @concat macro is used to concatenate multiple values together as a string. Calling it with one argument is unnecessary");
+                        ast_note!(callee_expr, "Remove this macro call");
+                        
+                        let output_expr = Expression::Literal(Rc::clone(value), tok.clone(), LiteralKind::String);
+                        Ok(Some(ctx.run(|ctx| self.evaluate(&output_expr, index, allow_unknown, ctx)).await?))
                     } else {
-                        ast_error!(self, arguments[0], "String for @concat macro must be a literal");
-                        ast_note!(arguments[0], "The value of the string must be known at compile time");
-                    }
+                        ast_error!(self, arguments[0], "Argument for @concat macro must be a literal");
+                        ast_note!(arguments[0], "The value must be known at compile time");
 
-                    Ok(Some(ctx.run(|ctx| self.evaluate(&arguments[0], index, allow_unknown, ctx)).await?))
+                        Err(ExecutionInterrupt::Error)
+                    }
                 } else {
                     let mut result = String::new();
                 
                     for argument in arguments {
-                        if let Expression::Literal(value, _, kind) = argument {
-                            if matches!(kind, LiteralKind::String) {
-                                result.push_str(value);
-                            } else {
-                                ast_error!(self, argument, "Arguments to @concat macro must be strings");
-                            }
+                        if let Expression::Literal(value, ..) = argument {
+                            result.push_str(value);
                         } else {
-                            ast_error!(self, argument, "String for @concat macro must be a literal");
-                            ast_note!(argument, "The value of the string must be known at compile time");
+                            ast_error!(self, argument, "Argument for @concat macro must be a literal");
+                            ast_note!(argument, "The value must be known at compile time");
                         }
                     }
 
