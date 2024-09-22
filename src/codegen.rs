@@ -2324,8 +2324,7 @@ impl CodeGen {
                                     Ok(SkyeValue::special(SkyeType::Type(Box::new(SkyeType::Pointer(Box::new(inner.type_), false, true)))))
                                 }
                                 _ => {
-                                    let new_inner = //inner.follow_reference(self.external_zero_check(op, index));
-                                    inner.clone();
+                                    let new_inner = inner.follow_reference(self.external_zero_check(op, index));
 
                                     match new_inner.type_.implements_op(Operator::Ref) {
                                         ImplementsHow::Native(_) | ImplementsHow::ThirdParty => {
