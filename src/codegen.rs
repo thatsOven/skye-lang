@@ -3319,7 +3319,7 @@ impl CodeGen {
                             expr, "|=", op, "__setor__", Operator::SetOr,
                             index, allow_unknown, ctx
                         )).await
-                    },
+                    }
                     _ => unreachable!()
                 }
             }
