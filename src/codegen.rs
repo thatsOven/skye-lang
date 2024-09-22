@@ -2121,8 +2121,8 @@ impl CodeGen {
                 match kind {
                     LiteralKind::Void => Ok(SkyeValue::special(SkyeType::Void)),
 
-                    LiteralKind::U8  => Ok(SkyeValue::new(Rc::from(format!("UINT8_C({})",  value)), SkyeType::U8, true)),
-                    LiteralKind::I8  => Ok(SkyeValue::new(Rc::from(format!("INT8_C({})",   value)), SkyeType::I8, true)),
+                    LiteralKind::U8  => Ok(SkyeValue::new(Rc::from(format!("UINT8_C({})",  value)), SkyeType::U8,  true)),
+                    LiteralKind::I8  => Ok(SkyeValue::new(Rc::from(format!("INT8_C({})",   value)), SkyeType::I8,  true)),
                     LiteralKind::U16 => Ok(SkyeValue::new(Rc::from(format!("UINT16_C({})", value)), SkyeType::U16, true)),
                     LiteralKind::I16 => Ok(SkyeValue::new(Rc::from(format!("INT16_C({})",  value)), SkyeType::I16, true)),
                     LiteralKind::U32 => Ok(SkyeValue::new(Rc::from(format!("UINT32_C({})", value)), SkyeType::U32, true)),
@@ -2130,8 +2130,8 @@ impl CodeGen {
                     LiteralKind::U64 => Ok(SkyeValue::new(Rc::from(format!("UINT64_C({})", value)), SkyeType::U64, true)),
                     LiteralKind::I64 => Ok(SkyeValue::new(Rc::from(format!("INT64_C({})",  value)), SkyeType::I64, true)),
                     LiteralKind::Usz => Ok(SkyeValue::new(Rc::from(format!("SIZE_T_C({})", value)), SkyeType::Usz, true)),
-                    LiteralKind::F32 => Ok(SkyeValue::new(Rc::from(format!("(float){}", value)), SkyeType::F32, true)),
-                    LiteralKind::F64 => Ok(SkyeValue::new(Rc::from(format!("(double){}", value)), SkyeType::F64, true)),
+                    LiteralKind::F32 => Ok(SkyeValue::new(Rc::from(format!("(float){}",    value)), SkyeType::F32, true)),
+                    LiteralKind::F64 => Ok(SkyeValue::new(Rc::from(format!("(double){}",   value)), SkyeType::F64, true)),
 
                     LiteralKind::AnyInt   => Ok(SkyeValue::new(Rc::clone(value), SkyeType::AnyInt, true)),
                     LiteralKind::AnyFloat => Ok(SkyeValue::new(Rc::clone(value), SkyeType::AnyFloat, true)),
