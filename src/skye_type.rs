@@ -15,6 +15,14 @@ impl SkyeFunctionParam {
 }
 
 #[derive(Debug, Clone)]
+pub enum GetResultInternal {
+    Ok(Rc<str>, SkyeType, SkyeType, bool), // value type holder_type is_const
+    InvalidType,
+    FieldNotFound,
+    Undefined
+}
+
+#[derive(Debug, Clone)]
 pub enum GetResult {
     Ok(Rc<str>, SkyeType, bool), // value type is_const
     InvalidType,
@@ -72,6 +80,7 @@ pub enum EqualsLevel {
     Permissive
 }
 
+#[derive(Clone)]
 pub struct SkyeValue {
     pub value: Rc<str>,
     pub type_: SkyeType,
@@ -92,8 +101,8 @@ impl SkyeValue {
         SkyeValue { value, type_, is_const, self_info: Some(self_info) }
     }
 
-    pub fn follow_reference(&self) -> Self {
-        self.type_.follow_reference(self.is_const, &self.value)
+    pub fn follow_reference(&self, mut zero_check: Box<impl FnMut(SkyeValue) -> Rc<str>>) -> Self {
+        self.type_.follow_reference(self.is_const, &self.value, &mut zero_check)
     }
 }
 
@@ -494,19 +503,26 @@ impl SkyeType {
         }
     }
 
-    fn get_internal(&self, from: &Rc<str>, name: &Token, is_source_const: bool, d: usize) -> GetResult {
+    fn get_internal(&self, from: &Rc<str>, name: &Token, is_source_const: bool, d: usize, zero_check: &mut Box<impl FnMut(SkyeValue) -> Rc<str>>) -> GetResultInternal {
         match self {
             SkyeType::Pointer(inner_type, is_pointer_const, _) => {
-                let inner_res = inner_type.get_internal(from, name, *is_pointer_const, d + 1);
-                if let GetResult::Ok(inner_str, type_, is_const) = inner_res {
+                let inner_res = inner_type.get_internal(from, name, *is_pointer_const, d + 1, zero_check);
+                if let GetResultInternal::Ok(inner_str, type_, holder_type, is_const) = inner_res {
+                    let mut tmp_var_type = holder_type.clone();
+                    for _ in 0 ..= d {
+                        tmp_var_type = SkyeType::Pointer(Box::new(tmp_var_type), false, false);
+                    }
+
+                    let inner_final = zero_check(SkyeValue::new(inner_str, tmp_var_type, is_const));
+
                     if d == 0 {
                         if let SkyeType::Pointer(..) = **inner_type {
-                            GetResult::Ok(Rc::from(format!("({})->{}", inner_str, name.lexeme)), type_, *is_pointer_const || is_const)
+                            GetResultInternal::Ok(Rc::from(format!("({})->{}", inner_final, name.lexeme)), type_, holder_type, *is_pointer_const || is_const)
                         } else {
-                            GetResult::Ok(Rc::from(format!("{}->{}", inner_str, name.lexeme)), type_, *is_pointer_const || is_const)
+                            GetResultInternal::Ok(Rc::from(format!("{}->{}", inner_final, name.lexeme)), type_, holder_type, *is_pointer_const || is_const)
                         }
                     } else {
-                        GetResult::Ok(Rc::from(format!("*{}", inner_str)), type_, *is_pointer_const || is_const)
+                        GetResultInternal::Ok(Rc::from(format!("*{}", inner_final)), type_, holder_type, *is_pointer_const || is_const)
                     }
                 } else {
                     inner_res
@@ -516,53 +532,58 @@ impl SkyeType {
                 if let Some(defined_fields) = fields {
                     if let Some((field, is_const)) = defined_fields.get(&name.lexeme) {
                         if d == 0 {
-                            GetResult::Ok(Rc::from(format!("{}.{}", from, name.lexeme)), field.clone(), is_source_const || *is_const)
+                            GetResultInternal::Ok(Rc::from(format!("{}.{}", from, name.lexeme)), field.clone(), self.clone(), is_source_const || *is_const)
                         } else {
-                            GetResult::Ok(Rc::clone(from), field.clone(), is_source_const || *is_const)
+                            GetResultInternal::Ok(Rc::clone(from), field.clone(), self.clone(), is_source_const || *is_const)
                         }
                     } else {
-                        GetResult::FieldNotFound
+                        GetResultInternal::FieldNotFound
                     }
                 } else {
-                    GetResult::Undefined
+                    GetResultInternal::Undefined
                 }
             }
             SkyeType::Enum(_, fields, _) => {
                 if let Some(defined_fields) = fields {
                     if let Some(field) = defined_fields.get(&name.lexeme) {
                         if d == 0 {
-                            GetResult::Ok(Rc::from(format!("{}.{}", from, name.lexeme)), field.clone(), true)
+                            GetResultInternal::Ok(Rc::from(format!("{}.{}", from, name.lexeme)), field.clone(), self.clone(), true)
                         } else {
-                            GetResult::Ok(Rc::clone(from), field.clone(), true)
+                            GetResultInternal::Ok(Rc::clone(from), field.clone(), self.clone(), true)
                         }
                     } else {
-                        GetResult::FieldNotFound
+                        GetResultInternal::FieldNotFound
                     }
                 } else {
-                    GetResult::InvalidType
+                    GetResultInternal::InvalidType
                 }
             }
             SkyeType::Union(_, fields) | SkyeType::Bitfield(_, fields) => {
                 if let Some(defined_fields) = fields {
                     if let Some(field) = defined_fields.get(&name.lexeme) {
                         if d == 0 {
-                            GetResult::Ok(Rc::from(format!("{}.{}", from, name.lexeme)), field.clone(), is_source_const)
+                            GetResultInternal::Ok(Rc::from(format!("{}.{}", from, name.lexeme)), field.clone(), self.clone(), is_source_const)
                         } else {
-                            GetResult::Ok(Rc::clone(from), field.clone(), is_source_const)
+                            GetResultInternal::Ok(Rc::clone(from), field.clone(), self.clone(), is_source_const)
                         }
                     } else {
-                        GetResult::FieldNotFound
+                        GetResultInternal::FieldNotFound
                     }
                 } else {
-                    GetResult::InvalidType
+                    GetResultInternal::InvalidType
                 }
             }
-            _ => GetResult::InvalidType
+            _ => GetResultInternal::InvalidType
         }
     }
 
-    pub fn get(&self, from: &Rc<str>, name: &Token, is_source_const: bool) -> GetResult {
-        self.get_internal(from, name, is_source_const, 0)
+    pub fn get(&self, from: &Rc<str>, name: &Token, is_source_const: bool, mut zero_check: Box<impl FnMut(SkyeValue) -> Rc<str>>) -> GetResult {
+        match self.get_internal(from, name, is_source_const, 0, &mut zero_check) {
+            GetResultInternal::Ok(value, type_, _, is_const) => GetResult::Ok(value, type_, is_const),
+            GetResultInternal::InvalidType => GetResult::InvalidType,
+            GetResultInternal::FieldNotFound => GetResult::FieldNotFound,
+            GetResultInternal::Undefined => GetResult::Undefined,
+        }
     }
 
     fn static_get_internal(&self, name: &Token, d: usize) -> GetResult {
@@ -607,29 +628,34 @@ impl SkyeType {
         }
     }
 
-    fn get_self_internal(&self, from: &Rc<str>, is_source_const: bool, d: usize) -> Option<(Rc<str>, SkyeType)> {
+    fn get_self_internal(&self, from: &Rc<str>, d: usize, zero_check: &mut Box<impl FnMut(SkyeValue) -> Rc<str>>) -> Option<(Rc<str>, SkyeType)> {
         match self {
-            SkyeType::Pointer(inner_type, is_const, _) => {
+            SkyeType::Pointer(ptr_type, is_const, _) => {
+                let (inner_val, inner_type) = ptr_type.get_self_internal(from, d + 1, zero_check)?;
+
                 if d == 0 {
-                    inner_type.get_self_internal(from, *is_const, d + 1)
+                    Some((inner_val, SkyeType::Pointer(Box::new(inner_type), *is_const, true)))
                 } else {
-                    let (inner_val, inner_type) = inner_type.get_self_internal(from, *is_const, d + 1)?;
-                    Some((Rc::from(format!("*{}", inner_val)), inner_type))
+                    let mut tmp_var_type = inner_type.clone();
+                    for _ in 0 ..= d {
+                        tmp_var_type = SkyeType::Pointer(Box::new(tmp_var_type), false, false);
+                    }
+
+                    let inner_final = zero_check(SkyeValue::new(inner_val, tmp_var_type, *is_const));
+                    Some((Rc::from(format!("*{}", inner_final)), inner_type))
                 }
             }
-            SkyeType::Struct(..) | SkyeType::Enum(..) => {
-                if d == 0 {
-                    Some((Rc::from(format!("&{}", from)), SkyeType::Pointer(Box::new(self.clone()), is_source_const, true)))
-                } else {
-                    Some((Rc::clone(from), SkyeType::Pointer(Box::new(self.clone()), is_source_const, true)))
-                }
-            }
+            SkyeType::Struct(..) | SkyeType::Enum(..) => Some((Rc::clone(from), self.clone())),
             _ => None
         }
     }
 
-    pub fn get_self(&self, from: &Rc<str>, is_source_const: bool) -> Option<(Rc<str>, SkyeType)> {
-        self.get_self_internal(from, is_source_const, 0)
+    pub fn get_self(&self, from: &Rc<str>, is_source_const: bool, mut zero_check: Box<impl FnMut(SkyeValue) -> Rc<str>>) -> Option<(Rc<str>, SkyeType)> {
+        if let SkyeType::Pointer(..) = self {
+            self.get_self_internal(from, 0, &mut zero_check)
+        } else {
+            Some((Rc::from(format!("&{}", from).as_ref()), SkyeType::Pointer(Box::new(self.clone()), is_source_const, true)))
+        }
     }
 
     fn infer_type_from_similar_internal(&self, other: &SkyeType, data: Rc<RefCell<HashMap<Rc<str>, SkyeType>>>) -> Option<()> {
@@ -900,17 +926,28 @@ impl SkyeType {
         }
     }
 
-    pub fn follow_reference(&self, is_source_const: bool, from: &Rc<str>) -> SkyeValue {
+    fn follow_reference_internal(&self, is_source_const: bool, from: &Rc<str>, d: usize, zero_check: &mut Box<impl FnMut(SkyeValue) -> Rc<str>>) -> SkyeValue {
         match self {
             SkyeType::Pointer(inner_type, is_const, is_reference) => {
                 if *is_reference {
-                    let value = inner_type.follow_reference(*is_const, from);
-                    SkyeValue::new(Rc::from(format!("*{}", value.value)), value.type_, value.is_const)
+                    let value = inner_type.follow_reference_internal(*is_const, from, d + 1, zero_check);
+
+                    let mut tmp_var_type = value.type_.clone();
+                    for _ in 0 ..= d {
+                        tmp_var_type = SkyeType::Pointer(Box::new(tmp_var_type), false, false);
+                    }
+                    
+                    let final_value = zero_check(SkyeValue::new(value.value, tmp_var_type, value.is_const));
+                    SkyeValue::new(Rc::from(format!("*{}", final_value)), value.type_, value.is_const)
                 } else {
                     SkyeValue::new(Rc::clone(from), self.clone(), is_source_const)
                 }
             }
             _ => SkyeValue::new(Rc::clone(from), self.clone(), is_source_const)
         }
+    }
+
+    pub fn follow_reference(&self, is_source_const: bool, from: &Rc<str>, zero_check: &mut Box<impl FnMut(SkyeValue) -> Rc<str>>) -> SkyeValue {
+        self.follow_reference_internal(is_source_const, from, 0, zero_check)
     }
 }

@@ -41,6 +41,40 @@ use (
 use f32 | f64 as AnyFloat;
 
 namespace core {
+    struct Slice[T] {
+        const ptr: *const T,
+        const length: usz
+    }
+
+    impl[T] core::Slice[T] {
+        fn new(const ptr: *const T, const length: usz) Self[T] {
+            return Self.{ ptr, length };
+        }
+
+        fn get(const self, const idx: usz) ?T {
+            if idx < self.length {
+                return (?T)::Some(self.ptr[idx]);
+            } else {
+                return (?T)::None;
+            }
+        }
+
+        fn iter(const self) core::SliceIterator[T] {
+            return core::SliceIterator::new(self);
+        }
+    }
+}
+
+use core::Slice[char] as String;
+use core::Slice as Slice;
+
+fn __panicHandler(const at: String, const msg: String);
+
+macro panic(msg) __panicHandler(PANIC_POS, msg);
+macro unreachable @panic("Entered unreachable code");
+macro assert(x) x ? void : @panic("Assertion failed");
+
+namespace core {
     enum Option[T] {
         Some(T),
         None
@@ -102,29 +136,6 @@ namespace core {
         }
     }
 
-    struct Slice[T] {
-        const ptr: *const T,
-        const length: usz
-    }
-
-    impl[T] core::Slice[T] {
-        fn new(const ptr: *const T, const length: usz) Self[T] {
-            return Self.{ ptr, length };
-        }
-
-        fn get(const self, const idx: usz) ?T {
-            if idx < self.length {
-                return (?T)::Some(self.ptr[idx]);
-            } else {
-                return (?T)::None;
-            }
-        }
-
-        fn iter(const self) core::SliceIterator[T] {
-            return core::SliceIterator::new(self);
-        }
-    }
-
     namespace mem {
         fn blockCopy(from: voidptr, to: voidptr, amt: usz) {
             while amt-- {
@@ -139,15 +150,6 @@ namespace core {
         }
     }
 }
-
-use core::Slice[char] as String;
-use core::Slice as Slice;
-
-fn __panicHandler(const at: String, const msg: String);
-
-macro panic(msg) __panicHandler(PANIC_POS, msg);
-macro unreachable @panic("Entered unreachable code");
-macro assert(x) x ? void : @panic("Assertion failed");
 
 impl[T] core::Slice[T] {
     fn __subscript__(const self, idx: usz) *const T {

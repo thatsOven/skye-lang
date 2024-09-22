@@ -380,7 +380,7 @@ impl CodeGen {
         res
     }
 
-    fn get_method(&mut self, object: &SkyeValue, name: &Token, strict: bool) -> Option<SkyeValue> {
+    fn get_method(&mut self, object: &SkyeValue, name: &Token, strict: bool, index: usize) -> Option<SkyeValue> {
         match object.type_.get_method(name, strict) {
             GetResult::Ok(value, ..) => {
                 let search_tok = Token::dummy(Rc::clone(&value));
@@ -390,7 +390,11 @@ impl CodeGen {
                 if let Some(var) = result {
                     return Some(SkyeValue::with_self_info(
                         value, var.type_, true,
-                        object.type_.get_self(&object.value, object.is_const).expect("get_self failed")
+                        object.type_.get_self(
+                            &object.value, 
+                            object.is_const,
+                            self.external_zero_check(name, index)
+                        ).expect("get_self failed")
                     ))
                 } else {
                     None
@@ -593,7 +597,7 @@ impl CodeGen {
                             }
 
                             let mut search_tok = Token::dummy(Rc::from("asString"));
-                            if self.get_method(&evaluated, &search_tok, false).is_some() {
+                            if self.get_method(&evaluated, &search_tok, false, index).is_some() {
                                 Expression::Call(
                                     Box::new(Expression::Get(
                                         Box::new(portion_expr.clone()), search_tok
@@ -603,7 +607,7 @@ impl CodeGen {
                                 )
                             } else {
                                 search_tok = Token::dummy(Rc::from("toString"));
-                                if self.get_method(&evaluated, &search_tok, false).is_some() {
+                                if self.get_method(&evaluated, &search_tok, false, index).is_some() {
                                     Expression::Call(
                                         Box::new(Expression::Get(
                                             Box::new(portion_expr.clone()), search_tok
@@ -632,7 +636,7 @@ impl CodeGen {
 
                     if is_format {
                         let search_tok = Token::dummy(Rc::from("pushString"));
-                        if self.get_method(&first, &search_tok, false).is_some() {
+                        if self.get_method(&first, &search_tok, false, index).is_some() {
                             if do_write {
                                 statements.push(Statement::Expression(
                                     Expression::Call(
@@ -660,7 +664,7 @@ impl CodeGen {
                         }
                     } else {
                         let search_tok = Token::dummy(Rc::from("write"));
-                        if self.get_method(&first, &search_tok, false).is_some() {
+                        if self.get_method(&first, &search_tok, false, index).is_some() {
                             if do_write {
                                 statements.push(Statement::Expression(
                                     Expression::Call(
@@ -973,7 +977,7 @@ impl CodeGen {
                     }
 
                     let search_tok = Token::dummy(Rc::from("__copy__"));
-                    if let Some(value) = self.get_method(&new_arg, &search_tok, true) {
+                    if let Some(value) = self.get_method(&new_arg, &search_tok, true, index) {
                         let v = Vec::new();
                         let copy_constructor = ctx.run(|ctx| self.call(&value, expr, &arguments[i - arguments_mod], &v, index, allow_unknown, ctx)).await?;
                         args.push_str(&copy_constructor.value);
@@ -1167,7 +1171,7 @@ impl CodeGen {
                         }
 
                         let search_tok = Token::dummy(Rc::from("__copy__"));
-                        if let Some(value) = self.get_method(&new_call_evaluated, &search_tok, true) {
+                        if let Some(value) = self.get_method(&new_call_evaluated, &search_tok, true, index) {
                             let loc_callee_expr = {
                                 if i != 0 || arguments_mod != 1 {
                                     &arguments[i - arguments_mod]
@@ -1636,7 +1640,7 @@ impl CodeGen {
             }
             ImplementsHow::ThirdParty => {
                 let search_tok = Token::dummy(Rc::from(op_method));
-                if let Some(value) = self.get_method(&inner, &search_tok, true) {
+                if let Some(value) = self.get_method(&inner, &search_tok, true, index) {
                     let v = Vec::new();
                     let _ = ctx.run(|ctx| self.call(&value, expr, inner_expr, &v, index, allow_unknown, ctx)).await;
                     Ok(inner)
@@ -1693,7 +1697,7 @@ impl CodeGen {
             }
             ImplementsHow::ThirdParty => {
                 let search_tok = Token::dummy(Rc::from(op_method));
-                if let Some(value) = self.get_method(&inner, &search_tok, true) {
+                if let Some(value) = self.get_method(&inner, &search_tok, true, index) {
                     let v = Vec::new();
                     let _ = ctx.run(|ctx| self.call(&value, expr, inner_expr, &v, index, allow_unknown, ctx)).await;
                     Ok(SkyeValue::new(Rc::from(tmp_var), inner.type_, false))
@@ -1729,13 +1733,13 @@ impl CodeGen {
         op_type: Operator, op: &Token, index: usize, allow_unknown: bool,
         ctx: &mut reblessive::Stk
     ) -> Result<SkyeValue, ExecutionInterrupt> {
-        let new_inner = inner.follow_reference();
+        let new_inner = inner.follow_reference(self.external_zero_check(op, index));
 
         match new_inner.type_.implements_op(op_type) {
             ImplementsHow::Native(_) => Ok(SkyeValue::new(Rc::from(format!("{}{}", op_stringified, new_inner.value)), new_inner.type_, false)),
             ImplementsHow::ThirdParty => {
                 let search_tok = Token::dummy(Rc::from(op_method));
-                if let Some(value) = self.get_method(&new_inner, &search_tok, true) {
+                if let Some(value) = self.get_method(&new_inner, &search_tok, true, index) {
                     let v = Vec::new();
                     ctx.run(|ctx| self.call(&value, expr, inner_expr, &v, index, allow_unknown, ctx)).await
                 } else {
@@ -1767,14 +1771,14 @@ impl CodeGen {
     async fn binary_operator(
         &mut self, left: SkyeValue, forced_return_type: Option<SkyeType>,
         left_expr: &Expression, right_expr: &Expression, expr: &Expression,
-        op_stringified: &str, op_method: &str, op_type: Operator,
+        op_stringified: &str, op: &Token, op_method: &str, op_type: Operator,
         index: usize, allow_unknown: bool, ctx: &mut reblessive::Stk
     ) -> Result<SkyeValue, ExecutionInterrupt> {
-        let new_left = left.follow_reference();
+        let new_left = left.follow_reference(self.external_zero_check(op, index));
 
         match new_left.type_.implements_op(op_type) {
             ImplementsHow::Native(compatible_types) => {
-                let right = ctx.run(|ctx| self.evaluate(&right_expr, index, allow_unknown, ctx)).await?.follow_reference();
+                let right = ctx.run(|ctx| self.evaluate(&right_expr, index, allow_unknown, ctx)).await?.follow_reference(self.external_zero_check(op, index));
 
                 if matches!(new_left.type_, SkyeType::Unknown(_)) ||
                     new_left.type_.equals(&right.type_, EqualsLevel::Typewise) ||
@@ -1799,7 +1803,7 @@ impl CodeGen {
             }
             ImplementsHow::ThirdParty => {
                 let search_tok = Token::dummy(Rc::from(op_method));
-                if let Some(value) = self.get_method(&new_left, &search_tok, true) {
+                if let Some(value) = self.get_method(&new_left, &search_tok, true, index) {
                     let args = vec![right_expr.clone()];
                     ctx.run(|ctx| self.call(&value, expr, left_expr, &args, index, allow_unknown, ctx)).await
                 } else {
@@ -1831,14 +1835,15 @@ impl CodeGen {
     async fn binary_operator_int_on_right(
         &mut self, left: SkyeValue, left_expr: &Expression, 
         right_expr: &Expression, expr: &Expression, op_stringified: &str, 
-        op_method: &str, op_type: Operator, index: usize, allow_unknown: bool, 
-        ctx: &mut reblessive::Stk
+        op: &Token, op_method: &str, op_type: Operator, 
+        index: usize, allow_unknown: bool, ctx: &mut reblessive::Stk
     ) -> Result<SkyeValue, ExecutionInterrupt> {
-        let new_left = left.follow_reference();
+        let new_left = left.follow_reference(self.external_zero_check(op, index));
 
         match new_left.type_.implements_op(op_type) {
             ImplementsHow::Native(_) => {
-                let right = ctx.run(|ctx| self.evaluate(&right_expr, index, allow_unknown, ctx)).await?.follow_reference();
+                let right = ctx.run(|ctx| self.evaluate(&right_expr, index, allow_unknown, ctx)).await?
+                    .follow_reference(self.external_zero_check(op, index));
 
                 if right.type_.equals(&SkyeType::AnyInt, EqualsLevel::Typewise) {
                     Ok(SkyeValue::new(Rc::from(format!("{} {} {}", new_left.value, op_stringified, right.value)), new_left.type_, false))
@@ -1856,7 +1861,7 @@ impl CodeGen {
             }
             ImplementsHow::ThirdParty => {
                 let search_tok = Token::dummy(Rc::from(op_method));
-                if let Some(value) = self.get_method(&new_left, &search_tok, true) {
+                if let Some(value) = self.get_method(&new_left, &search_tok, true, index) {
                     let args = vec![right_expr.clone()];
                     ctx.run(|ctx| self.call(&value, expr, left_expr, &args, index, allow_unknown, ctx)).await
                 } else {
@@ -1885,67 +1890,77 @@ impl CodeGen {
         }
     }
 
+    async fn zero_check(&mut self, value: &SkyeValue, tok: &Token, msg: &str, index: usize, ctx: &mut reblessive::Stk) -> Rc<str> {
+        if self.debug {
+            let tmp_var = self.get_temporary_var();
+    
+            self.definitions[index].push_indent();
+            self.definitions[index].push(&value.type_.stringify());
+            self.definitions[index].push(" ");
+            self.definitions[index].push(&tmp_var);
+            self.definitions[index].push(" = ");
+            self.definitions[index].push(&value.value);
+            self.definitions[index].push(";\n");
+        
+            self.definitions[index].push_indent();
+            self.definitions[index].push("if (");
+            self.definitions[index].push(&tmp_var);
+            self.definitions[index].push(" == 0) {\n");
+            self.definitions[index].inc_indent();
+        
+            let mut at_tok = tok.clone();
+            at_tok.set_type(TokenType::At);
+        
+            let mut panic_tok = tok.clone();
+            panic_tok.set_lexeme("panic");
+        
+            let panic_stmt = Statement::Expression(Expression::Call(
+                Box::new(Expression::Unary(
+                    at_tok, 
+                    Box::new(Expression::Variable(panic_tok)),
+                    true
+                )),
+                tok.clone(),
+                vec![Expression::Literal(Rc::from(msg), tok.clone(), LiteralKind::String)]
+            ));
+        
+            let _ = ctx.run(|ctx| self.execute(&panic_stmt, index, ctx)).await;
+        
+            self.definitions[index].dec_indent();
+            self.definitions[index].push_indent();
+            self.definitions[index].push("}\n");
+
+            Rc::from(tmp_var.as_ref())
+        } else {
+            value.value.clone()
+        }
+    }
+
+    fn external_zero_check<'a>(&'a mut self, tok: &'a Token, index: usize) -> Box<impl FnMut(SkyeValue) -> Rc<str> + 'a> {
+        Box::new(move |value| {
+            let mut stack = reblessive::Stack::new();
+            stack.enter(|ctx| self.zero_check(&value, tok, "Null pointer dereference", index, ctx)).finish()
+        })
+    }
+
     async fn binary_operator_with_zero_check(
         &mut self, left: SkyeValue, forced_return_type: Option<SkyeType>,
         left_expr: &Expression, right_expr: &Expression, expr: &Expression,
         op_stringified: &str, op: &Token, op_method: &str, op_type: Operator,
         index: usize, allow_unknown: bool, ctx: &mut reblessive::Stk
     ) -> Result<SkyeValue, ExecutionInterrupt> {
-        let new_left = left.follow_reference();
+        let new_left = left.follow_reference(self.external_zero_check(op, index));
 
         match new_left.type_.implements_op(op_type) {
             ImplementsHow::Native(compatible_types) => {
-                let right = ctx.run(|ctx| self.evaluate(&right_expr, index, allow_unknown, ctx)).await?.follow_reference();
+                let right = ctx.run(|ctx| self.evaluate(&right_expr, index, allow_unknown, ctx)).await?
+                    .follow_reference(self.external_zero_check(op, index));
 
                 if matches!(new_left.type_, SkyeType::Unknown(_)) ||
                     new_left.type_.equals(&right.type_, EqualsLevel::Typewise) ||
                     compatible_types.contains(&right.type_)
                 {
-                    let right_value = {
-                        if self.debug {
-                            let tmp_var = self.get_temporary_var();
-    
-                            self.definitions[index].push_indent();
-                            self.definitions[index].push(&right.type_.stringify());
-                            self.definitions[index].push(" ");
-                            self.definitions[index].push(&tmp_var);
-                            self.definitions[index].push(" = ");
-                            self.definitions[index].push(&right.value);
-                            self.definitions[index].push(";\n");
-    
-                            self.definitions[index].push_indent();
-                            self.definitions[index].push("if (");
-                            self.definitions[index].push(&tmp_var);
-                            self.definitions[index].push(" == 0) {\n");
-                            self.definitions[index].inc_indent();
-    
-                            let mut at_tok = op.clone();
-                            at_tok.set_type(TokenType::At);
-    
-                            let mut panic_tok = op.clone();
-                            panic_tok.set_lexeme("panic");
-    
-                            let panic_stmt = Statement::Expression(Expression::Call(
-                                Box::new(Expression::Unary(
-                                    at_tok, 
-                                    Box::new(Expression::Variable(panic_tok)),
-                                    true
-                                )),
-                                op.clone(),
-                                vec![Expression::Literal(Rc::from("Division by zero"), op.clone(), LiteralKind::String)]
-                            ));
-    
-                            let _ = ctx.run(|ctx| self.execute(&panic_stmt, index, ctx)).await;
-    
-                            self.definitions[index].dec_indent();
-                            self.definitions[index].push_indent();
-                            self.definitions[index].push("}\n");
-
-                            Rc::from(tmp_var)
-                        } else {
-                            right.value
-                        }
-                    };
+                    let right_value = ctx.run(|ctx| self.zero_check(&right, op, "Division by zero", index, ctx)).await;
 
                     if let Some(type_) = forced_return_type {
                         Ok(SkyeValue::new(Rc::from(format!("{} {} {}", new_left.value, op_stringified, right_value)), type_, false))
@@ -1966,7 +1981,7 @@ impl CodeGen {
             }
             ImplementsHow::ThirdParty => {
                 let search_tok = Token::dummy(Rc::from(op_method));
-                if let Some(value) = self.get_method(&new_left, &search_tok, true) {
+                if let Some(value) = self.get_method(&new_left, &search_tok, true, index) {
                     let args = vec![right_expr.clone()];
                     ctx.run(|ctx| self.call(&value, expr, left_expr, &args, index, allow_unknown, ctx)).await
                 } else {
@@ -2185,7 +2200,7 @@ impl CodeGen {
                 if *is_prefix {
                     match op.type_ {
                         TokenType::PlusPlus => {
-                            let new_inner = inner.follow_reference();
+                            let new_inner = inner.follow_reference(self.external_zero_check(op, index));
 
                             if new_inner.is_const {
                                 ast_error!(self, inner_expr, "Cannot apply '++' operator on const value");
@@ -2201,7 +2216,7 @@ impl CodeGen {
                             }
                         }
                         TokenType::MinusMinus => {
-                            let new_inner = inner.follow_reference();
+                            let new_inner = inner.follow_reference(self.external_zero_check(op, index));
 
                             if new_inner.is_const {
                                 ast_error!(self, inner_expr, "Cannot apply '--' operator on const value");
@@ -2309,7 +2324,8 @@ impl CodeGen {
                                     Ok(SkyeValue::special(SkyeType::Type(Box::new(SkyeType::Pointer(Box::new(inner.type_), false, true)))))
                                 }
                                 _ => {
-                                    let new_inner = inner.follow_reference();
+                                    let new_inner = //inner.follow_reference(self.external_zero_check(op, index));
+                                    inner.clone();
 
                                     match new_inner.type_.implements_op(Operator::Ref) {
                                         ImplementsHow::Native(_) | ImplementsHow::ThirdParty => {
@@ -2361,7 +2377,7 @@ impl CodeGen {
                                     Ok(SkyeValue::special(SkyeType::Type(Box::new(SkyeType::Pointer(Box::new(inner.type_), true, true)))))
                                 }
                                 _ => {
-                                    let new_inner = inner.follow_reference();
+                                    let new_inner = inner.follow_reference(self.external_zero_check(op, index));
 
                                     match new_inner.type_.implements_op(Operator::ConstRef) {
                                         ImplementsHow::Native(_) | ImplementsHow::ThirdParty => {
@@ -2402,12 +2418,13 @@ impl CodeGen {
                         }
                         TokenType::Star => {
                             match inner.type_ {
-                                SkyeType::Pointer(ptr_type, is_const, _) => {
-                                    if matches!(*ptr_type, SkyeType::Void) {
+                                SkyeType::Pointer(ref ptr_type, is_const, _) => {
+                                    if matches!(**ptr_type, SkyeType::Void) {
                                         ast_error!(self, inner_expr, "Cannot dereference a voidptr");
                                         Err(ExecutionInterrupt::Error)
                                     } else {
-                                        Ok(SkyeValue::new(Rc::from(format!("*{}", inner.value)), *ptr_type, is_const))
+                                        let inner_value = ctx.run(|ctx| self.zero_check(&inner, op, "Null pointer dereference", index, ctx)).await;
+                                        Ok(SkyeValue::new(Rc::from(format!("*{}", inner_value)), *ptr_type.clone(), is_const))
                                     }
                                 }
                                 SkyeType::Type(type_type) => {
@@ -2423,11 +2440,12 @@ impl CodeGen {
                                 _ => {
                                     match inner.type_.implements_op(Operator::Deref) {
                                         ImplementsHow::Native(_) => {
+                                            // never happens as far as i know, but i'll keep it here in case i decide to make it do something else
                                             return Ok(SkyeValue::new(Rc::from(format!("*{}", inner.value)), inner.type_, false));
                                         }
                                         ImplementsHow::ThirdParty => {
                                             let search_tok = Token::dummy(Rc::from("__deref__"));
-                                            if let Some(value) = self.get_method(&inner, &search_tok, true) {
+                                            if let Some(value) = self.get_method(&inner, &search_tok, true, index) {
                                                 let v = Vec::new();
                                                 return ctx.run(|ctx| self.call(&value, expr, inner_expr, &v, index, allow_unknown, ctx)).await;
                                             }
@@ -2439,7 +2457,7 @@ impl CodeGen {
                                         ImplementsHow::Native(_) => unreachable!(),
                                         ImplementsHow::ThirdParty => {
                                             let search_tok = Token::dummy(Rc::from("__asptr__"));
-                                            if let Some(value) = self.get_method(&inner, &search_tok, true) {
+                                            if let Some(value) = self.get_method(&inner, &search_tok, true, index) {
                                                 let v = Vec::new();
                                                 let value = ctx.run(|ctx| self.call(&value, expr, inner_expr, &v, index, allow_unknown, ctx)).await?;
 
@@ -2459,7 +2477,8 @@ impl CodeGen {
                                                     }
                                                 };
 
-                                                Ok(SkyeValue::new(Rc::from(format!("*{}", value.value)), inner_type, is_const))
+                                                let value_value = ctx.run(|ctx| self.zero_check(&value, op, "Null pointer dereference", index, ctx)).await;
+                                                Ok(SkyeValue::new(Rc::from(format!("*{}", value_value)), inner_type, is_const))
                                             } else {
                                                 token_error!(
                                                     self, op,
@@ -2489,12 +2508,13 @@ impl CodeGen {
                         }
                         TokenType::StarConst => {
                             match inner.type_ {
-                                SkyeType::Pointer(ptr_type, ..) => { // readonly dereference
-                                    if matches!(*ptr_type, SkyeType::Void) {
+                                SkyeType::Pointer(ref ptr_type, ..) => { // readonly dereference
+                                    if matches!(**ptr_type, SkyeType::Void) {
                                         ast_error!(self, inner_expr, "Cannot dereference a voidptr");
                                         Err(ExecutionInterrupt::Error)
                                     } else {
-                                        Ok(SkyeValue::new(Rc::from(format!("*{}", inner.value)), *ptr_type, true))
+                                        let inner_value = ctx.run(|ctx| self.zero_check(&inner, op, "Null pointer dereference", index, ctx)).await;
+                                        Ok(SkyeValue::new(Rc::from(format!("*{}", inner_value)), *ptr_type.clone(), true))
                                     }
                                 }
                                 SkyeType::Type(type_type) => {
@@ -2764,7 +2784,7 @@ impl CodeGen {
                 } else {
                     match op.type_ {
                         TokenType::PlusPlus => {
-                            let new_inner = inner.follow_reference();
+                            let new_inner = inner.follow_reference(self.external_zero_check(op, index));
 
                             if new_inner.is_const {
                                 ast_error!(self, inner_expr, "Cannot apply '++' operator on const value");
@@ -2780,7 +2800,7 @@ impl CodeGen {
                             }
                         }
                         TokenType::MinusMinus => {
-                            let new_inner = inner.follow_reference();
+                            let new_inner = inner.follow_reference(self.external_zero_check(op, index));
 
                             if new_inner.is_const {
                                 ast_error!(self, inner_expr, "Cannot apply '--' operator on const value");
@@ -2806,14 +2826,14 @@ impl CodeGen {
                     TokenType::Plus => {
                         ctx.run(|ctx| self.binary_operator(
                             left, None, &left_expr, &right_expr,
-                            expr, "+", "__add__", Operator::Add,
+                            expr, "+", op, "__add__", Operator::Add,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::Minus => {
                         ctx.run(|ctx| self.binary_operator(
                             left, None, &left_expr, &right_expr,
-                            expr, "-", "__sub__", Operator::Sub,
+                            expr, "-", op, "__sub__", Operator::Sub,
                             index, allow_unknown, ctx
                         )).await
                     }
@@ -2827,7 +2847,7 @@ impl CodeGen {
                     TokenType::Star => {
                         ctx.run(|ctx| self.binary_operator(
                             left, None, &left_expr, &right_expr,
-                            expr, "*", "__mul__", Operator::Mul,
+                            expr, "*", op, "__mul__", Operator::Mul,
                             index, allow_unknown, ctx
                         )).await
                     }
@@ -2841,19 +2861,19 @@ impl CodeGen {
                     TokenType::ShiftLeft => {
                         ctx.run(|ctx| self.binary_operator_int_on_right(
                             left, &left_expr, &right_expr,
-                            expr, "<<", "__shl__", Operator::Shl,
+                            expr, "<<", op, "__shl__", Operator::Shl,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::ShiftRight => {
                         ctx.run(|ctx| self.binary_operator_int_on_right(
                             left, &left_expr, &right_expr,
-                            expr, ">>", "__shr__", Operator::Shr,
+                            expr, ">>", op, "__shr__", Operator::Shr,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::LogicOr => {
-                        let new_left = left.follow_reference();
+                        let new_left = left.follow_reference(self.external_zero_check(op, index));
 
                         match new_left.type_.implements_op(Operator::Or) {
                             ImplementsHow::Native(compatible_types) => {
@@ -2880,7 +2900,8 @@ impl CodeGen {
                                 self.definitions[index].push("} else {\n");
                                 self.definitions[index].inc_indent();
 
-                                let right = ctx.run(|ctx| self.evaluate(&right_expr, index, allow_unknown, ctx)).await?.follow_reference();
+                                let right = ctx.run(|ctx| self.evaluate(&right_expr, index, allow_unknown, ctx)).await?
+                                    .follow_reference(self.external_zero_check(op, index));
 
                                 if !(
                                     matches!(new_left.type_, SkyeType::Unknown(_)) ||
@@ -2912,7 +2933,7 @@ impl CodeGen {
                             }
                             ImplementsHow::ThirdParty => {
                                 let search_tok = Token::dummy(Rc::from("__or__"));
-                                if let Some(value) = self.get_method(&new_left, &search_tok, true) {
+                                if let Some(value) = self.get_method(&new_left, &search_tok, true, index) {
                                     let args = vec![*right_expr.clone()];
                                     ctx.run(|ctx| self.call(&value, expr, left_expr, &args, index, allow_unknown, ctx)).await
                                 } else {
@@ -2941,7 +2962,7 @@ impl CodeGen {
                         }
                     }
                     TokenType::LogicAnd => {
-                        let new_left = left.follow_reference();
+                        let new_left = left.follow_reference(self.external_zero_check(op, index));
 
                         match new_left.type_.implements_op(Operator::And) {
                             ImplementsHow::Native(compatible_types) => {
@@ -2959,7 +2980,8 @@ impl CodeGen {
                                 self.definitions[index].push(") {\n");
                                 self.definitions[index].inc_indent();
 
-                                let right = ctx.run(|ctx| self.evaluate(&right_expr, index, allow_unknown, ctx)).await?.follow_reference();
+                                let right = ctx.run(|ctx| self.evaluate(&right_expr, index, allow_unknown, ctx)).await?
+                                    .follow_reference(self.external_zero_check(op, index));
 
                                 if !(
                                     matches!(new_left.type_, SkyeType::Unknown(_)) ||
@@ -3000,7 +3022,7 @@ impl CodeGen {
                             }
                             ImplementsHow::ThirdParty => {
                                 let search_tok = Token::dummy(Rc::from("__and__"));
-                                if let Some(value) = self.get_method(&new_left, &search_tok, true) {
+                                if let Some(value) = self.get_method(&new_left, &search_tok, true, index) {
                                     let args = vec![*right_expr.clone()];
                                     ctx.run(|ctx| self.call(&value, expr, left_expr, &args, index, allow_unknown, ctx)).await
                                 } else {
@@ -3031,7 +3053,7 @@ impl CodeGen {
                     TokenType::BitwiseXor => {
                         ctx.run(|ctx| self.binary_operator(
                             left, None, &left_expr, &right_expr,
-                            expr, "^", "__xor__", Operator::Xor,
+                            expr, "^", op, "__xor__", Operator::Xor,
                             index, allow_unknown, ctx
                         )).await
                     }
@@ -3055,7 +3077,7 @@ impl CodeGen {
                         } else {
                             ctx.run(|ctx| self.binary_operator(
                                 left, None, &left_expr, &right_expr,
-                                expr, "|", "__bitor__", Operator::BitOr,
+                                expr, "|", op, "__bitor__", Operator::BitOr,
                                 index, allow_unknown, ctx
                             )).await
                         }
@@ -3063,35 +3085,35 @@ impl CodeGen {
                     TokenType::BitwiseAnd => {
                         ctx.run(|ctx| self.binary_operator(
                             left, None, &left_expr, &right_expr,
-                            expr, "&", "__bitand__", Operator::BitAnd,
+                            expr, "&", op, "__bitand__", Operator::BitAnd,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::Greater => {
                         ctx.run(|ctx| self.binary_operator(
                             left, Some(SkyeType::U8), &left_expr, &right_expr,
-                            expr, ">", "__gt__", Operator::Gt,
+                            expr, ">", op, "__gt__", Operator::Gt,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::GreaterEqual => {
                         ctx.run(|ctx| self.binary_operator(
                             left, Some(SkyeType::U8), &left_expr, &right_expr,
-                            expr, ">=", "__ge__", Operator::Ge,
+                            expr, ">=", op, "__ge__", Operator::Ge,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::Less => {
                         ctx.run(|ctx| self.binary_operator(
                             left, Some(SkyeType::U8), &left_expr, &right_expr,
-                            expr, "<", "__lt__", Operator::Lt,
+                            expr, "<", op, "__lt__", Operator::Lt,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::LessEqual => {
                         ctx.run(|ctx| self.binary_operator(
                             left, Some(SkyeType::U8), &left_expr, &right_expr,
-                            expr, "<=", "__le__", Operator::Le,
+                            expr, "<=", op, "__le__", Operator::Le,
                             index, allow_unknown, ctx
                         )).await
                     }
@@ -3103,7 +3125,7 @@ impl CodeGen {
                         } else {
                             ctx.run(|ctx| self.binary_operator(
                                 left, Some(SkyeType::U8), &left_expr, &right_expr,
-                                expr, "==", "__eq__", Operator::Eq,
+                                expr, "==", op, "__eq__", Operator::Eq,
                                 index, allow_unknown, ctx
                             )).await
                         }
@@ -3116,7 +3138,7 @@ impl CodeGen {
                         } else {
                             ctx.run(|ctx| self.binary_operator(
                                 left, Some(SkyeType::U8), &left_expr, &right_expr,
-                                expr, "!=", "__ne__", Operator::Ne,
+                                expr, "!=", op, "__ne__", Operator::Ne,
                                 index, allow_unknown, ctx
                             )).await
                         }
@@ -3206,7 +3228,7 @@ impl CodeGen {
                         ast_error!(self, target_expr, "Assignment target is const");
                     }
                 } else {
-                    if target.follow_reference().is_const {
+                    if target.follow_reference(self.external_zero_check(op, index)).is_const {
                         ast_error!(self, target_expr, "Assignment target is const");
                     }
                 }
@@ -3232,21 +3254,21 @@ impl CodeGen {
                     TokenType::PlusEquals => {
                         ctx.run(|ctx| self.binary_operator(
                             target, None, &target_expr, &value_expr,
-                            expr, "+=", "__setadd__", Operator::SetAdd,
+                            expr, "+=", op, "__setadd__", Operator::SetAdd,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::MinusEquals => {
                         ctx.run(|ctx| self.binary_operator(
                             target, None, &target_expr, &value_expr,
-                            expr, "-=", "__setsub__", Operator::SetSub,
+                            expr, "-=", op, "__setsub__", Operator::SetSub,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::StarEquals => {
                         ctx.run(|ctx| self.binary_operator(
                             target, None, &target_expr, &value_expr,
-                            expr, "*=", "__setmul__", Operator::SetMul,
+                            expr, "*=", op, "__setmul__", Operator::SetMul,
                             index, allow_unknown, ctx
                         )).await
                     }
@@ -3267,35 +3289,35 @@ impl CodeGen {
                     TokenType::ShiftLeftEquals => {
                         ctx.run(|ctx| self.binary_operator(
                             target, None, &target_expr, &value_expr,
-                            expr, "<<=", "__setshl__", Operator::SetShl,
+                            expr, "<<=", op, "__setshl__", Operator::SetShl,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::ShiftRightEquals => {
                         ctx.run(|ctx| self.binary_operator(
                             target, None, &target_expr, &value_expr,
-                            expr, ">>=", "__setshr__", Operator::SetShr,
+                            expr, ">>=", op, "__setshr__", Operator::SetShr,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::AndEquals => {
                         ctx.run(|ctx| self.binary_operator(
                             target, None, &target_expr, &value_expr,
-                            expr, "&=", "__setand__", Operator::SetAnd,
+                            expr, "&=", op, "__setand__", Operator::SetAnd,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::XorEquals => {
                         ctx.run(|ctx| self.binary_operator(
                             target, None, &target_expr, &value_expr,
-                            expr, "^=", "__setxor__", Operator::SetXor,
+                            expr, "^=", op, "__setxor__", Operator::SetXor,
                             index, allow_unknown, ctx
                         )).await
                     }
                     TokenType::OrEquals => {
                         ctx.run(|ctx| self.binary_operator(
                             target, None, &target_expr, &value_expr,
-                            expr, "|=", "__setor__", Operator::SetOr,
+                            expr, "|=", op, "__setor__", Operator::SetOr,
                             index, allow_unknown, ctx
                         )).await
                     },
@@ -3474,7 +3496,7 @@ impl CodeGen {
                                             fields_output.push_str(" = ");
 
                                             let search_tok = Token::dummy(Rc::from("__copy__"));
-                                            if let Some(value) = self.get_method(&field_evaluated, &search_tok, true) {
+                                            if let Some(value) = self.get_method(&field_evaluated, &search_tok, true, index) {
                                                 let v = Vec::new();
                                                 let copy_constructor = ctx.run(|ctx| self.call(&value, expr, &field.expr, &v, index, allow_unknown, ctx)).await?;
                                                 fields_output.push_str(&copy_constructor.value);
@@ -3570,7 +3592,7 @@ impl CodeGen {
                                         buf.push_str(" = ");
 
                                         let search_tok = Token::dummy(Rc::from("__copy__"));
-                                        if let Some(value) = self.get_method(&field_evaluated, &search_tok, true) {
+                                        if let Some(value) = self.get_method(&field_evaluated, &search_tok, true, index) {
                                             let v = Vec::new();
                                             let copy_constructor = ctx.run(|ctx| self.call(&value, expr, &fields[0].expr, &v, index, allow_unknown, ctx)).await?;
                                             buf.push_str(&copy_constructor.value);
@@ -3927,7 +3949,7 @@ impl CodeGen {
             Expression::Subscript(subscripted_expr, paren, arguments) => {
                 let subscripted = ctx.run(|ctx| self.evaluate(&subscripted_expr, index, allow_unknown, ctx)).await?;
 
-                let new_subscripted = subscripted.follow_reference();
+                let new_subscripted = subscripted.follow_reference(self.external_zero_check(paren, index));
 
                 match new_subscripted.type_ {
                     SkyeType::Pointer(inner_type, is_const, is_reference) => {
@@ -3944,7 +3966,8 @@ impl CodeGen {
                             SkyeType::U8  | SkyeType::I8  | SkyeType::U16 | SkyeType::I16 |
                             SkyeType::U32 | SkyeType::I32 | SkyeType::U64 | SkyeType::I64 |
                             SkyeType::Usz | SkyeType::AnyInt => {
-                                return Ok(SkyeValue::new(Rc::from(format!("{}[{}]", subscripted.value, arg.value)), *inner_type.clone(), is_const));
+                                let subscripted_value = ctx.run(|ctx| self.zero_check(&subscripted, paren, "Null pointer dereference", index, ctx)).await;
+                                return Ok(SkyeValue::new(Rc::from(format!("{}[{}]", subscripted_value, arg.value)), *inner_type.clone(), is_const));
                             }
                             _ => {
                                 ast_error!(
@@ -4168,11 +4191,12 @@ impl CodeGen {
                             ImplementsHow::Native(_) => unreachable!(),
                             ImplementsHow::ThirdParty => {
                                 let search_tok = Token::dummy(Rc::from("__subscript__"));
-                                if let Some(value) = self.get_method(&new_subscripted, &search_tok, true) {
+                                if let Some(value) = self.get_method(&new_subscripted, &search_tok, true, index) {
                                     let call_value = ctx.run(|ctx| self.call(&value, expr, &subscripted_expr, &arguments, index, allow_unknown, ctx)).await?;
 
-                                    if let SkyeType::Pointer(inner_type, is_const, _) = call_value.type_ {
-                                        Ok(SkyeValue::new(Rc::from(format!("*{}", call_value.value).as_ref()), *inner_type, is_const))
+                                    if let SkyeType::Pointer(ref inner_type, is_const, _) = call_value.type_ {
+                                        let call_value_value = ctx.run(|ctx| self.zero_check(&call_value, paren, "Null pointer dereference", index, ctx)).await;
+                                        Ok(SkyeValue::new(Rc::from(format!("*{}", call_value_value).as_ref()), *inner_type.clone(), is_const))
                                     } else {
                                         ast_error!(
                                             self, subscripted_expr,
@@ -4215,7 +4239,7 @@ impl CodeGen {
             Expression::Get(object_expr, name) => {
                 let object = ctx.run(|ctx| self.evaluate(&object_expr, index, allow_unknown, ctx)).await?;
 
-                match object.type_.get(&object.value, name, object.is_const) {
+                match object.type_.get(&object.value, name, object.is_const, self.external_zero_check(name, index)) {
                     GetResult::Ok(value, type_, is_const) => {
                         return Ok(SkyeValue::new(value, type_, is_const))
                     }
@@ -4230,7 +4254,7 @@ impl CodeGen {
                     }
                     GetResult::Undefined => ast_error!(self, object_expr, "Cannot get properties from undefined struct or enum"),
                     GetResult::FieldNotFound => {
-                        if let Some(value) = self.get_method(&object, name, false) {
+                        if let Some(value) = self.get_method(&object, name, false, index) {
                             return Ok(value);
                         } else {
                             token_error!(self, name, "Undefined property");
@@ -4316,7 +4340,7 @@ impl CodeGen {
                     let search_tok = Token::dummy(Rc::from("__destruct__"));
                     let var_value = SkyeValue::new(Rc::clone(&name), var.type_.clone(), var.is_const);
 
-                    if let Some(value) = self.get_method(&var_value, &search_tok, true) {
+                    if let Some(value) = self.get_method(&var_value, &search_tok, true, index) {
                         let fake_expr = Expression::Variable(search_tok);
                         let v = Vec::new();
                         
@@ -5209,7 +5233,7 @@ impl CodeGen {
 
                     let final_value = {
                         let search_tok = Token::dummy(Rc::from("__copy__"));
-                        if let Some(method_value) = self.get_method(&value, &search_tok, true) {
+                        if let Some(method_value) = self.get_method(&value, &search_tok, true, index) {
                             let v = Vec::new();
                             let copy_constructor = ctx.run(|ctx| self.call(&method_value, expr, &expr, &v, index, false, ctx)).await?;
 
@@ -6696,12 +6720,12 @@ impl CodeGen {
 
                 let mut search_tok = Token::dummy(Rc::from("next"));
                 let method = {
-                    if let Some(method) = self.get_method(&iterator, &search_tok, false) {
+                    if let Some(method) = self.get_method(&iterator, &search_tok, false, index) {
                         method
                     } else {
                         search_tok.set_lexeme("iter");
 
-                        if let Some(method) = self.get_method(&iterator, &search_tok, false) {
+                        if let Some(method) = self.get_method(&iterator, &search_tok, false, index) {
                             let v = Vec::new();
                             let iterator_call = ctx.run(|ctx| self.call(&method, iterator_expr, &iterator_expr, &v, index, false, ctx)).await?;
 
@@ -6721,7 +6745,7 @@ impl CodeGen {
                             let iterator_val = SkyeValue::new(Rc::clone(&iterator_call.value), iterator_call.type_, false);
 
                             search_tok.set_lexeme("next");
-                            if let Some(final_method) = self.get_method(&iterator_val, &search_tok, false) {
+                            if let Some(final_method) = self.get_method(&iterator_val, &search_tok, false, index) {
                                 final_method
                             } else {
                                 ast_error!(

@@ -8,7 +8,6 @@ use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
 
 // TODO
 // - support % operator for floats (reimplement or bind fmod and call it implictly)
-// - ideally, panic if dereferencing null pointers (avoids undefined behavior, disabled in release mode)
 // - implement downloading packages via http
 // - check that copy constructors and destructors are implemented properly
 // - windows support!
@@ -61,9 +60,9 @@ enum CompilerCommand {
         /// Whether to emit C source code instead of an executable
         emit_c: bool,
 
-        #[arg(long, default_value_t = true)]
-        /// Whether to keep debug information in the compiled program
-        debug: bool,
+        #[arg(long, default_value_t = false)]
+        /// Whether to compile in release mode
+        release: bool,
 
         #[arg(short, long, default_value_t = String::from(""))]
         /// Output filename
@@ -122,7 +121,7 @@ fn main() -> Result<(), Error> {
     let args = Args::parse();
 
     match args.command {
-        CompilerCommand::Compile { file, emit_c, debug, output } => {
+        CompilerCommand::Compile { file, emit_c, release, output } => {
             if emit_c {
                 let output_file = OsString::from({
                     if output.len() == 0 {
@@ -132,7 +131,7 @@ fn main() -> Result<(), Error> {
                     }
                 });
         
-                compile_file_to_c(&file, &output_file, debug, &args.primitives)?;
+                compile_file_to_c(&file, &output_file, !release, &args.primitives)?;
             } else {
                 let output_file = OsString::from({
                     if output.len() == 0 {
@@ -142,7 +141,7 @@ fn main() -> Result<(), Error> {
                     }
                 });
         
-                compile_file_to_exec(&file, &output_file, debug, &args.primitives)?;
+                compile_file_to_exec(&file, &output_file, !release, &args.primitives)?;
             }
         }
         CompilerCommand::Run { file } => run_skye(file, &args.primitives)?,
