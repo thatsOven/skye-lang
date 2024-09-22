@@ -6,10 +6,7 @@ namespace build {
         defer buf.free();
 
         @format(&buf, "{input} --emit-c -o {output}");
-        
-        if release {
-            @format(&buf, " --release");
-        }
+        if (release) @format(&buf, " --release");
 
         const result = std::os::system(buf.asString());
         
