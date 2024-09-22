@@ -73,7 +73,7 @@ fn __panicHandler(const at: String, const msg: String);
 macro panic(msg) __panicHandler(PANIC_POS, msg);
 macro unreachable @panic("Entered unreachable code");
 macro assert(x) x ? void : @panic("Assertion failed");
-macro todo(msg) @panic(@concat("Not implemented yet: ", msg));
+macro todo(msg) @panic(@concat("Not implemented yet: \"", msg, "\""));
 
 namespace core {
     enum Option[T] {
