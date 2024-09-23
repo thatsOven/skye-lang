@@ -12,7 +12,7 @@ fn getInt() u8 {
         io::stdIn.readLine(&buf);
         defer buf.clear();        
         
-        const parsed = buf.parseInt[u64]();
+        const parsed = buf.parseInt[i64]();
 
         if parsed.isSome() && parsed.some > 0 && parsed.some <= @MAX_TERMS {
             return @cast(u8, parsed.some);

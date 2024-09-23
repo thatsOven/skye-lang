@@ -381,7 +381,7 @@ union MyUnionBinding: CUnionName {
     b: f32
 }
 ```
-Structs, Bitfields, and unions can be initialized through a compound literal:
+Structs, bitfields, and unions can be initialized through a compound literal:
 ```
 let myStructInstance = MyStructBinding.{ x: 1.0, y: 2.0 };
 let a = 2;
@@ -404,7 +404,7 @@ impl MyStruct {
    
     // self doesn't need type specifiers!
     fn add(const self) i32 {
-        return myField + @cast(i32, anotherField);
+        return self.myField + @cast(i32, self.anotherField);
     }
 
     fn setMyField(self, field: i32) {
@@ -570,7 +570,7 @@ macro variableArgumentsMacro(args*) {
 | Option | `?x` | Defines an `Option[x]` type where `x` is a type |
 | Try | `try x` | Returns the `Ok` or `Some` value of `x` where `x` is a `Result` or `Option`. Propagates the `Error` or `None` if the set variant is not `Ok` or `Some` |
 | Access | `x.y` | Accesses the `y` property of `x`, whether it's a method or a field, where `x` is an instance of a struct, sum type enum, union or bitfield. Automatically dereferences pointers if necessary [*4](#additional-information) |
-| Static access | `x::y` | Accesses the `y` property of `x` statically, where `x` is a namespace, a struct type, an enum type, or an instance of the above |
+| Static access | `x::y` | Accesses the `y` property of `x` statically, where `x` is a namespace, a struct type, an enum type, or an instance of the above. This operator will automatically follow pointers at compile time if necessary |
 | Addition | `x + y` `x += y` | ... |
 | Subtraction | `x - y` `x -= y` | ... |
 | Multiplication | `x * y` `x *= y` | ... |
@@ -618,7 +618,7 @@ Here is a list of operators that can be overloaded
 | `!{}` | `__not__` | 0 | any |
 | `~{}` | `__inv__` | 0 | any |
 | `*{}` | `__deref__` [*2](#additional-information) | 0 | any |
-| `*const {}` | `__constderef__` [*2](#additional-information) | 0 | any |
+| `*const {}` | `__constderef__` | 0 | any |
 | `{} + {}` | `__add__` | 1 | any |
 | `{} - {}` | `__sub__` | 1 | any |
 | `{} / {}` | `__div__` | 1 | any |
@@ -653,6 +653,6 @@ Additionally, Skye offers you copy constructors and destructors, mostly used for
 
 ### Additional information
 1) Prefix and suffix increments and decrements are handled by the Skye compiler, and thus prevent undefined behavior for cases where multiple increments are used in the same expression or statement. Every expression is evaluated from left to right, and the outcome is always predictable.
-2) The `__deref__` and `__constderef__` methods are used to bind the unary `*` and `*const` operators to a different behavior. This means, for example, that dereferencing the type and assigning to the dereferenced output will not be possible with the standard syntax. To achieve that kind of behavior, a `__asptr__` method, taking no arguments and returning a pointer to any type, has to be implemented.
+2) The `__deref__` method is used to bind the unary `*` operator to a different behavior. This means, for example, that dereferencing the type and assigning to the dereferenced output will not be possible with the standard syntax. To achieve that kind of behavior, a `__asptr__` method, taking no arguments and returning a pointer to any type, has to be implemented.
 3) In debug mode (the default compilation mode), division and modulo operators do not cause undefined behavior, but rather they panic the program if division by zero is performed. This check is disabled in release mode is disabled for performance reasons.
 4) Unlike in C, in debug mode, dereferencing a `null` pointer, either explicitly or implictly, will result in a panic rather than undefined behavior. This check is disabled in release mode is disabled for performance reasons.
