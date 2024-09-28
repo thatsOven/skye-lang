@@ -741,16 +741,6 @@ impl CodeGen {
                         }
 
                         if inner_type.equals(&to_cast.type_, EqualsLevel::ConstStrict) {
-                            ast_warning!(
-                                arguments[1], 
-                                format!(
-                                    "Casted type ({}) matches target cast type",
-                                    to_cast.type_.stringify_native()
-                                ).as_ref()
-                            ); // +W-useless-cast
-
-                            ast_note!(callee_expr, "Remove this cast");
-
                             Ok(Some(to_cast))
                         } else {
                             Ok(Some(SkyeValue::new(Rc::from(format!("({})({})", inner_type.stringify(), to_cast.value)), *inner_type, true)))
@@ -786,7 +776,6 @@ impl CodeGen {
                     if *is_const {
                         Ok(Some(SkyeValue::new(to_cast.value, SkyeType::Pointer(inner_type.clone(), false, *is_reference), true)))
                     } else {
-                        // no warning here because you might use this in a generic context where you don't know the type of pointer
                         Ok(Some(to_cast))
                     }
                 } else {
