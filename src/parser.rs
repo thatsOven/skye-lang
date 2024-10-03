@@ -947,10 +947,12 @@ impl Parser {
 
     fn struct_decl(&mut self, incoming_generics: &Vec<Generic>) -> Option<Statement> {
         let mut typedefed = false;
+        let mut bind = false;
 
         for (name, qualifier) in self.curr_qualifiers.iter() {
             match name.as_ref() {
                 "typedef" => typedefed = true,
+                "bind" => bind = true,
                 _ => token_error!(self, qualifier, "Unsupported qualifier for struct definition")
             }
         }
@@ -961,7 +963,9 @@ impl Parser {
         let generics = self.parse_generics(incoming_generics)?;
 
         let binding = {
-            if self.match_(&[TokenType::Colon]) {
+            if bind {
+                Some(name.clone())
+            } else if self.match_(&[TokenType::Colon]) {
                 if generics.len() != 0 {
                     token_error!(self, self.previous(), "Cannot use generics in a C struct binding");
                     None
@@ -1074,30 +1078,32 @@ impl Parser {
     }
 
     fn use_statement(&mut self) -> Option<Statement> {
-        if self.curr_qualifiers.len() != 0 {
-            let kw = self.previous();
-            token_error!(self, kw, "Cannot use qualifiers on \"use\" statement");
+        let mut typedef = false;
 
-            for (_, qualifier) in self.curr_qualifiers.iter() {
-                token_note!(qualifier, "Qualifier specified here");
+        for (name, qualifier) in self.curr_qualifiers.iter() {
+            match name.as_ref() {
+                "typedef" => typedef = true,
+                _ => token_error!(self, qualifier, "Unsupported qualifier for use statement")
             }
-
-            self.curr_qualifiers.clear();
         }
+
+        self.curr_qualifiers.clear();
 
         let use_expr = self.expression()?;
         self.consume(TokenType::As, "Expecting \"as\" after use expression")?;
         let as_ = self.consume(TokenType::Identifier, "Expecting identifier after \"as\"")?.clone();
         self.consume(TokenType::Semicolon, "Expecting ';' after use statement")?;
-        Some(Statement::Use(use_expr, as_))
+        Some(Statement::Use(use_expr, as_, typedef))
     }
 
     fn enum_decl(&mut self, incoming_generics: &Vec<Generic>) -> Option<Statement> {
         let mut typedefed = false;
+        let mut bind = false;
 
         for (name, qualifier) in self.curr_qualifiers.iter() {
             match name.as_ref() {
                 "typedef" => typedefed = true,
+                "bind" => bind = true,
                 _ => token_error!(self, qualifier, "Unsupported qualifier for enum definition")
             }
         }
@@ -1108,7 +1114,9 @@ impl Parser {
         let generics = self.parse_generics(incoming_generics)?;
 
         let binding = {
-            if self.match_(&[TokenType::Colon]) {
+            if bind {
+                Some(name.clone())
+            } else if self.match_(&[TokenType::Colon]) {
                 if generics.len() != 0 {
                     token_error!(self, self.previous(), "Cannot use generics in a C enum binding");
                     None
@@ -1243,10 +1251,12 @@ impl Parser {
 
     fn union_decl(&mut self) -> Option<Statement> {
         let mut typedefed = false;
+        let mut bind = false;
 
         for (name, qualifier) in self.curr_qualifiers.iter() {
             match name.as_ref() {
                 "typedef" => typedefed = true,
+                "bind" => bind = true,
                 _ => token_error!(self, qualifier, "Unsupported qualifier for union definition")
             }
         }
@@ -1259,7 +1269,9 @@ impl Parser {
         }
 
         let binding = {
-            if self.match_(&[TokenType::Colon]) {
+            if bind {
+                Some(name.clone())
+            } else if self.match_(&[TokenType::Colon]) {
                 Some(self.consume(TokenType::Identifier, "Expecting C union name after union binding")?.clone())
             } else {
                 if typedefed {
@@ -1301,10 +1313,12 @@ impl Parser {
 
     fn bitfield_decl(&mut self) -> Option<Statement> {
         let mut typedefed = false;
+        let mut bind = false;
 
         for (name, qualifier) in self.curr_qualifiers.iter() {
             match name.as_ref() {
                 "typedef" => typedefed = true,
+                "bind" => bind = true,
                 _ => token_error!(self, qualifier, "Unsupported qualifier for union definition")
             }
         }
@@ -1317,7 +1331,9 @@ impl Parser {
         }
 
         let binding = {
-            if self.match_(&[TokenType::Colon]) {
+            if bind {
+                Some(name.clone())
+            } else if self.match_(&[TokenType::Colon]) {
                 Some(self.consume(TokenType::Identifier, "Expecting C bitfield name after bitfield binding")?.clone())
             } else {
                 if typedefed {

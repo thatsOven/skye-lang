@@ -357,7 +357,7 @@ pub enum Statement {
     Struct(Token, Vec<StructField>, bool, Option<Token>, Vec<Token>, bool), // name fields has_body binding generics_names bind_typedefed
     Impl(Expression, Vec<Statement>), // struct declarations
     Namespace(Token, Vec<Statement>), // name body
-    Use(Expression, Token), // use_expr as
+    Use(Expression, Token, bool), // use_expr as typedef
     Enum(Token, Expression, Vec<EnumVariant>, bool, bool, Option<Token>, Vec<Token>, bool), // name kind_type variants is_simple has_body binding generics_names bind_typedefed
     Defer(Token, Box<Statement>), // kw statement
     Switch(Token, Expression, Vec<SwitchCase>), // kw expr cases
@@ -379,7 +379,7 @@ impl Statement {
             Statement::Empty | Statement::Undef(_) => AstPos::new(Rc::from(""), Rc::from(""), 0, 0, 0),
             Statement::Expression(expr) | 
             Statement::Impl(expr, _) | 
-            Statement::Use(expr, _) => expr.get_pos(),
+            Statement::Use(expr, ..) => expr.get_pos(),
             
             Statement::VarDecl(tok, ..) | 
             Statement::Block(tok, _) |

@@ -5307,10 +5307,13 @@ impl CodeGen {
                 drop(env);
 
                 let mut buf = String::from("typedef ");
+                let mut equal_binding = false;
 
                 if let Some(bound_name) = binding {
                     if !*bind_typedefed {
                         buf.push_str("struct ");
+                    } else {
+                        equal_binding = bound_name.lexeme == full_name;
                     }
 
                     buf.push_str(&bound_name.lexeme);
@@ -5323,7 +5326,7 @@ impl CodeGen {
 
                 buf.push(' ');
 
-                if (!has_decl) || (!*has_body) {
+                if (!equal_binding) && ((!has_decl) || (!*has_body)) {
                     self.declarations.push(CodeOutput::new());
                     self.declarations.last_mut().unwrap().push(&buf);
                     self.declarations.last_mut().unwrap().push(&full_name);
@@ -5558,17 +5561,26 @@ impl CodeGen {
                     self.curr_name = previous_name;
                 }
             }
-            Statement::Use(use_expr, identifier) => {
+            Statement::Use(use_expr, identifier, typedef) => {
                 let use_value = ctx.run(|ctx| self.evaluate(&use_expr, index, false, ctx)).await?;
 
                 if identifier.lexeme.as_ref() != "_" {
                     if use_value.value.len() != 0 {
                         let mut buf = String::new();
 
-                        buf.push_str("#define ");
-                        buf.push_str(&identifier.lexeme);
-                        buf.push(' ');
-                        buf.push_str(&use_value.value);
+                        if *typedef {
+                            buf.push_str("typedef ");
+                            buf.push_str(&use_value.value);
+                            buf.push(' ');
+                            buf.push_str(&identifier.lexeme);
+                            buf.push(';');
+                        } else {
+                            buf.push_str("#define ");
+                            buf.push_str(&identifier.lexeme);
+                            buf.push(' ');
+                            buf.push_str(&use_value.value);
+                        }
+                        
                         buf.push('\n');
 
                         if matches!(self.curr_function, CurrentFn::None) {
@@ -5676,22 +5688,31 @@ impl CodeGen {
                                 }
                             }
                         } else {
-                            self.declarations.push(CodeOutput::new());
-                            self.declarations.last_mut().unwrap().push("typedef ");
-
                             if let Some(bound_name) = binding {
+                                let mut write = true;
                                 if !*bind_typedefed {
-                                    self.declarations.last_mut().unwrap().push("enum ");
+                                    self.declarations.push(CodeOutput::new());
+                                    self.declarations.last_mut().unwrap().push("typedef enum ");
+                                } else {
+                                    write = bound_name.lexeme != full_name;
+
+                                    if write {
+                                        self.declarations.push(CodeOutput::new());
+                                        self.declarations.last_mut().unwrap().push("typedef enum ");
+                                    }
                                 }
 
-                                self.declarations.last_mut().unwrap().push(&bound_name.lexeme);
-                                self.declarations.last_mut().unwrap().push(": ");
-                                self.declarations.last_mut().unwrap().push(&type_.stringify());
-                                self.declarations.last_mut().unwrap().push(" ");
-                                self.declarations.last_mut().unwrap().push(&full_name);
-                                self.declarations.last_mut().unwrap().push(";\n");
+                                if write {
+                                    self.declarations.last_mut().unwrap().push(&bound_name.lexeme);
+                                    self.declarations.last_mut().unwrap().push(": ");
+                                    self.declarations.last_mut().unwrap().push(&type_.stringify());
+                                    self.declarations.last_mut().unwrap().push(" ");
+                                    self.declarations.last_mut().unwrap().push(&full_name);
+                                    self.declarations.last_mut().unwrap().push(";\n");
+                                }
                             } else {
-                                self.declarations.last_mut().unwrap().push("enum ");
+                                self.declarations.push(CodeOutput::new());
+                                self.declarations.last_mut().unwrap().push("typedef enum ");
 
                                 let full_struct_name = self.get_name(&Rc::from(format!("SKYE_ENUM_{}", simple_enum_name)));
                                 self.declarations.last_mut().unwrap().push(&full_struct_name);
@@ -6390,10 +6411,13 @@ impl CodeGen {
                 drop(env);
 
                 let mut buf = String::from("typedef ");
+                let mut equal_binding = false;
 
                 if let Some(bound_name) = binding {
                     if !*bind_typedefed {
                         buf.push_str("union ");
+                    } else {
+                        equal_binding = bound_name.lexeme == full_name;
                     }
 
                     buf.push_str(&bound_name.lexeme);
@@ -6405,7 +6429,7 @@ impl CodeGen {
 
                 buf.push(' ');
 
-                if (!has_decl) || (!*has_body) {
+                if (!equal_binding) && ((!has_decl) || (!*has_body)) {
                     self.declarations.push(CodeOutput::new());
                     self.declarations.last_mut().unwrap().push(&buf);
                     self.declarations.last_mut().unwrap().push(&full_name);
@@ -6543,10 +6567,13 @@ impl CodeGen {
                 drop(env);
 
                 let mut buf = String::from("typedef ");
+                let mut equal_binding = false;
 
                 if let Some(bound_name) = binding {
                     if !*bind_typedefed {
                         buf.push_str("struct ");
+                    } else {
+                        equal_binding = bound_name.lexeme != full_name;
                     }
 
                     buf.push_str(&bound_name.lexeme);
@@ -6558,7 +6585,7 @@ impl CodeGen {
 
                 buf.push(' ');
 
-                if (!has_decl) || (!*has_body) {
+                if (!equal_binding) && ((!has_decl) || (!*has_body)) {
                     self.declarations.push(CodeOutput::new());
                     self.declarations.last_mut().unwrap().push(&buf);
                     self.declarations.last_mut().unwrap().push(&full_name);
