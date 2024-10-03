@@ -1079,10 +1079,12 @@ impl Parser {
 
     fn use_statement(&mut self) -> Option<Statement> {
         let mut typedef = false;
+        let mut bind = false;
 
         for (name, qualifier) in self.curr_qualifiers.iter() {
             match name.as_ref() {
                 "typedef" => typedef = true,
+                "bind" => bind = true,
                 _ => token_error!(self, qualifier, "Unsupported qualifier for use statement")
             }
         }
@@ -1093,7 +1095,7 @@ impl Parser {
         self.consume(TokenType::As, "Expecting \"as\" after use expression")?;
         let as_ = self.consume(TokenType::Identifier, "Expecting identifier after \"as\"")?.clone();
         self.consume(TokenType::Semicolon, "Expecting ';' after use statement")?;
-        Some(Statement::Use(use_expr, as_, typedef))
+        Some(Statement::Use(use_expr, as_, typedef, bind))
     }
 
     fn enum_decl(&mut self, incoming_generics: &Vec<Generic>) -> Option<Statement> {

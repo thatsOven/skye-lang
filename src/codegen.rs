@@ -5561,11 +5561,11 @@ impl CodeGen {
                     self.curr_name = previous_name;
                 }
             }
-            Statement::Use(use_expr, identifier, typedef) => {
+            Statement::Use(use_expr, identifier, typedef, bind) => {
                 let use_value = ctx.run(|ctx| self.evaluate(&use_expr, index, false, ctx)).await?;
 
                 if identifier.lexeme.as_ref() != "_" {
-                    if use_value.value.len() != 0 {
+                    if use_value.value.len() != 0 && !*bind {
                         let mut buf = String::new();
 
                         if *typedef {
@@ -5590,7 +5590,10 @@ impl CodeGen {
                             self.definitions[index].push_indent();
                             self.definitions[index].push(&buf);
 
-                            self.deferred.borrow_mut().last_mut().unwrap().insert(0, Statement::Undef(Rc::clone(&identifier.lexeme)));
+                            if !*typedef {
+                                self.deferred.borrow_mut().last_mut().unwrap()
+                                    .insert(0, Statement::Undef(Rc::clone(&identifier.lexeme)));
+                            }
                         }
                     }
 
