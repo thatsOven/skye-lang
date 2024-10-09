@@ -584,14 +584,14 @@ namespace core {
             let string = core::fmt::allocIntToString(&core::mem::heapAllocator, value);
             const r = file.write(string.asString());
             string.free();
-            r.panicOnError("String interpolation failed writing to file");
+            r.expect("String interpolation failed writing to file");
         }
 
         fn __floatToFile[T: AnyFloat, U](const file: *U, const value: T) {
             let string = core::fmt::allocFloatToString(&core::mem::heapAllocator, value);
             const r = file.write(string.asString());
             string.free();
-            r.panicOnError("String interpolation failed writing to file");
+            r.expect("String interpolation failed writing to file");
         }
     }
 }
