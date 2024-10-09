@@ -69,8 +69,6 @@ namespace core {
 
 use core::Ptr as Ptr;
 
-macro MIN_ARRAY_CAPACITY 8;
-
 namespace core {
     struct Rc[T, U = core::mem::HeapAllocator] {
         const data: &T,
@@ -135,6 +133,8 @@ namespace core {
         }
     }
 
+    macro MIN_ARRAY_CAPACITY 8;
+
     struct Array[T, U = core::mem::HeapAllocator] {
         array: Ptr[T, U],
         length: usz,
@@ -145,18 +145,18 @@ namespace core {
     impl[T, U = core::mem::HeapAllocator] core::Array[T, U] {
         fn new() Self[T, U] {
             return Self.{
-                array: core::mem::heapAllocator.alloc[T](@MIN_ARRAY_CAPACITY),
+                array: core::mem::heapAllocator.alloc[T](core::@MIN_ARRAY_CAPACITY),
                 length: 0,
-                capacity: @MIN_ARRAY_CAPACITY,
+                capacity: core::@MIN_ARRAY_CAPACITY,
                 allocator: &core::mem::heapAllocator
             };
         }
 
         fn init(const allocator: *U) Self[T, U] {
             return Self.{
-                array: allocator.alloc[T](@MIN_ARRAY_CAPACITY),
+                array: allocator.alloc[T](core::@MIN_ARRAY_CAPACITY),
                 length: 0,
-                capacity: @MIN_ARRAY_CAPACITY,
+                capacity: core::@MIN_ARRAY_CAPACITY,
                 allocator
             };
         }
