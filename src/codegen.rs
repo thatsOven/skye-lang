@@ -5204,8 +5204,11 @@ impl CodeGen {
                 if let Some(expr) = ret_expr {
                     let value = ctx.run(|ctx| self.evaluate(expr, index, false, ctx)).await?;
 
+                    let is_void;
                     if let CurrentFn::Some(type_, orig_ret_type) = &self.curr_function {
-                        if matches!(type_, SkyeType::Void) {
+                        is_void = matches!(type_, SkyeType::Void);
+
+                        if is_void && !matches!(value.type_, SkyeType::Void) {
                             ast_error!(self, expr, "Cannot return value in a function that returns void");
                             ast_note!(expr, "Remove this expression");
                             ast_note!(orig_ret_type, "Return type defined here");
@@ -5224,33 +5227,44 @@ impl CodeGen {
                         unreachable!();
                     }
 
-                    let final_value = {
-                        let search_tok = Token::dummy(Rc::from("__copy__"));
-                        if let Some(method_value) = self.get_method(&value, &search_tok, true, index) {
-                            let v = Vec::new();
-                            let copy_constructor = ctx.run(|ctx| self.call(&method_value, expr, &expr, &v, index, false, ctx)).await?;
-
-                            ast_info!(expr, "Skye inserted a copy constructor call for this expression"); // +I-copies
-                            copy_constructor
-                        } else {
-                            value
+                    if is_void {
+                        if value.value.as_ref() != "" {
+                            self.definitions[index].push_indent();
+                            self.definitions[index].push(&value.value);
+                            self.definitions[index].push(";\n");
                         }
-                    };
-
-                    // return value is saved in a temporary variable so deferred statements get executed after evaluation
-                    let tmp_var_name = self.get_temporary_var();
-
-                    self.definitions[index].push_indent();
-                    self.definitions[index].push(&final_value.type_.stringify());
-                    self.definitions[index].push(" ");
-                    self.definitions[index].push(&tmp_var_name);
-                    self.definitions[index].push(" = ");
-                    self.definitions[index].push(&final_value.value);
-                    self.definitions[index].push(";\n");
-
-                    buf.push_str("return ");
-                    buf.push_str(&tmp_var_name);
-                    buf.push_str(";\n");
+                        
+                        buf.push_str("return;\n");
+                    } else {
+                        let final_value = {
+                            let search_tok = Token::dummy(Rc::from("__copy__"));
+                            if let Some(method_value) = self.get_method(&value, &search_tok, true, index) {
+                                let v = Vec::new();
+                                let copy_constructor = ctx.run(|ctx| self.call(&method_value, expr, &expr, &v, index, false, ctx)).await?;
+    
+                                ast_info!(expr, "Skye inserted a copy constructor call for this expression"); // +I-copies
+                                copy_constructor
+                            } else {
+                                value
+                            }
+                        };
+    
+                        // return value is saved in a temporary variable so deferred statements get executed after evaluation
+                        let tmp_var_name = self.get_temporary_var();
+    
+                        self.definitions[index].push_indent();
+                        self.definitions[index].push(&final_value.type_.stringify());
+                        self.definitions[index].push(" ");
+                        self.definitions[index].push(&tmp_var_name);
+                        self.definitions[index].push(" = ");
+                        self.definitions[index].push(&final_value.value);
+                        self.definitions[index].push(";\n");
+    
+                        buf.push_str("return ");
+                        buf.push_str(&tmp_var_name);
+                        buf.push_str(";\n");
+                    }
+                    
                 } else {
                     if let CurrentFn::Some(type_, expr) = &self.curr_function {
                         if !matches!(type_, SkyeType::Void) {

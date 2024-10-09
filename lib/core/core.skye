@@ -163,17 +163,6 @@ impl[T] core::Slice[T] {
 }
 
 impl[T] core::Option[T] {
-    fn unwrap(const self) T {
-        if self.kind == core::Option::Kind::Some {
-            switch T {
-                void    -> return;
-                default -> return self.some;
-            }
-        } else {
-            @panic("Option: unwrap on a None value");
-        }
-    }
-
     fn expect(const self, msg: String) T {
         if self.kind == core::Option::Kind::Some {
             switch T {
@@ -184,20 +173,13 @@ impl[T] core::Option[T] {
             @panic(msg);
         }
     }
+
+    fn unwrap(const self) T {
+        return self.expect("Option: unwrap on a None value");
+    }
 }
 
 impl[T, U] core::Result[T, U] {
-    fn unwrap(const self) T {
-        if self.kind == core::Result::Kind::Ok {
-            switch T {
-                void    -> return;
-                default -> return self.ok;
-            }
-        } else {
-            @panic("Result: unwrap on an Error value");
-        }
-    }
-
     fn expect(const self, msg: String) T {
         if self.kind == core::Result::Kind::Ok {            
             switch T {
@@ -207,5 +189,9 @@ impl[T, U] core::Result[T, U] {
         } else {
             @panic(msg);
         }
+    }
+
+    fn unwrap(const self) T {
+        return self.expect("Result: unwrap on an Error value");
     }
 }
