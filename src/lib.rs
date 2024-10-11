@@ -214,7 +214,7 @@ pub fn get_package_data(orig_path: &str) -> Result<(Vec<PathBuf>, Vec<PathBuf>, 
         }
     }
 
-    if file_count != 1 || fold_count != 1 {
+    if file_count != 1 || fold_count > 1 {
         return Ok((Vec::new(), Vec::new(), PathBuf::new()));
     }
 
