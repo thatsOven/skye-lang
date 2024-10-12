@@ -1,6 +1,14 @@
 import "std/os";
 
 namespace build {
+    fn system(const command: String) !void {
+        if std::os::system(command).isError() {
+            return (!void)::Error;
+        }
+
+        return (!void)::Ok;
+    }
+
     fn compileSkye(const input: String, const output: String, const release: u8) !void {
         let buf = core::Array::from("skye compile ");
         defer buf.free();
@@ -8,13 +16,7 @@ namespace build {
         @format(&buf, "{input} --emit-c -o {output}");
         if (release) @format(&buf, " --release");
 
-        const result = std::os::system(buf.asString());
-        
-        if result.isError() {
-            return (!void)::Error;
-        }
-
-        return (!void)::Ok;
+        try build::system(buf.asString());
     }
 
     fn compileCDefault(const input: String, const output: String) !void {
@@ -28,12 +30,6 @@ namespace build {
         }
         
         @format(&buf, "{input} -o {output}");
-        const result = std::os::system(buf.asString());
-
-        if result.isError() {
-            return (!void)::Error;
-        }
-
-        return (!void)::Ok;
+        try build::system(buf.asString());
     }
 }
