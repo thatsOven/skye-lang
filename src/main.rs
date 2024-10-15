@@ -72,7 +72,10 @@ enum CompilerCommand {
     Build {
         #[arg(long, default_value_t = String::from("."))]
         /// Path of project to be built
-        path: String
+        path: String,
+
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        program_args: Option<Vec<String>>
     },
     /// Exports a Skye package
     Export {
@@ -83,7 +86,10 @@ enum CompilerCommand {
     /// Runs a source file directly
     Run {
         /// Filename to be ran
-        file: OsString
+        file: OsString,
+
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        program_args: Option<Vec<String>>
     },
     /// Creates a new Skye project
     New {
@@ -144,8 +150,12 @@ fn main() -> Result<(), Error> {
                 compile_file_to_exec(&file, &output_file, !release, &args.primitives)?;
             }
         }
-        CompilerCommand::Run { file } => run_skye(file, &args.primitives)?,
-        CompilerCommand::Build { path } => run_skye(OsString::from(PathBuf::from(path).join("build.skye")), &args.primitives)?,
+        CompilerCommand::Run { file, program_args } => {
+            run_skye(file, &args.primitives, &program_args)?;
+        }
+        CompilerCommand::Build { path, program_args } => {
+            run_skye(OsString::from(PathBuf::from(path).join("build.skye")), &args.primitives, &program_args)?;
+        }
         CompilerCommand::New { project_type } => {
             match project_type {
                 ProjectType::Standalone { name } => {
@@ -275,7 +285,7 @@ fn main() -> Result<(), Error> {
             };
 
             if let Some(setup_file) = data_relative.iter().find(|x| **x == PathBuf::from("setup.skye")) {
-                run_skye(setup_file.clone().into_os_string(), &args.primitives)?;
+                run_skye(setup_file.clone().into_os_string(), &args.primitives, &None)?;
             }
 
             copy_dir_recursive(&tmp_folder, &lib_folder)?;

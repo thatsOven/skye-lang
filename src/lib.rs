@@ -149,7 +149,7 @@ pub fn compile_file_to_exec(input: &OsStr, output: &OsStr, debug: bool, primitiv
     Ok(())
 }
 
-pub fn run_skye(file: OsString, primitives: &String) -> Result<(), Error> {
+pub fn run_skye(file: OsString, primitives: &String, program_args: &Option<Vec<String>>) -> Result<(), Error> {
     let buf = PathBuf::from(
         env::var(SKYE_PATH_VAR).map_err(
             |e| Error::other(format!("Couldn't fetch SKYE_PATH environment variable. Error: {}", e.to_string()))
@@ -159,7 +159,13 @@ pub fn run_skye(file: OsString, primitives: &String) -> Result<(), Error> {
     let tmp = OsStr::new(buf.to_str().expect("Couldn't convert PathBuf to OsStr"));
 
     compile_file_to_exec(&file, &OsString::from(tmp), true, primitives)?;
-    Command::new(tmp).status()?;
+    let mut com = Command::new(tmp);
+    
+    if let Some(args) = program_args {
+        com.args(args);
+    }
+
+    com.status()?;
     remove_file(tmp)?;
     Ok(())
 }

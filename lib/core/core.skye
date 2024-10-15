@@ -153,7 +153,7 @@ namespace core {
 }
 
 impl[T] core::Slice[T] {
-    fn __subscript__(const self, idx: usz) *const T {
+    fn __constsubscript__(const self, idx: usz) *const T {
         if idx < self.length {
             return self.ptr + idx;
         } else {

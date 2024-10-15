@@ -4183,7 +4183,14 @@ impl CodeGen {
                         match new_subscripted.type_.implements_op(Operator::Subscript) {
                             ImplementsHow::Native(_) => unreachable!(),
                             ImplementsHow::ThirdParty => {
-                                let search_tok = Token::dummy(Rc::from("__subscript__"));
+                                let search_tok = {
+                                    if new_subscripted.is_const {
+                                        Token::dummy(Rc::from("__constsubscript__"))
+                                    } else {
+                                        Token::dummy(Rc::from("__subscript__"))
+                                    }
+                                };
+
                                 if let Some(value) = self.get_method(&new_subscripted, &search_tok, true, index) {
                                     let call_value = ctx.run(|ctx| self.call(&value, expr, &subscripted_expr, &arguments, index, allow_unknown, ctx)).await?;
 
@@ -4194,23 +4201,50 @@ impl CodeGen {
                                         ast_error!(
                                             self, subscripted_expr,
                                             format!(
-                                                "Expecting pointer as return type of __subscript__ (got {})",
-                                                call_value.type_.stringify_native()
+                                                "Expecting pointer as return type of {} (got {})",
+                                                search_tok.lexeme, call_value.type_.stringify_native()
                                             ).as_ref()
                                         );
 
                                         Err(ExecutionInterrupt::Error)
                                     }
                                 } else {
-                                    ast_error!(
-                                        self, subscripted_expr,
-                                        format!(
-                                            "Subscripting operation is not implemented for type {}",
-                                            new_subscripted.type_.stringify_native()
-                                        ).as_ref()
-                                    );
+                                    let search_tok = {
+                                        if new_subscripted.is_const {
+                                            Token::dummy(Rc::from("__subscript__"))
+                                        } else {
+                                            Token::dummy(Rc::from("__constsubscript__"))
+                                        }
+                                    };
 
-                                    Err(ExecutionInterrupt::Error)
+                                    if let Some(value) = self.get_method(&new_subscripted, &search_tok, true, index) {
+                                        let call_value = ctx.run(|ctx| self.call(&value, expr, &subscripted_expr, &arguments, index, allow_unknown, ctx)).await?;
+    
+                                        if let SkyeType::Pointer(ref inner_type, is_const, _) = call_value.type_ {
+                                            let call_value_value = ctx.run(|ctx| self.zero_check(&call_value, paren, "Null pointer dereference", index, ctx)).await;
+                                            Ok(SkyeValue::new(Rc::from(format!("*{}", call_value_value).as_ref()), *inner_type.clone(), is_const))
+                                        } else {
+                                            ast_error!(
+                                                self, subscripted_expr,
+                                                format!(
+                                                    "Expecting pointer as return type of {} (got {})",
+                                                    search_tok.lexeme, call_value.type_.stringify_native()
+                                                ).as_ref()
+                                            );
+    
+                                            Err(ExecutionInterrupt::Error)
+                                        }
+                                    } else {
+                                        ast_error!(
+                                            self, subscripted_expr,
+                                            format!(
+                                                "Subscripting operation is not implemented for type {}",
+                                                new_subscripted.type_.stringify_native()
+                                            ).as_ref()
+                                        );
+    
+                                        Err(ExecutionInterrupt::Error)
+                                    }                                    
                                 }
                             }
                             ImplementsHow::No => {

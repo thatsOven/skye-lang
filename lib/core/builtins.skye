@@ -61,6 +61,15 @@ namespace core {
             }
         }
 
+        fn __constsubscript__(const self, const offs: usz) *const T {
+            const r = self.ptr + offs;
+            if self.min <= r && r <= self.max {
+                return r;
+            } else {
+                @panic("Ptr: out of bounds access");
+            }
+        }
+
         fn __asptr__(self) *T {
             return self.ptr;
         } 
@@ -276,9 +285,9 @@ namespace core {
             return self.array[--self.length];
         }
 
-        fn get(self, const idx: usz) ?T {
+        fn get(const self, const idx: usz) ?T {
             if idx < self.length {
-                return (?T)::Some(self.array[idx]);
+                return self.array.get(idx);
             } else {
                 return (?T)::None;
             }
@@ -300,12 +309,38 @@ namespace core {
             }
         }
 
+        fn __constsubscript__(const self, const idx: usz) *const T {
+            if idx < self.length {
+                return &const self.array[idx];
+            } else {
+                @panic("Array: out of bounds access");
+            }
+        }
+
         fn slice(const self, const a: usz, const b: usz) core::Slice[T] {
             if a < self.length && b <= self.length {
                 return core::Slice::new(self.array.ptr + a, b - a);
             } else {
                 @panic("Array: out of bounds slicing");
             }
+        }
+
+        fn asSlice(const self) core::Slice[T] {
+            return self.slice(0, self.length);
+        }
+
+        fn find(const self, const item: &const T) ?usz {
+            for let i = 0usz; i < self.length; i++ {
+                if self.array[i] == item {
+                    return (?usz)::Some(i);
+                }
+            }
+
+            return (?usz)::None;
+        }
+
+        fn contains(const self, const item: &const T) u8 {
+            return self.find(item).isSome();
         }
 
         fn reverse(self) {
@@ -337,7 +372,7 @@ namespace core {
 
     impl[U = core::mem::HeapAllocator] core::Array[char, U] {
         fn asString(const self) String {
-            return String.{ ptr: self.array.ptr, length: self.length };
+            return self.asSlice();
         }
 
         fn pushString(self, const string: &String) {

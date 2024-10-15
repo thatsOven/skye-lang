@@ -647,7 +647,7 @@ Here is a list of operators that can be overloaded
 | `{} ^= {}` | `__setxor__` | 1 | any |
 | <code>{} &#124;= {}</code> | `__setor__` | 1 | any |
 | `{} &= {}` | `__setand__` | 1 | any |
-| `{}[{}]` | `__subscript__` | any | pointer to any |
+| `{}[{}]` | `__subscript__` or `__constsubscript__` [*5](#additional-information) | any | pointer to any |
 
 Additionally, Skye offers you copy constructors and destructors, mostly used for special types like smart pointers. They are respectively the `__copy__` method and the `__destruct__` method. The Skye compiler will warn you when it inserts calls to those methods inside the code, so that eventual debugging is easier.
 
@@ -656,3 +656,4 @@ Additionally, Skye offers you copy constructors and destructors, mostly used for
 2) The `__deref__` method is used to bind the unary `*` operator to a different behavior. This means, for example, that dereferencing the type and assigning to the dereferenced output will not be possible with the standard syntax. To achieve that kind of behavior, a `__asptr__` method, taking no arguments and returning a pointer to any type, has to be implemented.
 3) In debug mode (the default compilation mode), division and modulo operators do not cause undefined behavior, but rather they panic the program if division by zero is performed. This check is disabled in release mode for performance reasons.
 4) Unlike in C, in debug mode, dereferencing a `null` pointer, either explicitly or implictly, will result in a panic rather than undefined behavior. This check is disabled in release mode for performance reasons.
+5) `__constsubscript__` is used when subscripting from a const source, which in some cases throws an error if using `__subscript__`.
