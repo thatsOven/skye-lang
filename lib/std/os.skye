@@ -3,6 +3,8 @@
 
 namespace std {
     namespace os {
+        macro SEPARATOR @WINDOWS ? '\\' : '/';
+
         fn system(const command: String) !i32 {
             let buf = core::Array::new[char]();
             defer buf.free();

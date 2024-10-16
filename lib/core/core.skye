@@ -19,13 +19,14 @@ use @typeOf(0f64) as f64;
 use @typeOf(0usz) as usz;
 use @typeOf('\0') as char;
 
+#typedef use u8 as bool;
 use 0u8 as false;
 use 1u8 as true;
 
-macro WINDOWS -> u8;
-macro LINUX -> u8;
-macro MAC_OS -> u8;
-macro UNIX_LIKE -> u8;
+macro WINDOWS -> bool;
+macro LINUX -> bool;
+macro MAC_OS -> bool;
+macro UNIX_LIKE -> bool;
 
 macro empty(T) -> T;
 macro sizeOf(E) -> usz;
@@ -90,11 +91,11 @@ namespace core {
             }
         }
 
-        fn isSome(const self) u8 {
+        fn isSome(const self) bool {
             return self.kind == core::Option::Kind::Some;
         }
 
-        fn isNone(const self) u8 {
+        fn isNone(const self) bool {
             return self.kind == core::Option::Kind::None;
         }
     }
@@ -113,11 +114,11 @@ namespace core {
             }
         }
 
-        fn isOk(const self) u8 {
+        fn isOk(const self) bool {
             return self.kind == core::Result::Kind::Ok;
         }
 
-        fn isError(const self) u8 {
+        fn isError(const self) bool {
             return self.kind == core::Result::Kind::Error;
         }
     }
@@ -159,6 +160,22 @@ impl[T] core::Slice[T] {
         } else {
             @panic("Slice: out of bounds access");
         }
+    }
+
+    fn __eq__(const self, const other: &const Self) bool {
+        if (self.length != other.length) return false;
+        
+        for let i = 0usz; i < self.length; i++ {
+            if self[i] != other[i] {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    fn __ne__(const self, const other: &const Self) bool {
+        return !self.__eq__(other);
     }
 }
 

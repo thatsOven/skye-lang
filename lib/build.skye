@@ -9,7 +9,7 @@ namespace build {
         return (!void)::Ok;
     }
 
-    fn compileSkye(const input: String, const output: String, const release: u8) !void {
+    fn compileSkye(const input: String, const output: String, const release: bool) !void {
         let buf = core::Array::from("skye compile ");
         defer buf.free();
 
