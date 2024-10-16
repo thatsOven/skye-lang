@@ -433,7 +433,7 @@ namespace core {
         }
 
         fn remove(self, const idx: usz) ?T {
-            if self.length == 0 || idx >= self.length {
+            if idx >= self.length {
                 return (?T)::None;
             } 
 
@@ -442,7 +442,7 @@ namespace core {
         }
 
         fn swapRemove(self, const idx: usz) ?T {
-            if self.length == 0 || idx >= self.length {
+            if idx >= self.length {
                 return (?T)::None;
             } 
 
