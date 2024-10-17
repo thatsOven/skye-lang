@@ -137,15 +137,20 @@ impl<'a> Scanner<'a> {
         let mut back_slash = false;
         loop {
             let c = self.peek();
-            if (c == ch && !back_slash) || self.is_at_end() {
+            if self.is_at_end() || (c == ch && !back_slash) {
                 break;
             }
 
+            let old_backslash = back_slash;
             back_slash = false;
 
             match c {
                 '\n' => self.line += 1,
-                '\\' => back_slash = true,
+                '\\' => {
+                    if !old_backslash {
+                        back_slash = true;
+                    }
+                }
                 _ => (),
             }
 

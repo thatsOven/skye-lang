@@ -267,36 +267,40 @@ impl Expression {
                 )
             }
             Expression::Call(callee, paren, args) => {
-                let mut new_args = Vec::new();
-                for arg in args {
-                    new_args.push(arg.replace_variable(name, replace_expr));
-                }
-
-                Expression::Call(Box::new(callee.replace_variable(name, replace_expr)), paren.clone(), new_args)
+                Expression::Call(
+                    Box::new(callee.replace_variable(name, replace_expr)), 
+                    paren.clone(), 
+                    args.iter().map(|x| x.replace_variable(name, replace_expr)).collect()
+                )
             }
             Expression::FnPtr(kw, return_type, params) => {
-                let mut new_params = Vec::new();
-                for param in params {
-                    new_params.push(FunctionParam::new(param.name.clone(), param.type_.replace_variable(name, replace_expr), param.is_const))
-                }
-
-                Expression::FnPtr(kw.clone(), Box::new(return_type.replace_variable(name, replace_expr)), new_params)
+                Expression::FnPtr(
+                    kw.clone(), 
+                    Box::new(return_type.replace_variable(name, replace_expr)), 
+                    params.iter().map(
+                        |x| FunctionParam::new(
+                            x.name.clone(), x.type_.replace_variable(name, replace_expr), x.is_const
+                        )
+                    ).collect()
+                )
             }
             Expression::CompoundLiteral(struct_, closing_brace, fields) => {
-                let mut new_fields = Vec::new();
-                for field in fields {
-                    new_fields.push(StructField::new(field.name.clone(), field.expr.replace_variable(name, replace_expr), field.is_const))
-                }
-
-                Expression::CompoundLiteral(Box::new(struct_.replace_variable(name, replace_expr)), closing_brace.clone(), new_fields)
+                Expression::CompoundLiteral(
+                    Box::new(struct_.replace_variable(name, replace_expr)), 
+                    closing_brace.clone(), 
+                    fields.iter().map(
+                        |x| StructField::new(
+                            x.name.clone(), x.expr.replace_variable(name, replace_expr), x.is_const
+                        )
+                    ).collect()
+                )
             }
             Expression::Subscript(subscripted, paren, args) => {
-                let mut new_args = Vec::new();
-                for arg in args {
-                    new_args.push(arg.replace_variable(name, replace_expr));
-                }
-
-                Expression::Subscript(Box::new(subscripted.replace_variable(name, replace_expr)), paren.clone(), new_args)
+                Expression::Subscript(
+                    Box::new(subscripted.replace_variable(name, replace_expr)), 
+                    paren.clone(), 
+                    args.iter().map(|x| x.replace_variable(name, replace_expr)).collect()
+                )
             }
             Expression::Get(object, get_name) => {
                 Expression::Get(Box::new(object.replace_variable(name, replace_expr)), get_name.clone())
@@ -305,12 +309,10 @@ impl Expression {
                 Expression::StaticGet(Box::new(object.replace_variable(name, replace_expr)), get_name.clone(), *gets_macro)
             }
             Expression::Slice(opening_brace, items) => {
-                let mut new_items = Vec::new();
-                for item in items {
-                    new_items.push(item.replace_variable(name, replace_expr));
-                }
-
-                Expression::Slice(opening_brace.clone(), new_items)
+                Expression::Slice(
+                    opening_brace.clone(), 
+                    items.iter().map(|x| x.replace_variable(name, replace_expr)).collect()
+                )
             }
         }
     }
@@ -344,6 +346,25 @@ pub enum MacroParams {
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub enum MacroBody {
+    Binding(Expression),
+    Expression(Expression),
+    Block(Vec<Statement>)
+}
+
+impl MacroBody {
+    pub fn replace_variable(&self, name: &Rc<str>, replace_expr: &Expression) -> Self {
+        match self {
+            MacroBody::Binding(expression) => MacroBody::Binding(expression.replace_variable(name, replace_expr)),
+            MacroBody::Expression(expression) => MacroBody::Expression(expression.replace_variable(name, replace_expr)),
+            MacroBody::Block(statements) => {
+                MacroBody::Block(statements.iter().map(|x| x.replace_variable(name, replace_expr)).collect())
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Statement {
     Expression(Expression),
     VarDecl(Token, Option<Expression>, Option<Expression>, bool, Vec<Token>), // name initializer type is_const qualifiers
@@ -369,7 +390,7 @@ pub enum Statement {
     Import(Token, ImportType), // path is_ang
     Union(Token, Vec<StructField>, bool, Option<Token>, bool), // name fields has_body binding bind_typedefed
     Bitfield(Token, Vec<BitfieldField>, bool, Option<Token>, bool), // name fields has_body binding bind_typedefed
-    Macro(Token, MacroParams, Option<Expression>, Option<Expression>), // name params return_expr return_type
+    Macro(Token, MacroParams, MacroBody), // name params body
     Foreach(Token, Token, Expression, Box<Statement>) // kw variable iterator body
 }
 
@@ -404,6 +425,139 @@ impl Statement {
             Statement::Foreach(tok, ..) => {
                 AstPos::new(Rc::clone(&tok.source), Rc::clone(&tok.filename), tok.pos, tok.end, tok.line)
             } 
+        }
+    }
+
+    pub fn replace_variable(&self, name: &Rc<str>, replace_expr: &Expression) -> Statement {
+        match self {
+            Statement::Empty | Statement::Undef(_) |  Statement::Break(_) | Statement::Continue(_) | 
+            Statement::Import(..) | Statement::Bitfield(..) => self.clone(),
+
+            Statement::Expression(expression) => Statement::Expression(expression.replace_variable(name, replace_expr)),
+            Statement::VarDecl(var_name, initializer, type_, is_const, qualifiers) => {
+                Statement::VarDecl(
+                    var_name.clone(), 
+                    initializer.as_ref().map(|x| x.replace_variable(name, replace_expr)), 
+                    type_.as_ref().map(|x| x.replace_variable(name, replace_expr)), 
+                    *is_const, qualifiers.clone()
+                )
+            }
+            Statement::Block(kw, statements) => {
+                Statement::Block(kw.clone(), statements.iter().map(|x| x.replace_variable(name, replace_expr)).collect())
+            }
+            Statement::If(kw, cond, then_branch, else_branch) => {
+                Statement::If(
+                    kw.clone(), cond.replace_variable(name, replace_expr), 
+                    Box::new(then_branch.replace_variable(name, replace_expr)), 
+                    else_branch.as_ref().map(|x| Box::new(x.replace_variable(name, replace_expr)))
+                )
+            }
+            Statement::While(kw, cond, body) => {
+                Statement::While(kw.clone(), cond.replace_variable(name, replace_expr), Box::new(body.replace_variable(name, replace_expr)))
+            }
+            Statement::DoWhile(kw, cond, body) => {
+                Statement::DoWhile(kw.clone(), cond.replace_variable(name, replace_expr), Box::new(body.replace_variable(name, replace_expr)))
+            }
+            Statement::For(kw, initializer, cond, increment, body) => {
+                Statement::For(
+                    kw.clone(), 
+                    initializer.as_ref().map(|x| Box::new(x.replace_variable(name, replace_expr))), 
+                    cond.replace_variable(name, replace_expr), 
+                    increment.as_ref().map(|x| x.replace_variable(name, replace_expr)), 
+                    Box::new(body.replace_variable(name, replace_expr))
+                )
+            }
+            Statement::Function(kw, params, return_type, body, qualifiers, generics_names, bind) => {
+                Statement::Function(
+                    kw.clone(), 
+                    params.iter().map(|x| FunctionParam::new(x.name.clone(), x.type_.replace_variable(name, replace_expr), x.is_const)).collect(),
+                    return_type.replace_variable(name, replace_expr),
+                    body.as_ref().map(|x| x.iter().map(|statement| statement.replace_variable(name, replace_expr)).collect()),
+                    qualifiers.clone(),
+                    generics_names.clone(), 
+                    *bind
+                )
+            }
+            Statement::Return(kw, return_expr) => {
+                Statement::Return(kw.clone(), return_expr.as_ref().map(|x| x.replace_variable(name, replace_expr)))
+            }
+            Statement::Struct(struct_name, fields, has_body, binding, generics_names, bind_typedefed) => {
+                Statement::Struct(
+                    struct_name.clone(), 
+                    fields.iter().map(|x| StructField::new(x.name.clone(), x.expr.replace_variable(name, replace_expr), x.is_const)).collect(),
+                    *has_body, binding.clone(), generics_names.clone(), *bind_typedefed
+                )
+            }
+            Statement::Impl(struct_, declarations) => {
+                Statement::Impl(
+                    struct_.replace_variable(name, replace_expr),
+                    declarations.iter().map(|x| x.replace_variable(name, replace_expr)).collect()
+                )
+            }
+            Statement::Namespace(namespace_name, declarations) => {
+                Statement::Namespace(
+                    namespace_name.clone(), 
+                    declarations.iter().map(|x| x.replace_variable(name, replace_expr)).collect()
+                )
+            }
+            Statement::Use(expression, alias, typedef, bind) => {
+                Statement::Use(expression.replace_variable(name, replace_expr), alias.clone(), *typedef, *bind)
+            }
+            Statement::Enum(enum_name, kind_type, variants, is_simple, has_body, binding, generics_names, bind_typedefed) => {
+                Statement::Enum(
+                    enum_name.clone(),
+                    kind_type.replace_variable(name, replace_expr),
+                    variants.iter().map(|x| EnumVariant::new(x.name.clone(), x.expr.replace_variable(name, replace_expr))).collect(),
+                    *is_simple, *has_body, binding.clone(), generics_names.clone(), *bind_typedefed
+                )
+            }
+            Statement::Defer(kw, statement) => {
+                Statement::Defer(kw.clone(), Box::new(statement.replace_variable(name, replace_expr)))
+            }
+            Statement::Switch(kw, cond, cases) => {
+                Statement::Switch(
+                    kw.clone(), cond.replace_variable(name, replace_expr),
+                    cases.iter().map(
+                        |x| SwitchCase::new(
+                            x.cases.as_ref().map(
+                                |orig_cases| orig_cases.iter().map(
+                                    |case| case.replace_variable(name, replace_expr)
+                                ).collect()
+                            ),
+                            x.code.iter().map(|x| x.replace_variable(name, replace_expr)).collect()
+                        )
+                    ).collect()
+                )
+            }
+            Statement::Template(template_name, declaration, generics, generics_names) => {
+                Statement::Template(
+                    template_name.clone(), Box::new(declaration.replace_variable(name, replace_expr)),
+                    generics.iter().map(
+                        |x| Generic::new(
+                            x.name.clone(), 
+                            x.bounds.as_ref().map(|bounds| bounds.replace_variable(name, replace_expr)),
+                            x.default.as_ref().map(|default| default.replace_variable(name, replace_expr))
+                        )
+                    ).collect(),
+                    generics_names.clone()
+                )
+            }
+            Statement::Union(union_name, fields, has_body, binding, bind_typedefed) => {
+                Statement::Union(
+                    union_name.clone(), 
+                    fields.iter().map(|x| StructField::new(x.name.clone(), x.expr.replace_variable(name, replace_expr), x.is_const)).collect(),
+                    *has_body, binding.clone(), *bind_typedefed
+                )
+            }
+            Statement::Macro(macro_name, macro_params, macro_body) => {
+                Statement::Macro(macro_name.clone(), macro_params.clone(), macro_body.replace_variable(name, replace_expr))
+            }
+            Statement::Foreach(kw, var_name, iterator, body) => {
+                Statement::Foreach(
+                    kw.clone(), var_name.clone(), iterator.replace_variable(name, replace_expr),
+                    Box::new(body.replace_variable(name, replace_expr))
+                )
+            }
         }
     }
 }

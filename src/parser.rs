@@ -2,7 +2,7 @@ use convert_case::{Case, Casing};
 use std::{collections::HashMap, rc::Rc};
 
 use crate::{
-    ast::{BitfieldField, EnumVariant, Expression, FunctionParam, Generic, ImportType, LiteralKind, MacroParams, Statement, StructField, SwitchCase}, 
+    ast::{BitfieldField, EnumVariant, Expression, FunctionParam, Generic, ImportType, LiteralKind, MacroBody, MacroParams, Statement, StructField, SwitchCase}, 
     ast_error, ast_note, token_error, token_note, 
     tokens::{Token, TokenType}, 
     utils::is_valid_variant
@@ -1427,23 +1427,21 @@ impl Parser {
             }
         };
 
-        let (return_type, return_expr) = {
+        let body = {
             if self.match_(&[TokenType::Arrow]) {
                 let type_expr = self.type_expression()?;
                 self.consume(TokenType::Semicolon, "Expecting ';' after macro binding")?;
-                (Some(type_expr), None)
+                MacroBody::Binding(type_expr)
             } else if self.match_(&[TokenType::LeftBrace]) {
-                let expr = self.expression()?;
-                self.consume(TokenType::RightBrace, "Expecting '}' after macro body")?;
-                (None, Some(expr))
+                MacroBody::Block(self.block()?)
             } else {
                 let expr = self.expression()?;
                 self.consume(TokenType::Semicolon, "Expecting ';' after macro expression")?;
-                (None, Some(expr))
+                MacroBody::Expression(expr)
             }
         };
 
-        Some(Statement::Macro(name, params, return_expr, return_type))
+        Some(Statement::Macro(name, params, body))
     }
 
     fn declaration(&mut self, method: bool, incoming_generics: &Vec<Generic>, self_generics: &Vec<Expression>) -> Option<Statement> {

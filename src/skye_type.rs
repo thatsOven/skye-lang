@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use crate::{ast::{Expression, Generic, MacroParams, Statement}, environment::Environment, tokens::Token};
+use crate::{ast::{Generic, MacroBody, MacroParams, Statement}, environment::Environment, tokens::Token};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SkyeFunctionParam {
@@ -131,7 +131,7 @@ pub enum SkyeType {
     Template(Rc<str>, Statement, Vec<Generic>, Vec<Token>, String, Rc<RefCell<Environment>>), // name definition generics generics_names curr_name environment
     Union(Rc<str>, Option<HashMap<Rc<str>, SkyeType>>), // name fields
     Bitfield(Rc<str>, Option<HashMap<Rc<str>, SkyeType>>), // name fields
-    Macro(Rc<str>, MacroParams, Option<Expression>, Option<Expression>), // name params return_expr return_type
+    Macro(Rc<str>, MacroParams, MacroBody), // name params body
 }
 
 impl std::fmt::Debug for SkyeType {
@@ -163,7 +163,7 @@ impl std::fmt::Debug for SkyeType {
             Self::Template(arg0, arg1, arg2, arg3, arg4, _) => f.debug_tuple("Template").field(arg0).field(arg1).field(arg2).field(arg3).field(arg4).finish(),
             Self::Union(arg0, arg1) => f.debug_tuple("Union").field(arg0).field(arg1).finish(),
             Self::Bitfield(arg0, arg1) => f.debug_tuple("Bitfield").field(arg0).field(arg1).finish(),
-            Self::Macro(arg0, arg1, arg2, arg3) => f.debug_tuple("Macro").field(arg0).field(arg1).field(arg2).field(arg3).finish(),
+            Self::Macro(arg0, arg1, arg2) => f.debug_tuple("Macro").field(arg0).field(arg1).field(arg2).finish(),
         }
     }
 }

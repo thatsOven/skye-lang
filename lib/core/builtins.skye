@@ -408,7 +408,7 @@ namespace core {
             while (len--) self.swap(a++, b++);
         }
 
-        fn blockSwapBW(self, const a: const b: usz, const len: usz) {
+        fn blockSwapBW(self, const a: usz, const b: usz, const len: usz) {
             while (len--) self.swap(a + len, b + len);
         }
 
@@ -468,7 +468,7 @@ namespace core {
             return self.asSlice();
         }
 
-        fn pushString(self, const string: &String) {
+        fn pushString(self, const string: &const String) {
             for let i = 0usz; i < string.length; i++ {
                 self.push(string[i]);
             }

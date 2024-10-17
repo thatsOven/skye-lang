@@ -521,9 +521,13 @@ fn main() !i32 { // omitting the left value makes the compiler assume it's `void
 It's possible to create macros in Skye, and unlike in C, they are based on the AST instead of using a preprocessor. It's also possible to bind to C macros.
 ```
 macro constantNumber 32;
-macro saySomething(something) {
-    @println(something)
+macro count(n) {
+    for let i = @cast(@typeOf(n), 0); i < n; i++ {
+        @println("{i}");
+    }
 }
+
+macro addTwo(x) x + 2;
 
 // C macro bindings
 macro __WORDSIZE -> u8;
