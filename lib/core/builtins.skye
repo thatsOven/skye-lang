@@ -413,8 +413,8 @@ namespace core {
         }
 
         fn rotate(self, const a: usz, const m: usz, const b: usz) {
-            const rl = b - m;
-            const ll = m - a;
+            let rl = b - m;
+            let ll = m - a;
 
             while rl > 1 && ll > 1 {
                 if rl < ll {
