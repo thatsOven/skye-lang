@@ -104,6 +104,10 @@ impl SkyeValue {
     pub fn follow_reference(&self, mut zero_check: Box<impl FnMut(SkyeValue) -> Rc<str>>) -> Self {
         self.type_.follow_reference(self.is_const, &self.value, &mut zero_check)
     }
+
+    pub fn get_unknown() -> SkyeValue {
+        SkyeValue::special(SkyeType::get_unknown())
+    }
 }
 
 const ALL_INTS: &[SkyeType] = &[
@@ -949,5 +953,28 @@ impl SkyeType {
 
     pub fn follow_reference(&self, is_source_const: bool, from: &Rc<str>, zero_check: &mut Box<impl FnMut(SkyeValue) -> Rc<str>>) -> SkyeValue {
         self.follow_reference_internal(is_source_const, from, 0, zero_check)
+    }
+
+    pub fn can_be_instantiated(&self, as_type: bool) -> bool {
+        match self {
+            SkyeType::Group(..) | SkyeType::Namespace(_) | SkyeType::Template(..) | SkyeType::Macro(..) => false,
+            SkyeType::Void => as_type,
+            SkyeType::Type(inner) => {
+                if as_type {
+                    inner.can_be_instantiated(as_type)
+                } else {
+                    false
+                }
+            }
+            _ => true
+        }
+    }
+
+    pub fn get_unknown() -> SkyeType {
+        SkyeType::Unknown(Rc::from(""))
+    }
+
+    pub fn get_unknown_type() -> SkyeType {
+        SkyeType::Type(Box::new(SkyeType::Unknown(Rc::from(""))))
     }
 }

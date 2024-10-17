@@ -8,8 +8,6 @@ use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
 
 // TODO
 // - properly handle deferred statements with try operator (important: leads to memory leaks and unwanted behavior in general)
-// - better error message for using macro type as type (currently, it just says "cannot reference incomplete type directly". 
-//   if you reference through a pointer it's not even an error. important: can generate broken code)
 // - allow macro calls in declaration context for `matches!(body, MacroBody::Block)` (useful for metaprogramming)
 // - support % operator for floats (reimplement or bind fmod and call it implictly)
 // - implement downloading packages via http
