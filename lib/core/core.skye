@@ -67,7 +67,7 @@ namespace core {
 }
 
 use core::Slice[char] as String;
-use core::Slice as Slice;
+use core::Slice;
 
 fn __panicHandler(const at: String, const msg: String);
 

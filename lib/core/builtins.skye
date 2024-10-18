@@ -76,7 +76,7 @@ namespace core {
     }
 }
 
-use core::Ptr as Ptr;
+use core::Ptr;
 
 namespace core {
     struct Rc[T, U = core::mem::HeapAllocator] {
@@ -724,8 +724,8 @@ namespace core {
     }
 }
 
-use core::Rc as Rc;
-use core::Array as Array;
+use core::Rc;
+use core::Array;
 
 impl core::io::File {
     fn read[T, U = core::mem::HeapAllocator](self, const buf: *core::Array[T, U], const amt: usz) usz {

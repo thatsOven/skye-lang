@@ -1092,8 +1092,20 @@ impl Parser {
         self.curr_qualifiers.clear();
 
         let use_expr = self.expression()?;
-        self.consume(TokenType::As, "Expecting \"as\" after use expression")?;
-        let as_ = self.consume(TokenType::Identifier, "Expecting identifier after \"as\"")?.clone();
+        
+        let as_ = {
+            if let Expression::StaticGet(_, name, _) = &use_expr {
+                if self.match_(&[TokenType::As]) {
+                    self.consume(TokenType::Identifier, "Expecting identifier after \"as\"")?.clone()
+                } else {
+                    name.clone()
+                }
+            } else {
+                self.consume(TokenType::As, "Expecting \"as\" after use expression")?;
+                self.consume(TokenType::Identifier, "Expecting identifier after \"as\"")?.clone()
+            }
+        };
+        
         self.consume(TokenType::Semicolon, "Expecting ';' after use statement")?;
         Some(Statement::Use(use_expr, as_, typedef, bind))
     }

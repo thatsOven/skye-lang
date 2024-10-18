@@ -438,7 +438,19 @@ namespace myNamespace {
 The `use` statement is used to create aliases for types and identifiers.
 ```
 use f32 | f64 as Floats;
-use myNamespace::test as test;
+use myNamespace::test; // in case of namespaces accesses, `as` can be omitted and the alias will be bound to the outermost name, in this case, "test"
+
+use myNamespace::test as myTestAlias;
+
+macro defineAdd(constant) {
+    fn addValue[T: AnyFloat](x: T) T {
+        return a + constant;
+    }
+}
+
+// using "_" as an identifier forces the compiler to evaluate the expression without creating an alias.
+use @defineAdd(1) as _; // this is especially useful for metaprogramming with macros
+use addValue[f32] as _; // or, for instance, this syntax will create the necessary code for add[f32], adding to the resulting C source
 ```
 # Import
 The import statement can import both Skye packages and C libraries.
