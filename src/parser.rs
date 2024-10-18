@@ -171,6 +171,20 @@ impl Parser {
         Some(Expression::FnPtr(kw, Box::new(return_type), params))
     }
 
+    fn get_nonzero_expressions(&mut self) -> Option<Vec<Expression>> {
+        let mut expressions = Vec::new();
+
+        loop {
+            expressions.push(self.expression()?);
+
+            if !self.match_(&[TokenType::Comma]) {
+                break;
+            }
+        }
+
+        Some(expressions)
+    }
+
     fn primary(&mut self) -> Option<Expression> {
         if self.match_(&[TokenType::Void]) {
             return Some(Expression::Literal(Rc::from(""), self.previous().clone(), LiteralKind::Void));
@@ -192,34 +206,14 @@ impl Parser {
 
         if self.match_(&[TokenType::LeftBrace]) {
             let opening_brace = self.previous().clone();
-
-            let mut items = Vec::new();
-
-            loop {
-                items.push(self.expression()?);
-
-                if !self.match_(&[TokenType::Comma]) {
-                    break;
-                }
-            }
-
+            let items = self.get_nonzero_expressions()?;
             self.consume(TokenType::RightBrace, "Expecting '}' after slice")?;
             return Some(Expression::Slice(opening_brace, items));
         }
 
         if self.match_(&[TokenType::LeftSquare]) {
             let opening_brace = self.previous().clone();
-
-            let mut items = Vec::new();
-
-            loop {
-                items.push(self.expression()?);
-
-                if !self.match_(&[TokenType::Comma]) {
-                    break;
-                }
-            }
-
+            let items = self.get_nonzero_expressions()?;
             self.consume(TokenType::RightSquare, "Expecting ']' after array")?;
 
             let mut method_tok = opening_brace.clone();
@@ -268,12 +262,12 @@ impl Parser {
         self.static_access()
     }
 
-    fn finish_call(&mut self, callee: Expression) -> Option<Expression> {
-        let mut arguments = Vec::new();
+    fn get_expressions(&mut self) -> Option<Vec<Expression>> {
+        let mut expressions = Vec::new();
 
         if !self.check(TokenType::RightParen) {
             loop {
-                arguments.push(self.expression()?);
+                expressions.push(self.expression()?);
 
                 if !self.match_(&[TokenType::Comma]) {
                     break;
@@ -281,23 +275,17 @@ impl Parser {
             }
         }
 
+        Some(expressions)
+    }
+
+    fn finish_call(&mut self, callee: Expression) -> Option<Expression> {
+        let arguments = self.get_expressions()?;
         let paren = self.consume(TokenType::RightParen, "Expecting ')' after arguments.")?.clone();
         Some(Expression::Call(Box::new(callee), paren, arguments))
     }
 
     fn finish_subscript(&mut self, subscripted: Expression) -> Option<Expression> {
-        let mut arguments = Vec::new();
-
-        if !self.check(TokenType::RightSquare) {
-            loop {
-                arguments.push(self.expression()?);
-
-                if !self.match_(&[TokenType::Comma]) {
-                    break;
-                }
-            }
-        }
-
+        let arguments = self.get_expressions()?;
         let paren = self.consume(TokenType::RightSquare, "Expecting ']' after subscript operation")?.clone();
         Some(Expression::Subscript(Box::new(subscripted), paren, arguments))
     }
@@ -549,18 +537,18 @@ impl Parser {
                 if has_paren {
                     let r = {
                         if self.check(TokenType::RightParen) {
-                            None 
+                            Vec::new() 
                         } else {
-                            Some(self.expression()?)
+                            self.get_expressions()?
                         }
                     };
     
                     self.consume(TokenType::RightParen, "Expecting ')' after for increment")?;
                     r
                 } else if self.check(TokenType::LeftBrace) {
-                    None
+                    Vec::new()
                 } else {
-                    Some(self.expression()?)
+                    self.get_expressions()?
                 }
             };
     

@@ -5046,7 +5046,7 @@ impl CodeGen {
                 self.definitions[index].push(&break_label);
                 self.definitions[index].push(":;\n");
             }
-            Statement::For(kw, initializer, cond_expr, increment, body) => {
+            Statement::For(kw, initializer, cond_expr, increments, body) => {
                 if matches!(self.curr_function, CurrentFn::None) {
                     token_error!(self, kw, "Only declarations are allowed at top level");
                     token_note!(kw, "Place this for loop inside a function");
@@ -5120,8 +5120,8 @@ impl CodeGen {
                 self.definitions[index].push(&continue_label);
                 self.definitions[index].push(":;\n");
 
-                if let Some(inc) = increment {
-                    let stmt = Statement::Expression(inc.clone());
+                for increment in increments {
+                    let stmt = Statement::Expression(increment.clone());
                     let _ = ctx.run(|ctx| self.execute(&stmt, index, ctx)).await;
                 }
 

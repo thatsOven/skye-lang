@@ -382,7 +382,7 @@ pub enum Statement {
     If(Token, Expression, Box<Statement>, Option<Box<Statement>>), // kw cond then else
     While(Token, Expression, Box<Statement>), // kw cond body
     DoWhile(Token, Expression, Box<Statement>), // kw cond body
-    For(Token, Option<Box<Statement>>, Expression, Option<Expression>, Box<Statement>), // kw init cond increment body
+    For(Token, Option<Box<Statement>>, Expression, Vec<Expression>, Box<Statement>), // kw init cond increments body
     Function(Token, Vec<FunctionParam>, Expression, Option<Vec<Statement>>, Vec<Token>, Vec<Token>, bool), // name params return_type body qualifiers generics_names bind
     Return(Token, Option<Expression>), // kw value
     Struct(Token, Vec<StructField>, bool, Option<Token>, Vec<Token>, bool), // name fields has_body binding generics_names bind_typedefed
@@ -475,7 +475,7 @@ impl Ast for Statement {
                     kw.clone(), 
                     initializer.as_ref().map(|x| Box::new(x.replace_variable(name, replace_expr))), 
                     cond.replace_variable(name, replace_expr), 
-                    increment.as_ref().map(|x| x.replace_variable(name, replace_expr)), 
+                    increment.iter().map(|x| x.replace_variable(name, replace_expr)).collect(), 
                     Box::new(body.replace_variable(name, replace_expr))
                 )
             }
