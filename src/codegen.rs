@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, env, ffi::OsString, path::{Path, PathBuf}, rc::Rc};
 
 use crate::{
-    ast::{Expression, FunctionParam, ImportType, LiteralKind, MacroBody, MacroParams, Statement}, ast_error, ast_info, ast_note, ast_warning, environment::{Environment, SkyeVariable}, parse_file, parser::Parser, scanner::Scanner, skye_type::{CastableHow, EqualsLevel, GetResult, ImplementsHow, Operator, SkyeEnumVariant, SkyeFunctionParam, SkyeType, SkyeValue}, token_error, token_note, token_warning, tokens::{Token, TokenType}, utils::{fix_raw_string, get_real_string_length, note}, SKYE_PATH_VAR
+    ast::{Ast, Expression, FunctionParam, ImportType, LiteralKind, MacroBody, MacroParams, Statement}, ast_error, ast_info, ast_note, ast_warning, environment::{Environment, SkyeVariable}, parse_file, parser::Parser, scanner::Scanner, skye_type::{CastableHow, EqualsLevel, GetResult, ImplementsHow, Operator, SkyeEnumVariant, SkyeFunctionParam, SkyeType, SkyeValue}, token_error, token_note, token_warning, tokens::{Token, TokenType}, utils::{fix_raw_string, get_real_string_length, note}, SKYE_PATH_VAR
 };
 
 const OUTPUT_INDENT_SPACES: usize = 4;
@@ -2573,8 +2573,10 @@ impl CodeGen {
 
                                 match name.as_ref() {
                                     "core_DOT_Option" => {
-                                        self.definitions[index].push("core_DOT_Option_DOT_Kind_DOT_None)\n");
+                                        self.definitions[index].push("core_DOT_Option_DOT_Kind_DOT_None) {\n");
                                         self.definitions[index].inc_indent();
+
+                                        ctx.run(|ctx| self.handle_all_deferred(index, false, expr, "in the propagation branch of this expression", ctx)).await;
 
                                         self.definitions[index].push_indent();
                                         self.definitions[index].push("return ");
@@ -2590,6 +2592,8 @@ impl CodeGen {
                                         }
 
                                         self.definitions[index].dec_indent();
+                                        self.definitions[index].push_indent();
+                                        self.definitions[index].push("}\n");
 
                                         if let Some(variant) = variants.as_ref().unwrap().get("some") {
                                             SkyeValue::new(
@@ -2603,8 +2607,10 @@ impl CodeGen {
                                         }
                                     }
                                     "core_DOT_Result" => {
-                                        self.definitions[index].push("core_DOT_Result_DOT_Kind_DOT_Error)\n");
+                                        self.definitions[index].push("core_DOT_Result_DOT_Kind_DOT_Error) {\n");
                                         self.definitions[index].inc_indent();
+
+                                        ctx.run(|ctx| self.handle_all_deferred(index, false, expr, "in the propagation branch of this expression", ctx)).await;
 
                                         self.definitions[index].push_indent();
                                         self.definitions[index].push("return ");
@@ -2661,6 +2667,8 @@ impl CodeGen {
                                         }
 
                                         self.definitions[index].dec_indent();
+                                        self.definitions[index].push_indent();
+                                        self.definitions[index].push("}\n");
 
                                         if let Some(variant) = variants.as_ref().unwrap().get("ok") {
                                             SkyeValue::new(
@@ -4324,7 +4332,7 @@ impl CodeGen {
         }
     }
 
-    async fn handle_destructors(&mut self, index: usize, global: bool, stmt: &Statement, msg: &str, ctx: &mut reblessive::Stk) -> Result<Option<SkyeType>, ExecutionInterrupt> {
+    async fn handle_destructors<T: Ast>(&mut self, index: usize, global: bool, ast_item: &T, msg: &str, ctx: &mut reblessive::Stk) -> Result<Option<SkyeType>, ExecutionInterrupt> {
         if !global {
             let vars = self.environment.borrow().iter_local();
 
@@ -4339,7 +4347,7 @@ impl CodeGen {
                         
                         let call = ctx.run(|ctx| self.call(&value, &fake_expr, &fake_expr, &v, index, false, ctx)).await;
 
-                        ast_info!(stmt, format!("Skye inserted a destructor call for \"{}\" {} this statement", name, msg).as_ref()); // +I-destructors
+                        ast_info!(ast_item, format!("Skye inserted a destructor call for \"{}\" {}", name, msg).as_ref()); // +I-destructors
 
                         self.definitions[index].push_indent();
                         self.definitions[index].push(&call.value);
@@ -4350,6 +4358,18 @@ impl CodeGen {
         }
 
         Ok(None)
+    }
+
+    async fn handle_all_deferred<T: Ast>(&mut self, index: usize, global: bool, ast_item: &T, msg: &str, ctx: &mut reblessive::Stk) {
+        let deferred = self.deferred.borrow().clone();
+
+        for statements in deferred.iter().rev() {
+            for statement in statements.iter().rev() {
+                let _ = ctx.run(|ctx| self.execute(&statement, index, ctx)).await;
+            }
+        }
+
+        let _ = ctx.run(|ctx| self.handle_destructors(index, global, ast_item, msg, ctx)).await;
     }
 
     async fn execute_block(&mut self, statements: &Vec<Statement>, environment: Rc<RefCell<Environment>>, index: usize, global: bool, ctx: &mut reblessive::Stk) {
@@ -4364,7 +4384,7 @@ impl CodeGen {
                 match interrupt {
                     ExecutionInterrupt::Interrupt(output) => {
                         ctx.run(|ctx| self.handle_deferred(index, ctx)).await;
-                        let _ = ctx.run(|ctx| self.handle_destructors(index, global, statement, "before", ctx)).await;
+                        let _ = ctx.run(|ctx| self.handle_destructors(index, global, statement, "before this statement", ctx)).await;
                         destructors_called = true;
 
                         self.definitions[index].push_indent();
@@ -4376,15 +4396,7 @@ impl CodeGen {
                         }
                     }
                     ExecutionInterrupt::Return(output) => {
-                        let deferred = self.deferred.borrow().clone();
-
-                        for statements in deferred.iter().rev() {
-                            for statement in statements.iter().rev() {
-                                let _ = ctx.run(|ctx| self.execute(&statement, index, ctx)).await;
-                            }
-                        }
-
-                        let _ = ctx.run(|ctx| self.handle_destructors(index, global, statement, "before", ctx)).await;
+                        ctx.run(|ctx| self.handle_all_deferred(index, global, statement, "before this statement", ctx)).await;
                         destructors_called = true;
 
                         self.definitions[index].push_indent();
@@ -4401,7 +4413,7 @@ impl CodeGen {
 
         if statements.len() != 0 && !destructors_called {
             ctx.run(|ctx| self.handle_deferred(index, ctx)).await;
-            let _ = ctx.run(|ctx| self.handle_destructors(index, global, statements.last().unwrap(), "after", ctx)).await;
+            let _ = ctx.run(|ctx| self.handle_destructors(index, global, statements.last().unwrap(), "after this statement", ctx)).await;
         }
 
         self.deferred.borrow_mut().pop();

@@ -2,7 +2,7 @@ use convert_case::{Case, Casing};
 use std::{collections::HashMap, rc::Rc};
 
 use crate::{
-    ast::{BitfieldField, EnumVariant, Expression, FunctionParam, Generic, ImportType, LiteralKind, MacroBody, MacroParams, Statement, StructField, SwitchCase}, 
+    ast::{BitfieldField, EnumVariant, Expression, FunctionParam, Generic, ImportType, LiteralKind, MacroBody, MacroParams, Statement, StructField, SwitchCase, Ast}, 
     ast_error, ast_note, token_error, token_note, 
     tokens::{Token, TokenType}, 
     utils::is_valid_variant

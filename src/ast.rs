@@ -2,6 +2,32 @@ use std::rc::Rc;
 
 use crate::tokens::{Token, TokenType};
 
+pub struct AstPos {
+    pub source: Rc<str>,
+    pub filename: Rc<str>,
+    pub start: usize,
+    pub end: usize,
+    pub line: usize
+}
+
+impl std::fmt::Debug for AstPos {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AstPos").field("filename", &self.filename).field("start", &self.start).field("end", &self.end).field("line", &self.line).finish()
+    }
+}
+
+impl AstPos {
+    pub fn new(source: Rc<str>, filename: Rc<str>, start: usize, end: usize, line: usize) -> Self {
+        AstPos { source, filename, start, end, line }
+    }
+}
+
+pub trait Ast {
+    type Output;
+    fn get_pos(&self) -> AstPos;
+    fn replace_variable(&self, name: &Rc<str>, replace_expr: &Expression) -> Self::Output;
+}
+
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum LiteralKind {
     U8, U16, U32, U64, Usz,
@@ -91,28 +117,10 @@ pub enum Expression {
     Slice(Token, Vec<Expression>), // opening_brace items 
 }
 
-pub struct AstPos {
-    pub source: Rc<str>,
-    pub filename: Rc<str>,
-    pub start: usize,
-    pub end: usize,
-    pub line: usize
-}
+impl Ast for Expression {
+    type Output = Expression;
 
-impl std::fmt::Debug for AstPos {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("AstPos").field("filename", &self.filename).field("start", &self.start).field("end", &self.end).field("line", &self.line).finish()
-    }
-}
-
-impl AstPos {
-    pub fn new(source: Rc<str>, filename: Rc<str>, start: usize, end: usize, line: usize) -> Self {
-        AstPos { source, filename, start, end, line }
-    }
-}
-
-impl Expression {
-    pub fn get_pos(&self) -> AstPos {
+    fn get_pos(&self) -> AstPos {
         match self {
             Expression::Grouping(expr) => expr.get_pos(),
             Expression::Literal(_, tok, _) | Expression::Variable(tok) => {
@@ -229,16 +237,7 @@ impl Expression {
         }
     }
 
-    pub fn is_valid_assignment_target(&self) -> bool {
-        match self {
-            Expression::Variable(_) | Expression::Get(..) | Expression::StaticGet(..) | Expression::Subscript(..) => true,
-            Expression::Unary(op, _, is_prefix) => *is_prefix && op.type_ == TokenType::Star,
-            Expression::Grouping(inner) => inner.is_valid_assignment_target(),
-            _ => false
-        }
-    }
-
-    pub fn replace_variable(&self, name: &Rc<str>, replace_expr: &Expression) -> Expression {
+    fn replace_variable(&self, name: &Rc<str>, replace_expr: &Expression) -> Expression {
         match self {
             Expression::Grouping(expr) => expr.replace_variable(name, replace_expr),
             Expression::Literal(..) => self.clone(),
@@ -314,6 +313,17 @@ impl Expression {
                     items.iter().map(|x| x.replace_variable(name, replace_expr)).collect()
                 )
             }
+        }
+    }
+}
+
+impl Expression {
+    pub fn is_valid_assignment_target(&self) -> bool {
+        match self {
+            Expression::Variable(_) | Expression::Get(..) | Expression::StaticGet(..) | Expression::Subscript(..) => true,
+            Expression::Unary(op, _, is_prefix) => *is_prefix && op.type_ == TokenType::Star,
+            Expression::Grouping(inner) => inner.is_valid_assignment_target(),
+            _ => false
         }
     }
 }
@@ -394,8 +404,10 @@ pub enum Statement {
     Foreach(Token, Token, Expression, Box<Statement>) // kw variable iterator body
 }
 
-impl Statement {
-    pub fn get_pos(&self) -> AstPos {
+impl Ast for Statement {
+    type Output = Statement;
+
+    fn get_pos(&self) -> AstPos {
         match self {
             Statement::Empty | Statement::Undef(_) => AstPos::new(Rc::from(""), Rc::from(""), 0, 0, 0),
             Statement::Expression(expr) | 
@@ -428,7 +440,7 @@ impl Statement {
         }
     }
 
-    pub fn replace_variable(&self, name: &Rc<str>, replace_expr: &Expression) -> Statement {
+    fn replace_variable(&self, name: &Rc<str>, replace_expr: &Expression) -> Statement {
         match self {
             Statement::Empty | Statement::Undef(_) |  Statement::Break(_) | Statement::Continue(_) | 
             Statement::Import(..) | Statement::Bitfield(..) => self.clone(),
