@@ -36,11 +36,11 @@ namespace std {
             }
 
             fn nextI32Range(self, min: i32, max: i32) i32 {
-                return min + self.nextI32() % (max - min);
+                return min + self.nextI32() % (max - min + 1);
             }
 
             fn nextF32Range(self, min: f32, max: f32) f32 {
-                return min + self.nextF32() * (max - min);
+                return min + self.nextF32() * (max - min + 1);
             }
         }
     }
