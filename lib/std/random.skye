@@ -35,6 +35,7 @@ namespace std {
                 return @cast(f32, self.nextI32()) / @cast(f32, @I32_MAX);
             }
 
+            // TODO improve implementation for this, it's biased
             fn nextI32Range(self, min: i32, max: i32) i32 {
                 return min + self.nextI32() % (max - min + 1);
             }
