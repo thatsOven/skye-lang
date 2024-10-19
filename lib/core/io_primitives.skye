@@ -156,13 +156,3 @@ fn _SKYE_PRIMITIVES_INIT() {
     core::io::stdErr = core::io::File::fromCFile(@stderr);
     core::io::stdIn  = core::io::File::fromCFile(@stdin);
 }
-
-fn __panicHandler(const at: String, const msg: String) {
-    let _ = core::io::stdErr.write("Skye program panicked at ");
-    let _ = core::io::stdErr.write(at);
-    let _ = core::io::stdErr.write("\n");
-    let _ = core::io::stdErr.write(msg);
-    let _ = core::io::stdErr.write("\n");
-    let _ = core::io::stdErr.flush();
-    exit(1);
-}

@@ -47,6 +47,10 @@ struct Args {
     #[arg(long, default_value_t = String::from("core/io_primitives"))]
     /// Filename containing primitives for different platforms
     primitives: String,
+
+    #[arg(long, default_value_t = false)]
+    /// If set, a custom panic handler must be provided
+    no_panic: bool
 }
 
 #[derive(Subcommand, Debug)]
@@ -137,7 +141,7 @@ fn main() -> Result<(), Error> {
                     }
                 });
         
-                compile_file_to_c(&file, &output_file, !release, &args.primitives)?;
+                compile_file_to_c(&file, &output_file, !release, &args.primitives, args.no_panic)?;
             } else {
                 let output_file = OsString::from({
                     if output.len() == 0 {
@@ -147,14 +151,14 @@ fn main() -> Result<(), Error> {
                     }
                 });
         
-                compile_file_to_exec(&file, &output_file, !release, &args.primitives)?;
+                compile_file_to_exec(&file, &output_file, !release, &args.primitives, args.no_panic)?;
             }
         }
         CompilerCommand::Run { file, program_args } => {
-            run_skye(file, &args.primitives, &program_args)?;
+            run_skye(file, &args.primitives, &program_args, args.no_panic)?;
         }
         CompilerCommand::Build { path, program_args } => {
-            run_skye(OsString::from(PathBuf::from(path).join("build.skye")), &args.primitives, &program_args)?;
+            run_skye(OsString::from(PathBuf::from(path).join("build.skye")), &args.primitives, &program_args, args.no_panic)?;
         }
         CompilerCommand::New { project_type } => {
             match project_type {
@@ -285,7 +289,7 @@ fn main() -> Result<(), Error> {
             };
 
             if let Some(setup_file) = data_relative.iter().find(|x| **x == PathBuf::from("setup.skye")) {
-                run_skye(setup_file.clone().into_os_string(), &args.primitives, &None)?;
+                run_skye(setup_file.clone().into_os_string(), &args.primitives, &None, args.no_panic)?;
             }
 
             copy_dir_recursive(&tmp_folder, &lib_folder)?;
