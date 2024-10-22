@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, env, ffi::OsString, path::{Path, PathBuf}, rc::Rc};
 
 use crate::{
-    ast::{Ast, Expression, FunctionParam, ImportType, LiteralKind, MacroBody, MacroParams, Statement}, ast_error, ast_info, ast_note, ast_warning, environment::{Environment, SkyeVariable}, parse_file, parser::Parser, scanner::Scanner, skye_type::{CastableHow, EqualsLevel, GetResult, ImplementsHow, Operator, SkyeEnumVariant, SkyeFunctionParam, SkyeType, SkyeValue}, token_error, token_note, token_warning, tokens::{Token, TokenType}, utils::{fix_raw_string, get_real_string_length, note}, SKYE_PATH_VAR
+    ast::{Ast, Expression, FunctionParam, ImportType, LiteralKind, MacroBody, MacroParams, Statement}, ast_error, ast_info, ast_note, ast_warning, environment::{Environment, SkyeVariable}, parse_file, parser::Parser, scanner::Scanner, skye_type::{CastableHow, EqualsLevel, GetResult, ImplementsHow, Operator, SkyeEnumVariant, SkyeFunctionParam, SkyeType, SkyeValue}, token_error, token_note, token_warning, tokens::{Token, TokenType}, utils::{fix_raw_string, get_real_string_length, note}, CompileMode, SKYE_PATH_VAR
 };
 
 const OUTPUT_INDENT_SPACES: usize = 4;
@@ -171,11 +171,11 @@ pub struct CodeGen {
     curr_loop:     Option<(Rc<str>, Rc<str>)>,
 
     had_error: bool,
-    debug:     bool
+    compile_mode: CompileMode
 }
 
 impl CodeGen {
-    pub fn new(path: Option<&Path>, debug: bool) -> Self {
+    pub fn new(path: Option<&Path>, compile_mode: CompileMode) -> Self {
         let globals = Rc::new(RefCell::new(Environment::new()));
 
         globals.borrow_mut().define(
@@ -188,6 +188,33 @@ impl CodeGen {
                     ))
                 ),
                 true, None
+            )
+        );
+
+        globals.borrow_mut().define(
+            Rc::from("COMPILE_MODE"),
+            SkyeVariable::new(
+                SkyeType::Type(
+                    Box::new(SkyeType::Macro(
+                        Rc::from("COMPILE_MODE"),
+                        MacroParams::None,
+                        MacroBody::Expression({
+                            let lit = {
+                                match compile_mode {
+                                    CompileMode::Debug         => "0",
+                                    CompileMode::Release       => "1",
+                                    CompileMode::ReleaseUnsafe => "2"
+                                }
+                            };
+
+                            Expression::Literal(
+                                Rc::from(lit), 
+                                Token::dummy(Rc::from("")), 
+                                LiteralKind::U8
+                            )
+                        })
+                    ))
+                ), true, None
             )
         );
 
@@ -205,7 +232,7 @@ impl CodeGen {
             curr_function: CurrentFn::None,
             string_type: None, tmp_var_cnt: 0,
             curr_loop: None, had_error: false,
-            debug, globals, source_path: {
+            compile_mode, globals, source_path: {
                 if let Some(real_path) = path {
                     Some(Box::new(PathBuf::from(real_path)))
                 } else {
@@ -1495,7 +1522,7 @@ impl CodeGen {
                                     if macro_name.as_ref() == "panic" {
                                         // panic also includes position information
             
-                                        if self.debug {
+                                        if matches!(self.compile_mode, CompileMode::Debug) {
                                             let panic_pos = callee_expr.get_pos();
             
                                             curr_expr = curr_expr.replace_variable(
@@ -1859,7 +1886,7 @@ impl CodeGen {
     }
 
     async fn zero_check(&mut self, value: &SkyeValue, tok: &Token, msg: &str, index: usize, ctx: &mut reblessive::Stk) -> Rc<str> {
-        if self.debug {
+        if matches!(self.compile_mode, CompileMode::Debug) {
             let tmp_var = self.get_temporary_var();
     
             self.definitions[index].push_indent();

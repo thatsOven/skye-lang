@@ -3,7 +3,7 @@ use std::{collections::HashMap, env, ffi:: OsString, fs::{self, create_dir, remo
 use clap::{Parser, Subcommand};
 use scopeguard::defer;
 use serde_json::Value;
-use skye::{compile_file_to_c, compile_file_to_exec, copy_dir_recursive, get_package_data, run_skye, write_package, MAX_PACKAGE_SIZE_BYTES, SKYE_PATH_VAR};
+use skye::{compile_file_to_c, compile_file_to_exec, copy_dir_recursive, get_package_data, run_skye, write_package, CompileMode, MAX_PACKAGE_SIZE_BYTES, SKYE_PATH_VAR};
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
 
 // TODO
@@ -19,7 +19,7 @@ use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
 const BUILD_FILE_INIT: &[u8] = concat!(
     "import \"build\";\n\n",
     "fn main() !void {\n",
-    "    try build::compileSkye(\"src/main.skye\", \"tmp.c\", false);\n",
+    "    try build::compileSkye(\"src/main.skye\", \"tmp.c\", 0);\n",
     "    try build::compileCDefault(\"tmp.c\", \"helloworld\");\n",
     "    try std::os::removeFile(\"tmp.c\");\n\n",
     "    return (!void)::Ok;\n",
@@ -64,9 +64,9 @@ enum CompilerCommand {
         /// Whether to emit C source code instead of an executable
         emit_c: bool,
 
-        #[arg(long, default_value_t = false)]
-        /// Whether to compile in release mode
-        release: bool,
+        #[arg(short, long, default_value_t, value_enum)]
+        /// Compilation mode
+        compile_mode: CompileMode,
 
         #[arg(short, long, default_value_t = String::from(""))]
         /// Output filename
@@ -131,7 +131,7 @@ fn main() -> Result<(), Error> {
     let args = Args::parse();
 
     match args.command {
-        CompilerCommand::Compile { file, emit_c, release, output } => {
+        CompilerCommand::Compile { file, emit_c, compile_mode, output } => {
             if emit_c {
                 let output_file = OsString::from({
                     if output.len() == 0 {
@@ -141,7 +141,7 @@ fn main() -> Result<(), Error> {
                     }
                 });
         
-                compile_file_to_c(&file, &output_file, !release, &args.primitives, args.no_panic)?;
+                compile_file_to_c(&file, &output_file, compile_mode, &args.primitives, args.no_panic)?;
             } else {
                 let output_file = OsString::from({
                     if output.len() == 0 {
@@ -151,7 +151,7 @@ fn main() -> Result<(), Error> {
                     }
                 });
         
-                compile_file_to_exec(&file, &output_file, !release, &args.primitives, args.no_panic)?;
+                compile_file_to_exec(&file, &output_file, compile_mode, &args.primitives, args.no_panic)?;
             }
         }
         CompilerCommand::Run { file, program_args } => {

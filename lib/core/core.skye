@@ -93,7 +93,7 @@ fn __panicHandler(const at: String, const msg: String);
 
 macro panic(msg) __panicHandler(PANIC_POS, msg);
 macro unreachable @panic("Entered unreachable code");
-macro assert(x) x ? void : @panic("Assertion failed");
+macro assert(x) @COMPILE_MODE != 0 || x ? void : @panic("Assertion failed");
 macro todo(msg) @panic(@concat("Not implemented yet: \"", msg, "\""));
 
 namespace core {
@@ -175,7 +175,7 @@ namespace core {
 
 impl[T] core::Slice[T] {
     fn __constsubscript__(const self, idx: usz) *const T {
-        if idx < self.length {
+        if @COMPILE_MODE != 0 || idx < self.length {
             return self.ptr + idx;
         } else {
             @panic("Slice: out of bounds access");
@@ -196,6 +196,45 @@ impl[T] core::Slice[T] {
 
     fn __ne__(const self, const other: &const Self) bool {
         return !self.__eq__(other);
+    }
+
+    // TODO does this work?
+    fn __lt__(const self, const other: &const Self) bool {
+        const lenLt = self.length < other.length;
+        const len   = lenLt ? self.length : other.length;
+
+        for let i = 0usz; i < len; i++ {
+            if self[i] > other[i] {
+                return false;
+            }
+        }
+
+        if self.length == other.length {
+            return self[self.length - 1] != other[self.length - 1];
+        }
+
+        return lenLt;
+    }
+
+    fn __le__(const self, const other: &const Self) bool {
+        const lenLt = self.length < other.length;
+        const len   = lenLt ? self.length : other.length;
+
+        for let i = 0usz; i < len; i++ {
+            if self[i] > other[i] {
+                return false;
+            }
+        }
+
+        return self.length == other.length;
+    }
+
+    fn __gt__(const self, const other: &const Self) bool {
+        return other.__lt__(self);
+    }
+
+    fn __ge__(const self, const other: &const Self) bool {
+        return other.__le__(self);
     }
 }
 

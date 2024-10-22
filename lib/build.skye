@@ -9,12 +9,18 @@ namespace build {
         return (!void)::Ok;
     }
 
-    fn compileSkye(const input: String, const output: String, const release: bool) !void {
+    fn compileSkye(const input: String, const output: String, const compileMode: u8) !void {
         let buf = core::Array::from("skye compile ");
         defer buf.free();
 
         @format(&buf, "{input} --emit-c -o {output}");
-        if (release) @format(&buf, " --release");
+
+        switch compileMode {
+            0 {}
+            1 -> @format(&buf, " -c release");
+            2 -> @format(&buf, " -c release-unsafe");
+            default -> @panic("build::compileSkye: Invalid compilation mode");
+        }
 
         try build::system(buf.asString());
     }
