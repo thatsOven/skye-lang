@@ -1,7 +1,7 @@
-use std::{cell::RefCell, collections::HashMap, env, ffi::OsString, path::{Path, PathBuf}, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, ffi::OsString, path::{Path, PathBuf}, rc::Rc};
 
 use crate::{
-    ast::{Ast, Expression, FunctionParam, ImportType, LiteralKind, MacroBody, MacroParams, Statement}, ast_error, ast_info, ast_note, ast_warning, environment::{Environment, SkyeVariable}, parse_file, parser::Parser, scanner::Scanner, skye_type::{CastableHow, EqualsLevel, GetResult, ImplementsHow, Operator, SkyeEnumVariant, SkyeFunctionParam, SkyeType, SkyeValue}, token_error, token_note, token_warning, tokens::{Token, TokenType}, utils::{fix_raw_string, get_real_string_length, note}, CompileMode, SKYE_PATH_VAR
+    ast::{Ast, Expression, FunctionParam, ImportType, LiteralKind, MacroBody, MacroParams, Statement}, ast_error, ast_info, ast_note, ast_warning, environment::{Environment, SkyeVariable}, parse_file, parser::Parser, scanner::Scanner, skye_type::{CastableHow, EqualsLevel, GetResult, ImplementsHow, Operator, SkyeEnumVariant, SkyeFunctionParam, SkyeType, SkyeValue}, token_error, token_note, token_warning, tokens::{Token, TokenType}, utils::{fix_raw_string, get_real_string_length, note}, CompileMode
 };
 
 const OUTPUT_INDENT_SPACES: usize = 4;
@@ -151,6 +151,7 @@ pub enum ExecutionInterrupt {
 
 pub struct CodeGen {
     source_path: Option<Box<PathBuf>>,
+    skye_path:   PathBuf,
 
     strings:            HashMap<Rc<str>, usize>,
     strings_code:       CodeOutput,
@@ -175,7 +176,7 @@ pub struct CodeGen {
 }
 
 impl CodeGen {
-    pub fn new(path: Option<&Path>, compile_mode: CompileMode) -> Self {
+    pub fn new(path: Option<&Path>, compile_mode: CompileMode, skye_path: PathBuf) -> Self {
         let globals = Rc::new(RefCell::new(Environment::new()));
 
         globals.borrow_mut().define(
@@ -232,7 +233,7 @@ impl CodeGen {
             curr_function: CurrentFn::None,
             string_type: None, tmp_var_cnt: 0,
             curr_loop: None, had_error: false,
-            compile_mode, globals, source_path: {
+            compile_mode, globals, skye_path, source_path: {
                 if let Some(real_path) = path {
                     Some(Box::new(PathBuf::from(real_path)))
                 } else {
@@ -6374,14 +6375,7 @@ impl CodeGen {
 
                     if let Some(extension) = fetched_extension {
                         if *import_type == ImportType::Lib {
-                            match env::var(SKYE_PATH_VAR) {
-                                Ok(val) => path = PathBuf::from(val).join("lib").join(path),
-                                Err(e) => {
-                                    token_error!(self, path_tok, format!("An error occurred while trying to load the SKYE_PATH variable. Error: {}", e.to_string()).as_ref());
-                                    token_note!(path_tok, "Is the environment variable set?");
-                                    return Ok(None);
-                                }
-                            }
+                            path = self.skye_path.join("lib").join(path)
                         } else if path.is_relative() && self.source_path.is_some() && *import_type != ImportType::Ang {
                             path = PathBuf::from((**self.source_path.as_ref().unwrap()).clone()).join(path);
                         } else {
@@ -6390,17 +6384,8 @@ impl CodeGen {
 
                         extension == "skye"
                     } else if path.is_relative() {
-                        match env::var(SKYE_PATH_VAR) {
-                            Ok(val) => {
-                                path = PathBuf::from(val).join("lib").join(path).with_extension("skye");
-                                true
-                            }
-                            Err(e) => {
-                                token_error!(self, path_tok, format!("An error occurred while trying to load the SKYE_PATH variable. Error: {}", e.to_string()).as_ref());
-                                token_note!(path_tok, "Is the environment variable set?");
-                                return Ok(None);
-                            }
-                        }
+                        path = self.skye_path.join("lib").join(path).with_extension("skye");
+                        true
                     } else {
                         token_error!(self, path_tok, "A file extension is required on absolute path imports for Skye to know what kind of import to perform");
                         token_note!(path_tok, "Add the file extension (\".skye\", \".c\", \".h\", ...)");

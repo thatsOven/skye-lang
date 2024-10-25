@@ -1,4 +1,4 @@
-use std::{env, ffi::{OsStr, OsString}, fs::{self, create_dir, read_dir, remove_file, File}, io::{Error, Read, Write}, path::{Path, PathBuf}, process::Command, rc::Rc};
+use std::{ffi::{OsStr, OsString}, fs::{self, create_dir, read_dir, remove_file, File}, io::{Error, Read, Write}, path::{Path, PathBuf}, process::Command, rc::Rc};
 
 use ast::{ImportType, Statement};
 use clap::ValueEnum;
@@ -17,7 +17,6 @@ mod skye_type;
 mod environment;
 mod codegen;
 
-pub const SKYE_PATH_VAR: &str = "SKYE_PATH";
 pub const MAX_PACKAGE_SIZE_BYTES: u128 = 2u128.pow(32); // Max uncompressed package size is 4 GB (basic protection against malicious ZIPs)
 
 pub fn parse(source: &String, filename: Rc<str>) -> Option<Vec<Statement>> {
@@ -46,7 +45,7 @@ pub enum CompileMode {
     ReleaseUnsafe
 }
 
-pub fn compile(source: &String, path: Option<&Path>, filename: Rc<str>, compile_mode: CompileMode, primitives: &String, no_panic: bool) -> Option<String> {
+pub fn compile(source: &String, path: Option<&Path>, filename: Rc<str>, compile_mode: CompileMode, primitives: &String, no_panic: bool, skye_path: PathBuf) -> Option<String> {
     let mut statements = parse(source, Rc::clone(&filename))?;
     statements.insert(
         0, 
@@ -106,7 +105,7 @@ pub fn compile(source: &String, path: Option<&Path>, filename: Rc<str>, compile_
         );
     }
 
-    let mut codegen = CodeGen::new(path, compile_mode);
+    let mut codegen = CodeGen::new(path, compile_mode, skye_path);
     codegen.compile(statements);
     codegen.get_output()
 }
@@ -123,17 +122,17 @@ pub fn parse_file(path: &OsStr) -> Result<Vec<Statement>, Error> {
     }
 }
 
-pub fn compile_file(path: &OsStr, compile_mode: CompileMode, primitives: &String, no_panic: bool) -> Result<String, Error> {
+pub fn compile_file(path: &OsStr, compile_mode: CompileMode, primitives: &String, no_panic: bool, skye_path: PathBuf) -> Result<String, Error> {
     let mut f = File::open(path)?;
     let mut input = String::new();
     f.read_to_string(&mut input)?;
 
-    compile(&input, PathBuf::from(path).parent(), Rc::from(path.to_str().unwrap()), compile_mode, primitives, no_panic)
+    compile(&input, PathBuf::from(path).parent(), Rc::from(path.to_str().unwrap()), compile_mode, primitives, no_panic, skye_path)
         .ok_or(Error::other("Compilation failed"))
 }
 
-pub fn compile_file_to_c(input: &OsStr, output: &OsStr, compile_mode: CompileMode, primitives: &String, no_panic: bool) -> Result<(), Error> {
-    let code = compile_file(input, compile_mode, primitives, no_panic)?;
+pub fn compile_file_to_c(input: &OsStr, output: &OsStr, compile_mode: CompileMode, primitives: &String, no_panic: bool, skye_path: PathBuf) -> Result<(), Error> {
+    let code = compile_file(input, compile_mode, primitives, no_panic, skye_path)?;
     let mut f = File::create(output)?;
     f.write_all(code.as_bytes())?;
     Ok(())
@@ -158,32 +157,22 @@ pub fn basic_compile_c(input: &OsStr, output: &OsStr) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn compile_file_to_exec(input: &OsStr, output: &OsStr, compile_mode: CompileMode, primitives: &String, no_panic: bool) -> Result<(), Error> {
-    let buf = PathBuf::from(
-        env::var(SKYE_PATH_VAR).map_err(
-            |e| Error::other(format!("Couldn't fetch SKYE_PATH environment variable. Error: {}", e.to_string()))
-        )?
-    ).join("tmp.c");
-
+pub fn compile_file_to_exec(input: &OsStr, output: &OsStr, compile_mode: CompileMode, primitives: &String, no_panic: bool, skye_path: PathBuf) -> Result<(), Error> {
+    let buf = skye_path.join("tmp.c");
     let tmp_c = OsStr::new(buf.to_str().expect("Couldn't convert PathBuf to &str"));
     
-    compile_file_to_c(input, tmp_c, compile_mode, primitives, no_panic)?;
+    compile_file_to_c(input, tmp_c, compile_mode, primitives, no_panic, skye_path)?;
     println!("Skye compilation was successful. Calling C compiler...\n");
     basic_compile_c(tmp_c, output)?;
     remove_file(tmp_c)?;
     Ok(())
 }
 
-pub fn run_skye(file: OsString, primitives: &String, program_args: &Option<Vec<String>>, no_panic: bool) -> Result<(), Error> {
-    let buf = PathBuf::from(
-        env::var(SKYE_PATH_VAR).map_err(
-            |e| Error::other(format!("Couldn't fetch SKYE_PATH environment variable. Error: {}", e.to_string()))
-        )?
-    ).join("tmp");
-
+pub fn run_skye(file: OsString, primitives: &String, program_args: &Option<Vec<String>>, no_panic: bool, skye_path: PathBuf) -> Result<(), Error> {
+    let buf = skye_path.join("tmp");
     let tmp = OsStr::new(buf.to_str().expect("Couldn't convert PathBuf to OsStr"));
 
-    compile_file_to_exec(&file, &OsString::from(tmp), CompileMode::Debug, primitives, no_panic)?;
+    compile_file_to_exec(&file, &OsString::from(tmp), CompileMode::Debug, primitives, no_panic, skye_path)?;
     let mut com = Command::new(tmp);
     
     if let Some(args) = program_args {

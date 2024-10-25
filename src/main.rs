@@ -3,7 +3,7 @@ use std::{collections::HashMap, env, ffi:: OsString, fs::{self, create_dir, remo
 use clap::{Parser, Subcommand};
 use scopeguard::defer;
 use serde_json::Value;
-use skye::{compile_file_to_c, compile_file_to_exec, copy_dir_recursive, get_package_data, run_skye, write_package, CompileMode, MAX_PACKAGE_SIZE_BYTES, SKYE_PATH_VAR};
+use skye::{compile_file_to_c, compile_file_to_exec, copy_dir_recursive, get_package_data, run_skye, write_package, CompileMode, MAX_PACKAGE_SIZE_BYTES};
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
 
 // TODO
@@ -128,6 +128,21 @@ enum ProjectType {
 }
 
 fn main() -> Result<(), Error> {
+    let skye_path = {
+        match env::var("SKYE_PATH") {
+            Ok(path) => PathBuf::from(path),
+            Err(e) => {
+                println!("WARNING: Couldn't fetch SKYE_PATH environment variable. Error: {}", e.to_string());
+                println!("Attempting inference from executable.");
+            
+                match env::current_exe().map_err(|_| Error::other("Couldn't infer executable location"))?.parent() {
+                    Some(path) => path.to_path_buf(),
+                    None              => return Err(Error::other("Couldn't infer executable location"))
+                }
+            } 
+        }
+    };
+
     let args = Args::parse();
 
     match args.command {
@@ -141,7 +156,7 @@ fn main() -> Result<(), Error> {
                     }
                 });
         
-                compile_file_to_c(&file, &output_file, compile_mode, &args.primitives, args.no_panic)?;
+                compile_file_to_c(&file, &output_file, compile_mode, &args.primitives, args.no_panic, skye_path)?;
             } else {
                 let output_file = OsString::from({
                     if output.len() == 0 {
@@ -151,14 +166,14 @@ fn main() -> Result<(), Error> {
                     }
                 });
         
-                compile_file_to_exec(&file, &output_file, compile_mode, &args.primitives, args.no_panic)?;
+                compile_file_to_exec(&file, &output_file, compile_mode, &args.primitives, args.no_panic, skye_path)?;
             }
         }
         CompilerCommand::Run { file, program_args } => {
-            run_skye(file, &args.primitives, &program_args, args.no_panic)?;
+            run_skye(file, &args.primitives, &program_args, args.no_panic, skye_path)?;
         }
         CompilerCommand::Build { path, program_args } => {
-            run_skye(OsString::from(PathBuf::from(path).join("build.skye")), &args.primitives, &program_args, args.no_panic)?;
+            run_skye(OsString::from(PathBuf::from(path).join("build.skye")), &args.primitives, &program_args, args.no_panic, skye_path)?;
         }
         CompilerCommand::New { project_type } => {
             match project_type {
@@ -246,10 +261,6 @@ fn main() -> Result<(), Error> {
                 return Err(Error::other("Cannot verify package decompressed size"));
             }
 
-            let skye_path = PathBuf::from(env::var(SKYE_PATH_VAR).map_err(
-                |e| Error::other(format!("Couldn't fetch SKYE_PATH environment variable. Error: {}", e.to_string()))
-            )?);
-
             let tmp_folder = skye_path.join("tmp");
             
             create_dir(&tmp_folder)?;
@@ -289,7 +300,7 @@ fn main() -> Result<(), Error> {
             };
 
             if let Some(setup_file) = data_relative.iter().find(|x| **x == PathBuf::from("setup.skye")) {
-                run_skye(setup_file.clone().into_os_string(), &args.primitives, &None, args.no_panic)?;
+                run_skye(setup_file.clone().into_os_string(), &args.primitives, &None, args.no_panic, skye_path)?;
             }
 
             copy_dir_recursive(&tmp_folder, &lib_folder)?;
@@ -307,10 +318,6 @@ fn main() -> Result<(), Error> {
             println!("Package \"{}\" was installed successfully", pkg_name_str);
         }
         CompilerCommand::Remove { package } => {
-            let skye_path = PathBuf::from(env::var(SKYE_PATH_VAR).map_err(
-                |e| Error::other(format!("Couldn't fetch SKYE_PATH environment variable. Error: {}", e.to_string()))
-            )?);
-
             let lib_folder = skye_path.join("lib");
             let index_file = lib_folder.join("index.json");
 
