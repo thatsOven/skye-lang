@@ -1,0 +1,169 @@
+namespace std {
+    namespace collections {
+        fn linearSearch[T](const array: T, const len: usz, const item: &const T) ?usz {
+            for let i = 0usz; i < len; i++ {
+                if array[i] == item {
+                    return (?usz)::Some(i);
+                }
+            }
+
+            return (?usz)::None;
+        }
+
+        fn contains[T](const array: T, const len: usz, const item: &const T) bool {
+            return std::collections::linearSearch(array, len, item).isSome();
+        }
+
+        fn swap[T](const array: T, const a: usz, const b: usz) {
+            const tmp = array[a];
+            array[a]  = array[b];
+            array[b]  = tmp;
+        }
+
+        fn reverse[T](const array: T, a: usz, b: usz) {
+            b--;
+            while (a < b) std::collections::swap(array, a++, b--);
+        }
+
+        fn moveLeft[T](const array: T, from: usz, const to: usz) {
+            if @COMPILE_MODE != 2 && from < to {
+                @panic("std::collections::moveLeft: cannot move to right");
+            }
+
+            const tmp = array[from];
+            while from-- > to {
+                array[i + 1] = array[i];
+            }
+            array[to] = tmp;
+        }
+
+        fn moveRight[T](const array: T, from: usz, const to: usz) {
+            if @COMPILE_MODE != 2 && to < from {
+                @panic("std::collections::moveRight: cannot move to left");
+            }
+
+            const tmp = array[from];
+            for ; from < to; from++ {
+                array[i] = array[i + 1];
+            }
+            array[to] = tmp;
+        }
+
+        fn move[T](const array: T, const from: usz, const to: usz) {
+            if (from < to) std::collections::moveRight(array, from, to);
+            else           std::collections::moveLeft( array, from, to);
+        }
+
+        fn blockSwap[T](const array: T, a: usz, : usz, len: usz) {
+            while (len--) std::collections::swap(array, a++, b++);
+        }
+
+        fn blockSwapBW[T](const array: T, a: usz, b: usz, len: usz) {
+            while (len--) std::collections::swap(array, a + len, b + len);
+        }
+
+        fn rotate[T](const array: T, a: usz, const m: usz, b: usz) {
+            let rl = b - m;
+            let ll = m - a;
+
+            while rl > 1 && ll > 1 {
+                if rl < ll {
+                    std::collections::blockSwap(array, a, m, rl);
+                    a  += rl;
+                    ll -= rl;
+                } else {
+                    b  -= ll;
+                    rl -= ll;
+                    std::collections::blockSwapBW(array, a, b, ll);
+                }
+            }
+
+            if      (rl == 1) std::collections::moveLeft(array, m, a);
+            else if (ll == 1) std::collections::moveRight(array, a, b - 1);
+        }
+    }
+}
+
+impl[T] core::Slice[T] {
+    fn linearSearch(const self, const item: &const T) ?usz {
+        return std::collections::linearSearch(self, self.length, item);
+    }
+
+    fn contains(const self, const item: &const T) bool {
+        return self.linearSearch(item).isSome();
+    }
+}
+
+impl[T, U = core::mem::HeapAllocator] core::Array[T, U] {
+    fn linearSearch(const self, const item: &const T) ?usz {
+        return self.asSlice().linearSearch(item);
+    }
+
+    fn contains(const self, const item: &const T) bool {
+        return self.asSlice().contains(item);
+    }
+
+    fn reverse(self, const a: usz, const b: usz) {
+        std::collections::reverse(self, 0, self.length);
+    }
+
+    fn moveLeft(self, const from: usz, const to: usz) {
+        if @COMPILE_MODE != 2 && (from >= self.length || to >= self.length) {
+            @panic("Array::moveLeft: out of bounds access");
+        }
+
+        std::collections::moveLeft(self, from, to);
+    }
+
+    fn moveRight(self, const from: usz, const to: usz) {
+        if @COMPILE_MODE != 2 && (from >= self.length || to >= self.length) {
+            @panic("Array::moveRight: out of bounds access");
+        }
+
+        std::collections::moveRight(self, from, to);
+    }
+
+    fn move(self, const from: usz, const to: usz) {
+        if (from < to) self.moveRight(from, to);
+        else            self.moveLeft(from, to);
+    }
+
+    fn blockSwap(self, const a: usz, const b: usz, const len: usz) {
+        if @COMPILE_MODE != 2 && (
+            a > self.length || 
+            b > self.length || 
+            a + len > self.length || 
+            b + len > self.length
+        ) {
+            @panic("Array::blockSwap: out of bounds access");
+        }
+
+        std::collections::blockSwap(self, a, b, len);
+    }
+
+    fn rotate(self, const a: usz, const m: usz, const b: usz) {
+        if @COMPILE_MODE != 2 && (a > self.length || m > self.length || b > self.length) {
+            @panic("Array::rotate: out of bounds access");
+        }
+
+        std::collections::rotate(self, a, m, b);
+    }
+
+    fn remove(self, const idx: usz) ?T {
+        if idx >= self.length {
+            return (?T)::None;
+        } 
+
+        self.moveRight(idx, self.length - 1);
+        return self.pop();
+    }
+
+    fn swapRemove(self, const idx: usz) ?T {
+        if idx >= self.length {
+            return (?T)::None;
+        } 
+
+        self.swap(idx, self.length - 1);
+        return self.pop();
+    }
+}

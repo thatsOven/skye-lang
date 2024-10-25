@@ -329,20 +329,6 @@ namespace core {
             return self.slice(0, self.length);
         }
 
-        fn find(const self, const item: &const T) ?usz {
-            for let i = 0usz; i < self.length; i++ {
-                if self.array[i] == item {
-                    return (?usz)::Some(i);
-                }
-            }
-
-            return (?usz)::None;
-        }
-
-        fn contains(const self, const item: &const T) bool {
-            return self.find(item).isSome();
-        }
-
         fn swap(self, const a: usz, const b: usz) {
             if @COMPILE_MODE != 2 && (a > self.length || b > self.length) {
                 @panic("Array::swap: out of bounds access");
@@ -362,89 +348,6 @@ namespace core {
         fn pop(self) ?T {
             if (self.length == 0) return (?T)::None;
             return (?T)::Some(self.array[--self.length]);
-        }
-
-        fn moveLeft(self, const from: usz, const to: usz) {
-            if @COMPILE_MODE != 2 && (from >= self.length || to >= self.length) {
-                @panic("Array::moveLeft: out of bounds access");
-            }
-
-            if @COMPILE_MODE != 2 && from < to {
-                @panic("Array::moveLeft: cannot move to right");
-            }
-
-            const tmp = self.array[from];
-            while from-- > to {
-                self.array[i + 1] = self.array[i];
-            }
-            self.array[to] = tmp;
-        }
-
-        fn moveRight(self, const from: usz, const to: usz) {
-            if @COMPILE_MODE != 2 && (from >= self.length || to >= self.length) {
-                @panic("Array::moveRight: out of bounds access");
-            }
-
-            if @COMPILE_MODE != 2 && to < from {
-                @panic("Array::moveRight: cannot move to left");
-            }
-
-            const tmp = self.array[from];
-            for ; from < to; from++ {
-                self.array[i] = self.array[i + 1];
-            }
-            self.array[to] = tmp;
-        }
-
-        fn move(self, const from: usz, const to: usz) {
-            if (from < to) self.moveRight(from, to);
-            else            self.moveLeft(from, to);
-        }
-
-        fn blockSwap(self, const a: usz, const b: usz, const len: usz) {
-            while (len--) self.swap(a++, b++);
-        }
-
-        fn blockSwapBW(self, const a: usz, const b: usz, const len: usz) {
-            while (len--) self.swap(a + len, b + len);
-        }
-
-        fn rotate(self, const a: usz, const m: usz, const b: usz) {
-            let rl = b - m;
-            let ll = m - a;
-
-            while rl > 1 && ll > 1 {
-                if rl < ll {
-                    self.blockSwap(a, m, rl);
-                    a  += rl;
-                    ll -= rl;
-                } else {
-                    b  -= ll;
-                    rl -= ll;
-                    self.blockSwapBW(a, b, ll);
-                }
-            }
-
-            if      (rl == 1) self.moveLeft(m, a);
-            else if (ll == 1) self.moveRight(a, b - 1);
-        }
-
-        fn remove(self, const idx: usz) ?T {
-            if idx >= self.length {
-                return (?T)::None;
-            } 
-
-            self.moveRight(idx, self.length - 1);
-            return self.pop();
-        }
-
-        fn swapRemove(self, const idx: usz) ?T {
-            if idx >= self.length {
-                return (?T)::None;
-            } 
-
-            self.swap(idx, self.length - 1);
-            return self.pop();
         }
 
         fn iter(const self) core::ArrayIterator[T] {
