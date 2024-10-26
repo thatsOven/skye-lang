@@ -103,10 +103,6 @@ impl[T, U = core::mem::HeapAllocator] core::Array[T, U] {
         return self.asSlice().contains(item);
     }
 
-    fn reverse(self, const a: usz, const b: usz) {
-        std::collections::reverse(self, 0, self.length);
-    }
-
     fn moveLeft(self, const from: usz, const to: usz) {
         if @COMPILE_MODE != 2 && (from >= self.length || to >= self.length) {
             @panic("Array::moveLeft: out of bounds access");
