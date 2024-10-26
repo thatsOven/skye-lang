@@ -14,7 +14,7 @@ Skye tries to give you a similar experience to writing code in C, but with some 
 # Installation
 To install Skye, you can either jump to the releases and download the latest version for your platform, or download the source and compile it using `cargo build --release`.
 
-When using the Skye compiler, the `SKYE_PATH` environment variable must be set. It has to be set to the path of the compiler executable and the `lib` folder.
+When using the Skye compiler, the `SKYE_PATH` environment variable should be set. It has to be set to the path of the compiler executable and the `lib` folder. If not set, Skye will try to infer it from the compiler executable location.
 
 NOTE: Windows is not supported yet, sorry! I will work on it<3
 
@@ -34,7 +34,7 @@ If you're working with a bigger project (this is the most common case, since you
 
 Standalone projects can be built by using the `skye build` command, and Skye packages can be exported using `skye export`. The result of `skye export` is a `zip` file that can be installed using `skye install <package_file>`. To remove an installed package, use `skye remove <package_name>`.
 
-The Skye package manager has no notion of versions, so feature-wise versioning should be performed by the developer through different package names (for example "myPackage-v1.0", "myPackage-v1.1"...). This way, projects that require a specific version of a package as a dependency don't collide with a different version of the same package while the required one is being installed.
+The Skye package manager has no notion of versions, so feature-wise versioning should be performed by the developer through different package names (for example "myPackage-v1_0", "myPackage-v1_1"...). This way, projects that require a specific version of a package as a dependency don't collide with a different version of the same package while the required one is being installed.
 
 # Comments
 ```
