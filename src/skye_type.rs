@@ -18,16 +18,14 @@ impl SkyeFunctionParam {
 pub enum GetResultInternal {
     Ok(Rc<str>, SkyeType, SkyeType, bool), // value type holder_type is_const
     InvalidType,
-    FieldNotFound,
-    Undefined
+    FieldNotFound
 }
 
 #[derive(Debug, Clone)]
 pub enum GetResult {
     Ok(Rc<str>, SkyeType, bool), // value type is_const
     InvalidType,
-    FieldNotFound,
-    Undefined
+    FieldNotFound
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -106,7 +104,7 @@ impl SkyeValue {
     }
 
     pub fn get_unknown() -> SkyeValue {
-        SkyeValue::special(SkyeType::get_unknown())
+        SkyeValue { value: Rc::from(""), type_: SkyeType::get_unknown(), is_const: false, self_info: None }
     }
 }
 
@@ -230,11 +228,17 @@ impl SkyeType {
             SkyeType::Char => String::from("char"),
             SkyeType::Void => String::from("void"),
 
-            SkyeType::Unknown(name) => format!("any \"{}\"", name),
             SkyeType::Group(left, right) => format!("{} | {}", left.stringify_native(), right.stringify_native()),
             SkyeType::Template(name, ..) => format!("template \"{}\"", name.replace("_DOT_", "::")),
             SkyeType::Namespace(name) => format!("namespace \"{}\"", name.replace("_DOT_", "::")),
             SkyeType::Macro(name, ..) => format!("macro {}", name),
+            SkyeType::Unknown(name) => {
+                if name.as_ref() == "" {
+                    String::from("any")
+                } else {
+                    format!("any \"{}\"", name)
+                }
+            }
             
             SkyeType::Type(inner) => format!("type \"{}\"", inner.stringify_native()),
             SkyeType::Function(args, return_type, _) => {
@@ -544,7 +548,7 @@ impl SkyeType {
                         GetResultInternal::FieldNotFound
                     }
                 } else {
-                    GetResultInternal::Undefined
+                    GetResultInternal::FieldNotFound
                 }
             }
             SkyeType::Enum(_, fields, _) => {
@@ -586,7 +590,6 @@ impl SkyeType {
             GetResultInternal::Ok(value, type_, _, is_const) => GetResult::Ok(value, type_, is_const),
             GetResultInternal::InvalidType => GetResult::InvalidType,
             GetResultInternal::FieldNotFound => GetResult::FieldNotFound,
-            GetResultInternal::Undefined => GetResult::Undefined,
         }
     }
 

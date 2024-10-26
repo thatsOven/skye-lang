@@ -4281,7 +4281,6 @@ impl CodeGen {
                             ).as_ref()
                         );
                     }
-                    GetResult::Undefined => ast_error!(self, object_expr, "Cannot get properties from undefined struct or enum"),
                     GetResult::FieldNotFound => {
                         if let Some(value) = self.get_method(&object, name, false, index) {
                             return value;
