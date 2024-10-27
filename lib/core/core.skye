@@ -105,7 +105,7 @@ namespace core {
     impl[T] core::Option[T] {
         fn or(const self, const value: T) T {
             if self.kind == core::Option::Kind::Some {
-                return self.some;
+                return self.Some;
             } else {
                 return value;
             }
@@ -128,7 +128,7 @@ namespace core {
     impl[T, U] core::Result[T, U] {
         fn or(const self, const value: T) T {
             if self.kind == core::Result::Kind::Ok {
-                return self.ok;
+                return self.Ok;
             } else {
                 return value;
             }
@@ -243,7 +243,7 @@ impl[T] core::Option[T] {
         if self.kind == core::Option::Kind::Some {
             switch T {
                 void    -> return;
-                default -> return self.some;
+                default -> return self.Some;
             }
         } else {
             @panic(msg);
@@ -260,7 +260,7 @@ impl[T, U] core::Result[T, U] {
         if self.kind == core::Result::Kind::Ok {            
             switch T {
                 void    -> return;
-                default -> return self.ok;
+                default -> return self.Ok;
             }
         } else {
             @panic(msg);

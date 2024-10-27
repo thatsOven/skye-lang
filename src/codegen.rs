@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, ffi::OsString, path::{Path, PathBuf}, rc::Rc};
 
 use crate::{
-    ast::{Ast, Expression, FunctionParam, ImportType, LiteralKind, MacroBody, MacroParams, Statement}, ast_error, ast_info, ast_note, ast_warning, environment::{Environment, SkyeVariable}, parse_file, parser::Parser, scanner::Scanner, skye_type::{CastableHow, EqualsLevel, GetResult, ImplementsHow, Operator, SkyeEnumVariant, SkyeFunctionParam, SkyeType, SkyeValue}, token_error, token_note, token_warning, tokens::{Token, TokenType}, utils::{fix_raw_string, get_real_string_length, note}, CompileMode
+    ast::{Ast, EnumVariant, Expression, FunctionParam, ImportType, LiteralKind, MacroBody, MacroParams, Statement, SwitchCase}, ast_error, ast_info, ast_note, ast_warning, environment::{Environment, SkyeVariable}, parse_file, parser::Parser, scanner::Scanner, skye_type::{CastableHow, EqualsLevel, GetResult, ImplementsHow, Operator, SkyeEnumVariant, SkyeFunctionParam, SkyeType, SkyeValue}, token_error, token_note, token_warning, tokens::{Token, TokenType}, utils::{fix_raw_string, get_real_string_length, note}, CompileMode
 };
 
 const OUTPUT_INDENT_SPACES: usize = 4;
@@ -784,6 +784,59 @@ impl CodeGen {
                             Some(SkyeValue::new(Rc::from(format!("({})({})", inner_type.stringify(), to_cast.value)), *inner_type, true))
                         }
                     } else {
+                        // cast from specific type to interface
+                        if let SkyeType::Enum(full_name, variants, _) = &*inner_type {
+                            if let Some(real_variants) = variants {
+                                let mangled = to_cast.type_.mangle();
+                                if let Some(result) = real_variants.get(&Rc::from(mangled.as_ref())) {
+                                    if result.equals(&to_cast.type_, EqualsLevel::Typewise) {
+                                        return Some(SkyeValue::new(Rc::from(format!("{}_DOT_{}({})", full_name, mangled, to_cast.value).as_ref()), *inner_type, true));
+                                    }
+                                }
+                            }
+                        }
+
+                        // cast from interface to specific type
+                        if let SkyeType::Enum(_, variants, base_name) = &to_cast.type_ {
+                            if let Some(real_variants) = variants {
+                                let mangled = inner_type.mangle();
+                                if let Some(result) = real_variants.get(&Rc::from(mangled.as_ref())) {
+                                    if result.equals(&inner_type, EqualsLevel::Typewise) {
+                                        let mut question = Token::dummy(Rc::from(""));
+                                        let mut custom_tok = question.clone();
+                                        question.set_type(TokenType::Question);
+                                        custom_tok.set_lexeme(&mangled);
+
+                                        let option_expr = Expression::Unary(question, Box::new(Expression::Variable(custom_tok)), true);
+                                        let option_type = ctx.run(|ctx| self.evaluate(&option_expr, index, allow_unknown, ctx)).await;
+
+                                        if let SkyeType::Type(inner_option_type) = option_type.type_ {
+                                            let mangled_option_type = inner_option_type.mangle();
+
+                                            let tmp_var = self.get_temporary_var();
+
+                                            self.definitions[index].push_indent();
+                                            self.definitions[index].push(&to_cast.type_.stringify());
+                                            self.definitions[index].push(" ");
+                                            self.definitions[index].push(&tmp_var);
+                                            self.definitions[index].push(" = ");
+                                            self.definitions[index].push(&to_cast.value);
+                                            self.definitions[index].push(";\n");
+
+                                            return Some(SkyeValue::new(
+                                                Rc::from(format!(
+                                                    "({}.kind == {}_DOT_Kind_DOT_{} ? {}_DOT_Some({}.{}) : {}_DOT_None)",
+                                                    tmp_var, base_name, mangled, mangled_option_type, tmp_var, mangled, mangled_option_type
+                                                ).as_ref()), *inner_option_type, true
+                                            ));
+                                        } else {
+                                            panic!("option type generation resulted in not a type");
+                                        }
+                                    }   
+                                }
+                            }
+                        }
+
                         ast_error!(
                             self, arguments[1], 
                             format!(
@@ -4285,7 +4338,7 @@ impl CodeGen {
                         if let Some(value) = self.get_method(&object, name, false, index) {
                             return value;
                         } else {
-                            token_error!(self, name, "Undefined property");
+                            token_error!(self, name, format!("Undefined property \"{}\"", name.lexeme).as_ref());
                         }
                     }
                 }
@@ -5905,8 +5958,6 @@ impl CodeGen {
                             let is_void = matches!(variant_type, SkyeType::Void);
                             let is_not_void = !is_void;
 
-                            let lowercase_variant = variant.name.lexeme.to_lowercase();
-
                             if write_output {
                                 let mut buf = String::new();
                                 buf.push_str(&full_name);
@@ -5951,7 +6002,7 @@ impl CodeGen {
                                 if is_not_void {
                                     initializers.push_indent();
                                     initializers.push("tmp.");
-                                    initializers.push(&lowercase_variant);
+                                    initializers.push(&variant.name.lexeme);
                                     initializers.push(" = value;\n");
                                 }
 
@@ -5981,11 +6032,11 @@ impl CodeGen {
                                     def_buf.push_indent();
                                     def_buf.push(&variant_type.stringify());
                                     def_buf.push(" ");
-                                    def_buf.push(&lowercase_variant);
+                                    def_buf.push(&variant.name.lexeme);
                                     def_buf.push(";\n");
                                 }
 
-                                output_fields.insert(Rc::from(lowercase_variant), variant_type);
+                                output_fields.insert(Rc::clone(&variant.name.lexeme), variant_type);
                             }
                         }
 
@@ -6955,6 +7006,186 @@ impl CodeGen {
                 self.definitions[index].push_indent();
                 self.definitions[index].push(&break_label);
                 self.definitions[index].push(":;\n");
+            }
+            Statement::Interface(name, declarations, types) => {
+                let full_name = self.get_name(&name.lexeme);
+
+                if let Some(body) = declarations {
+                    if let Some(bound_types) = types {
+                        let mut variants = Vec::new();
+                        let mut evaluated_types = Vec::new();
+
+                        for bound_type in bound_types {
+                            let evaluated = ctx.run(|ctx| self.evaluate(&bound_type, index, false, ctx)).await;
+                            if matches!(evaluated.type_, SkyeType::Void) || !evaluated.type_.can_be_instantiated(true) {
+                                ast_error!(self, bound_type, format!("Cannot instantiate type {}", evaluated.type_.stringify_native()).as_ref());
+                            } 
+
+                            let mut name_tok = name.clone();
+                            name_tok.set_lexeme(evaluated.type_.mangle().as_ref()); 
+                            variants.push(EnumVariant::new(name_tok.clone(), bound_type.clone()));
+                            evaluated_types.push(evaluated.type_);
+                        }
+
+                        let mut functions = Vec::new();
+
+                        for statement in body {
+                            let mut cases = Vec::new();
+
+                            let mut self_type_tok = name.clone();
+                            self_type_tok.set_lexeme("Self");
+
+                            let mut self_tok = name.clone();
+                            self_tok.set_lexeme("self");
+
+                            let mut kind_type_tok = name.clone();
+                            kind_type_tok.set_lexeme("Kind");
+
+                            let mut kind_tok = name.clone();
+                            kind_tok.set_lexeme("kind");
+                            
+                            if let Statement::Function(fn_name, params, return_type, fn_body, qualifiers, generics_names, bind) = statement {
+                                let mut args = Vec::new();
+                                for (i, param) in params.iter().enumerate() {
+                                    let name = param.name.as_ref().expect("param name wasn't available in interface");
+
+                                    if i == 0 && name.lexeme.as_ref() == "self" {
+                                        continue;
+                                    }
+
+                                    args.push(Expression::Variable(name.clone()))
+                                }
+                                
+                                for type_ in &evaluated_types {
+                                    let type_name = type_.mangle();
+                                    let mut name_tok = name.clone();
+                                    name_tok.set_lexeme(type_name.as_ref());
+
+                                    if let GetResult::Ok(obj_name, ..) = type_.static_get(&fn_name) {
+                                        let mut search_tok = fn_name.clone();
+                                        search_tok.set_lexeme(&obj_name);
+
+                                        if let Some(_) = self.globals.borrow().get(&search_tok) {
+                                            cases.push(SwitchCase::new(
+                                                Some(vec![
+                                                    Expression::StaticGet(
+                                                        Box::new(Expression::StaticGet(
+                                                            Box::new(Expression::Variable(self_type_tok.clone())), 
+                                                            kind_type_tok.clone(), 
+                                                            false
+                                                        )), 
+                                                        name_tok.clone(), 
+                                                        false
+                                                    )
+                                                ]),
+                                                vec![Statement::Return(
+                                                    name_tok.clone(),
+                                                    Some(Expression::Call(
+                                                        Box::new(Expression::Get(
+                                                            Box::new(Expression::Get(
+                                                                Box::new(Expression::Variable(self_tok.clone())),
+                                                                name_tok.clone()
+                                                            )),
+                                                            fn_name.clone()
+                                                        )),
+                                                        name_tok,
+                                                        args.clone()
+                                                    ))
+                                                )]
+                                            ));
+                                        }
+                                    } else {
+                                        unreachable!();
+                                    }
+                                }
+                                
+                                // if the interface function has a body, use that as default implementation
+                                if let Some(body) = fn_body {
+                                    cases.push(SwitchCase::new(None, body.clone()));
+                                }
+
+                                functions.push(Statement::Function(
+                                    fn_name.clone(), 
+                                    params.clone(), 
+                                    return_type.clone(), 
+                                    Some(vec![Statement::Switch(
+                                        name.clone(),
+                                        Expression::Get(
+                                            Box::new(Expression::Variable(self_tok)),
+                                            kind_tok
+                                        ),
+                                        cases
+                                    )]),
+                                    qualifiers.clone(), 
+                                    generics_names.clone(),
+                                    *bind
+                                )); 
+                            } else {
+                                ast_error!(self, statement, "Can only define functions in interface body");
+                            }
+                        }
+
+                        let mut custom_tok = name.clone();
+                        custom_tok.set_lexeme("i32");
+
+                        let enum_def = Statement::Enum(
+                            name.clone(), Expression::Variable(custom_tok.clone()), variants,
+                            false, true, None, Vec::new(), false
+                        );
+
+                        let _ = ctx.run(|ctx| self.execute(&enum_def, index, ctx)).await;
+
+                        custom_tok.set_lexeme(&full_name);
+                        let impl_def = Statement::Impl(Expression::Variable(custom_tok), functions);
+
+                        let _ = ctx.run(|ctx| self.execute(&impl_def, index, ctx)).await;
+                    } else {
+                        let mut functions = Vec::new();
+
+                        for statement in body {                            
+                            if let Statement::Function(fn_name, params, return_type, fn_body, qualifiers, generics_names, bind) = statement {
+                                // if the interface function has a body, use that as default implementation
+                                if fn_body.is_some() {
+                                    token_error!(self, fn_name, "Cannot define function body in forward declaration of interface");
+                                }
+
+                                functions.push(Statement::Function(
+                                    fn_name.clone(), params.clone(), return_type.clone(),
+                                    None, qualifiers.clone(), generics_names.clone(), *bind
+                                )); 
+                            } else {
+                                ast_error!(self, statement, "Can only define functions in interface body");
+                            }
+                        }
+
+                        let mut custom_tok = name.clone();
+                        custom_tok.set_lexeme("i32");
+
+                        let enum_def = Statement::Enum(
+                            name.clone(), Expression::Variable(custom_tok.clone()),
+                            Vec::new(), false, false, None, Vec::new(), false
+                        );
+
+                        let _ = ctx.run(|ctx| self.execute(&enum_def, index, ctx)).await;
+
+                        custom_tok.set_lexeme(&full_name);
+                        let impl_def = Statement::Impl(Expression::Variable(custom_tok), functions);
+
+                        let _ = ctx.run(|ctx| self.execute(&impl_def, index, ctx)).await;
+                    }
+                } else {
+                    assert!(types.is_none()); // ensured by parser
+
+                    let mut custom_tok = name.clone();
+                    custom_tok.set_lexeme("i32");
+
+                    let enum_def = Statement::Enum(
+                        name.clone(), Expression::Variable(custom_tok),
+                        Vec::new(), false, false, None, Vec::new(), false
+                    );
+
+                    let _ = ctx.run(|ctx| self.execute(&enum_def, index, ctx)).await;
+                }
             }
         }
 

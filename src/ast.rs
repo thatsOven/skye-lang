@@ -401,7 +401,8 @@ pub enum Statement {
     Union(Token, Vec<StructField>, bool, Option<Token>, bool), // name fields has_body binding bind_typedefed
     Bitfield(Token, Vec<BitfieldField>, bool, Option<Token>, bool), // name fields has_body binding bind_typedefed
     Macro(Token, MacroParams, MacroBody), // name params body
-    Foreach(Token, Token, Expression, Box<Statement>) // kw variable iterator body
+    Foreach(Token, Token, Expression, Box<Statement>), // kw variable iterator body
+    Interface(Token, Option<Vec<Statement>>, Option<Vec<Expression>>) // name declarations types
 }
 
 impl Ast for Statement {
@@ -434,7 +435,8 @@ impl Ast for Statement {
             Statement::Union(tok, ..) |
             Statement::Bitfield(tok, ..) |
             Statement::Macro(tok, ..) |
-            Statement::Foreach(tok, ..) => {
+            Statement::Foreach(tok, ..) |
+            Statement::Interface(tok, ..) => {
                 AstPos::new(Rc::clone(&tok.source), Rc::clone(&tok.filename), tok.pos, tok.end, tok.line)
             } 
         }
@@ -568,6 +570,21 @@ impl Ast for Statement {
                 Statement::Foreach(
                     kw.clone(), var_name.clone(), iterator.replace_variable(name, replace_expr),
                     Box::new(body.replace_variable(name, replace_expr))
+                )
+            }
+            Statement::Interface(interface_name, declarations, types) => {
+                Statement::Interface(
+                    interface_name.clone(),
+                    declarations.as_ref().map(
+                        |decls| decls.iter().map(
+                            |x| x.replace_variable(name, replace_expr)
+                        ).collect()
+                    ),
+                    types.as_ref().map(
+                        |types_unwrapped| types_unwrapped.iter().map(
+                            |x| x.replace_variable(name, replace_expr)
+                        ).collect()
+                    )
                 )
             }
         }

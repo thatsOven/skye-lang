@@ -47,6 +47,7 @@ impl<'a> Scanner<'a> {
         keywords.insert(  "default", TokenType::Default);
         keywords.insert( "bitfield", TokenType::Bitfield);
         keywords.insert( "continue", TokenType::Continue);
+        keywords.insert("interface", TokenType::Interface);
         keywords.insert("namespace", TokenType::Namespace);
 
         // reserved for internal usage

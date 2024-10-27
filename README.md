@@ -338,7 +338,7 @@ enum SumTypeEnum {
     Variant2(f64)
 }
 ```
-Sum type enums require their variant types to be `PascalCase` or `UPPER_SNAKE_CASE` due to how the type is implemented. Any sum type includes a `kind` field that indicates the active variant.
+Any sum type includes a `kind` field that indicates the active variant.
 ```
 struct Dog {}
 struct Cat {}
@@ -352,7 +352,7 @@ enum Animal {
 fn test() {
     let var = Animal::DogVariant(Dog.{});
     let kind = var.kind; // Animal::Kind::DogVariant;
-    let dog = var.dogVariant;
+    let dog = var.DogVariant;
 
     var = Animal::AnotherAnimal;
     kind = var.kind; // Animal::Kind::AnotherAnimal;
@@ -389,6 +389,58 @@ let a = 2;
 let myBitfieldInstance = MyBitfieldBinding.{ a, b: 1 }; 
 let myUnionInstance = MyUnionBinding.{ a }; // only one field of a union can be initialized
 ```
+# Interfaces
+It is possible to create interfaces with types known at compile time. Interfaces allow to group shared behavior to a shared data type. Internally, this is just syntax sugar around sum types, implementing enum dispatch.
+```
+struct Dog {}
+impl Dog {
+    fn speak(const self) {
+        @println("Woof!");
+    }
+}
+
+struct Cat {}
+impl Cat {
+    fn speak(const self) {
+        @println("Meow!");
+    }
+}
+
+interface Animal {
+    fn speak(const self);
+} for Dog, Cat;
+
+fn main() {
+    let animal = @cast(Animal, Dog.{}); // you can convert an instance of a type to a compatible interface using a cast
+    const dog = @cast(Dog, animal).unwrap(); // casting the interface back to its type can fail, so it may return none
+    
+    animal.speak(); // Woof!
+
+    animal = @cast(Animal, Cat.{});
+    animal.speak(); // Meow!
+}
+```
+You can also provide a default implementation:
+```
+...
+
+struct AnotherAnimal {}
+
+interface Animal {
+    fn speak(const self) {
+        @println("<insert animal noise here>");
+    }
+} for Dog, Cat, AnotherAnimal;
+
+fn main() {
+    const animal = @cast(Animal, AnotherAnimal.{});
+    animal.speak(); // <insert animal noise here>
+}
+```
+Interfaces can be forward declared when needed, by just omitting default implementations and the `for types...` part.
+
+This approach to type dispatching has been experimented with in Rust, and has shown up to a 10x speed increase over Rust's native dynamic dispatching, as well as much better possibility for compiler optimizations ([reference](https://gitlab.com/antonok/enum_dispatch)).
+
 # Impl
 Structs and sum type enums can have methods, and they can be implemented using the `impl` keyword.
 ```

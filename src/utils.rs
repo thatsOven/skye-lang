@@ -162,22 +162,6 @@ pub fn is_alphanumeric(c: char) -> bool {
     is_alpha(c) || is_digit(c)
 }
 
-pub fn is_valid_variant(str: &Rc<str>) -> bool {
-    for char in str.chars() {
-        if char == '_' {
-            continue;
-        }
-
-        if char == char.to_ascii_uppercase() {
-            return true;
-        } else {
-            return false;
-        }
-    }
-
-    false
-}
-
 // TODO this actually doesn't work properly, 
 // it would need to handle variable length escape codes but it doesn't
 pub fn get_real_string_length(str: &str) -> usize {

@@ -14,8 +14,8 @@ fn getInt() u8 {
         
         const parsed = buf.parseInt[i64]();
 
-        if parsed.isSome() && parsed.some > 0 && parsed.some <= @MAX_TERMS {
-            return @cast(u8, parsed.some);
+        if parsed.isSome() && parsed.Some > 0 && parsed.Some <= @MAX_TERMS {
+            return @cast(u8, parsed.Some);
         } else {
             @println("Invalid input. Please retry");
         }

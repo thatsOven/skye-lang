@@ -1,11 +1,9 @@
-use convert_case::{Case, Casing};
 use std::{collections::HashMap, rc::Rc};
 
 use crate::{
     ast::{BitfieldField, EnumVariant, Expression, FunctionParam, Generic, ImportType, LiteralKind, MacroBody, MacroParams, Statement, StructField, SwitchCase, Ast}, 
     ast_error, ast_note, token_error, token_note, 
-    tokens::{Token, TokenType}, 
-    utils::is_valid_variant
+    tokens::{Token, TokenType}
 };
 
 macro_rules! match_literal {
@@ -1192,13 +1190,6 @@ impl Parser {
             if binding.is_some() {
                 token_error!(self, binding.as_ref().unwrap(), "Cannot use enum as sum type when creating a C binding");
             }
-
-            for variant in &variants {
-                if !is_valid_variant(&variant.name.lexeme) {
-                    token_error!(self, variant.name, "Enum variant names must be PascalCase or UPPER_SNAKE_CASE when the enum acts as a sum type");
-                    token_note!(variant.name, format!("Rename this variant to \"{}\"", variant.name.lexeme.as_ref().to_case(Case::Pascal)).as_ref());
-                }
-            }
         }
 
         if generics.len() == 0 {
@@ -1444,6 +1435,63 @@ impl Parser {
         Some(Statement::Macro(name, params, body))
     }
 
+    fn interface(&mut self) -> Option<Statement> {
+        if self.curr_qualifiers.len() != 0 {
+            let kw = self.previous();
+            token_error!(self, kw, "Cannot use qualifiers on \"interface\" statement");
+
+            for (_, qualifier) in self.curr_qualifiers.iter() {
+                token_note!(qualifier, "Qualifier specified here");
+            }
+
+            self.curr_qualifiers.clear();
+        }
+
+        let name = self.consume(TokenType::Identifier, "Expecting interface name")?.clone();
+
+        let declarations = {
+            if self.match_(&[TokenType::LeftBrace]) {
+                let mut declarations = Vec::new();
+                while (!self.check(TokenType::RightBrace)) && (!self.is_at_end()) {
+                    declarations.push(self.declaration(true, &Vec::new(), &Vec::new())?);
+                }
+
+                self.consume(TokenType::RightBrace, "Expecting '}' after interface body")?;
+
+                Some(declarations)
+            } else {
+                None
+            }
+        };
+
+        let types = {
+            if self.match_(&[TokenType::For]) {
+                let has_paren = self.match_(&[TokenType::LeftParen]);
+                let exprs = self.get_nonzero_expressions()?;
+                
+                if has_paren {
+                    self.consume(TokenType::RightParen, "Expecting ')' after list of types enclosed in parentheses")?;
+                }
+
+                self.consume(TokenType::Semicolon, "Expecting ';' after interface types")?;
+                Some(exprs)
+            } else {
+                None
+            }
+        };
+
+        if declarations.is_none() {
+            if let Some(bound_types) = &types {
+                ast_error!(self, bound_types[0], "Cannot declare interface types without interface body");
+                token_note!(name, "Add the methods that compose the interface after the interface name, enclosed in brackets");
+            } else {
+                self.consume(TokenType::Semicolon, "Expecting ';' after interface declaration")?;
+            }
+        }
+
+        Some(Statement::Interface(name, declarations, types))
+    }
+
     fn declaration(&mut self, method: bool, incoming_generics: &Vec<Generic>, self_generics: &Vec<Expression>) -> Option<Statement> {
         if self.match_(&[TokenType::Fn]) {
             return self.function(method, incoming_generics, self_generics);
@@ -1487,6 +1535,10 @@ impl Parser {
 
         if self.match_(&[TokenType::Macro]) {
             return self.macro_decl();
+        }
+
+        if self.match_(&[TokenType::Interface]) {
+            return self.interface();
         }
 
         if self.match_(&[TokenType::Hash]) {
