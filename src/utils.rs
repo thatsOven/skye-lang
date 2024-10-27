@@ -72,7 +72,7 @@ macro_rules! token_error {
     ($slf: expr, $token: expr, $msg: expr) => {
         {
             crate::utils::error(&$token.source, $msg, &$token.filename, $token.pos, $token.end - $token.pos, $token.line);
-            $slf.had_error = true;
+            $slf.errors += 1;
         }
     };
 }
@@ -97,7 +97,7 @@ macro_rules! ast_error {
         {
             let pos: crate::ast::AstPos = $e.get_pos();
             crate::utils::error(&pos.source, $msg, &pos.filename, pos.start, pos.end - pos.start, pos.line);
-            $slf.had_error = true;
+            $slf.errors += 1;
         }
     };
 }

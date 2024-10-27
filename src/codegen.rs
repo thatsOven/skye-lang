@@ -171,7 +171,7 @@ pub struct CodeGen {
     curr_name:     String,
     curr_loop:     Option<(Rc<str>, Rc<str>)>,
 
-    had_error: bool,
+    errors:       usize,
     compile_mode: CompileMode
 }
 
@@ -232,7 +232,7 @@ impl CodeGen {
             deferred: Rc::new(RefCell::new(Vec::new())),
             curr_function: CurrentFn::None,
             string_type: None, tmp_var_cnt: 0,
-            curr_loop: None, had_error: false,
+            curr_loop: None, errors: 0,
             compile_mode, globals, skye_path, source_path: {
                 if let Some(real_path) = path {
                     Some(Box::new(PathBuf::from(real_path)))
@@ -560,7 +560,7 @@ impl CodeGen {
                             scanner.scan_tokens();
 
                             if scanner.had_error {
-                                self.had_error = true;
+                                self.errors += 1;
                                 token_note!(tok, "This error occurred while lexing this interpolated string");
                                 continue;
                             }
@@ -575,7 +575,7 @@ impl CodeGen {
 
                                 result
                             } else {
-                                self.had_error = true;
+                                self.errors += 1;
                                 token_note!(tok, "This error occurred while parsing this interpolated string");
                                 continue;
                             }
@@ -1306,7 +1306,7 @@ impl CodeGen {
                                 );
                             }
                         } else {
-                            if !self.had_error { // avoids having inference errors caused by other errors
+                            if self.errors == 0 { // avoids having inference errors caused by other errors
                                 ast_error!(self, callee_expr, "Skye cannot infer the generic types for this function");
                                 ast_note!(callee_expr, "This expression is a template and requires generic typing");
                                 ast_note!(callee_expr, "Manually specify the generic types");
@@ -1387,7 +1387,7 @@ impl CodeGen {
 
                     drop(env);
 
-                    let old_had_error = self.had_error;
+                    let old_errors = self.errors;
                     
                     let type_ = {
                         match ctx.run(|ctx| self.execute(&definition, 0, ctx)).await {
@@ -1399,7 +1399,7 @@ impl CodeGen {
                         }
                     };
 
-                    if self.had_error && !old_had_error {
+                    if self.errors != old_errors {
                         ast_note!(expr, "This error is a result of template generation originating from this call");
                     }
 
@@ -1558,11 +1558,11 @@ impl CodeGen {
                                 MacroParams::None => unreachable!()
                             }
     
-                            let old_had_error = self.had_error;
+                            let old_errors = self.errors;
     
                             let res = ctx.run(|ctx| self.evaluate(&curr_expr, index, allow_unknown, ctx)).await;
     
-                            if self.had_error && !old_had_error {
+                            if self.errors != old_errors {
                                 ast_note!(expr, "This error is a result of this macro expansion");
                             }
     
@@ -2762,11 +2762,11 @@ impl CodeGen {
                                                 }
                                             }
                                             MacroBody::Expression(return_expr) => {
-                                                let old_had_error = self.had_error;
+                                                let old_errors = self.errors;
 
                                                 let res = ctx.run(|ctx| self.evaluate(&return_expr, index, allow_unknown, ctx)).await;
 
-                                                if self.had_error && !old_had_error {
+                                                if self.errors != old_errors {
                                                     ast_note!(expr, "This error is a result of this macro expansion");
                                                 }
 
@@ -3863,7 +3863,7 @@ impl CodeGen {
                                         );
                                     }
                                 } else {
-                                    if !self.had_error { // avoids having inference errors caused by other errors
+                                    if self.errors == 0 { // avoids having inference errors caused by other errors
                                         ast_error!(self, identifier_expr, "Skye cannot infer the generic types for this struct literal");
                                         ast_note!(identifier_expr, "This expression is a template and requires generic typing");
                                         ast_note!(identifier_expr, "Manually specify the generic types");
@@ -6974,9 +6974,7 @@ impl CodeGen {
     }
 
     pub fn get_output(&self) -> Option<String> {
-        if self.had_error {
-            None
-        } else {
+        if self.errors == 0 {
             let mut output = String::from("// Hello from Skye!! ^_^\n\n");
 
             if self.includes.code.len() != 0 {
@@ -7010,6 +7008,8 @@ impl CodeGen {
             }
 
             Some(output)
+        } else {
+            None
         }
     }
 }

@@ -68,12 +68,12 @@ pub struct Parser {
     tokens: Vec<Token>,
     curr_qualifiers: HashMap<Rc<str>, Token>,
     curr: usize,
-    pub had_error: bool
+    pub errors: usize
 }
 
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
-        Parser { tokens, curr_qualifiers: HashMap::new(), curr: 0, had_error: false }
+        Parser { tokens, curr_qualifiers: HashMap::new(), curr: 0, errors: 0 }
     }
 
     fn peek(&self) -> &Token {

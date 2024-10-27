@@ -30,7 +30,7 @@ pub fn parse(source: &String, filename: Rc<str>) -> Option<Vec<Statement>> {
     let mut parser = Parser::new(scanner.tokens);
     let statements = parser.parse();
 
-    if parser.had_error {
+    if parser.errors != 0 {
         return None;
     }
 
