@@ -1,5 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, ffi::OsString, path::{Path, PathBuf}, rc::Rc};
 
+use convert_case::{Case, Casing};
+
 use crate::{
     ast::{Ast, Expression, FunctionParam, ImportType, LiteralKind, MacroBody, MacroParams, Statement}, ast_error, ast_info, ast_note, ast_warning, environment::{Environment, SkyeVariable}, parse_file, parser::Parser, scanner::Scanner, skye_type::{CastableHow, EqualsLevel, GetResult, ImplementsHow, Operator, SkyeEnumVariant, SkyeFunctionParam, SkyeType, SkyeValue}, token_error, token_note, token_warning, tokens::{Token, TokenType}, utils::{fix_raw_string, get_real_string_length, note}, CompileMode
 };
@@ -5905,7 +5907,7 @@ impl CodeGen {
                             let is_void = matches!(variant_type, SkyeType::Void);
                             let is_not_void = !is_void;
 
-                            let lowercase_variant = variant.name.lexeme.to_lowercase();
+                            let lowercase_variant = variant.name.lexeme.as_ref().to_case(Case::Camel);
 
                             if write_output {
                                 let mut buf = String::new();
