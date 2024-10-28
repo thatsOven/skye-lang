@@ -25,7 +25,7 @@ namespace build {
             build::Mode::Debug {}
             build::Mode::Release       -> @format(&buf, " -c release");
             build::Mode::ReleaseUnsafe -> @format(&buf, " -c release-unsafe");
-            default -> @panic("build::compileSkye: Invalid compilation mode");
+            default -> @unreachable;
         }
 
         try build::system(buf.asString());
