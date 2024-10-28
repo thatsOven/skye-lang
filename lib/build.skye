@@ -1,6 +1,12 @@
 import "std/os";
 
 namespace build {
+    enum Mode as u8 {
+        Debug,
+        Release,
+        ReleaseUnsafe
+    }
+
     fn system(const command: String) !void {
         if std::os::system(command).isError() {
             return (!void)::Error;
@@ -9,16 +15,16 @@ namespace build {
         return (!void)::Ok;
     }
 
-    fn compileSkye(const input: String, const output: String, const compileMode: u8) !void {
+    fn compileSkye(const input: String, const output: String, const compileMode: build::Mode) !void {
         let buf = core::Array::from("skye compile ");
         defer buf.free();
 
         @format(&buf, "{input} --emit-c -o {output}");
 
         switch compileMode {
-            0 {}
-            1 -> @format(&buf, " -c release");
-            2 -> @format(&buf, " -c release-unsafe");
+            build::Mode::Debug {}
+            build::Mode::Release       -> @format(&buf, " -c release");
+            build::Mode::ReleaseUnsafe -> @format(&buf, " -c release-unsafe");
             default -> @panic("build::compileSkye: Invalid compilation mode");
         }
 
