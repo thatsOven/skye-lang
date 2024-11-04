@@ -3349,7 +3349,19 @@ impl CodeGen {
                         let value = ctx.run(|ctx| self.evaluate(&value_expr, index, allow_unknown, ctx)).await;
 
                         if target_type.equals(&value.type_, EqualsLevel::Strict) {
-                            SkyeValue::new(Rc::from(format!("{} = {}", target.value, value.value)), value.type_, true)
+                            let search_tok = Token::dummy(Rc::from("__copy__"));
+                            let output_value = {
+                                if let Some(value) = self.get_method(&value, &search_tok, true, index) {
+                                    let v = Vec::new();
+                                    let copy_constructor = ctx.run(|ctx| self.call(&value, expr, &value_expr, &v, index, allow_unknown, ctx)).await;
+                                    ast_info!(value_expr, "Skye inserted a copy constructor call for this expression"); // +I-copies
+                                    copy_constructor
+                                } else {
+                                    value
+                                }
+                            };
+
+                            SkyeValue::new(Rc::from(format!("{} = {}", target.value, output_value.value)), output_value.type_, true)
                         } else {
                             ast_error!(
                                 self, value_expr,
