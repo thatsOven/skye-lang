@@ -11,6 +11,7 @@ use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
 // - support % operator for floats (reimplement or bind fmod and call it implictly)
 // - implement downloading packages via http
 // - check that copy constructors and destructors are implemented properly
+// - improve error messages related to desugaring (especially interfaces)
 // - windows support!
 // - optional warnings and notes
 // - extend standard library (still needs A LOT of work)

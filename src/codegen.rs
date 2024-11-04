@@ -638,7 +638,10 @@ impl CodeGen {
                             if self.get_method(&evaluated, &search_tok, false, index).is_some() {
                                 Expression::Call(
                                     Box::new(Expression::Get(
-                                        Box::new(portion_expr.clone()), search_tok
+                                        Box::new(Expression::Grouping(
+                                            Box::new(portion_expr.clone())
+                                        )), 
+                                        search_tok
                                     )),
                                     tok.clone(), 
                                     Vec::new()
@@ -648,7 +651,10 @@ impl CodeGen {
                                 if self.get_method(&evaluated, &search_tok, false, index).is_some() {
                                     Expression::Call(
                                         Box::new(Expression::Get(
-                                            Box::new(portion_expr.clone()), search_tok
+                                            Box::new(Expression::Grouping(
+                                                Box::new(portion_expr.clone())
+                                            )), 
+                                            search_tok
                                         )),
                                         tok.clone(), 
                                         Vec::new()
@@ -679,7 +685,9 @@ impl CodeGen {
                                 statements.push(Statement::Expression(
                                     Expression::Call(
                                         Box::new(Expression::Get(
-                                            Box::new(arguments[0].clone()),
+                                            Box::new(Expression::Grouping(
+                                                Box::new(arguments[0].clone())
+                                            )),
                                             search_tok
                                         )),
                                         tok.clone(),
@@ -709,7 +717,9 @@ impl CodeGen {
                                         Box::new(Expression::Get(
                                             Box::new(Expression::Call(
                                                 Box::new(Expression::Get(
-                                                    Box::new(arguments[0].clone()),
+                                                    Box::new(Expression::Grouping(
+                                                        Box::new(arguments[0].clone())
+                                                    )),
                                                     search_tok
                                                 )),
                                                 tok.clone(),
@@ -1004,7 +1014,14 @@ impl CodeGen {
                                     arg_pos.start, arg_pos.end, arg_pos.line
                                 );
 
-                                let ref_expr = Expression::Unary(custom_tok, Box::new(arguments[i - arguments_mod].clone()), true);
+                                let ref_expr = Expression::Unary(
+                                    custom_tok, 
+                                    Box::new(Expression::Grouping(
+                                        Box::new(arguments[i - arguments_mod].clone())
+                                    )), 
+                                    true
+                                );
+
                                 ctx.run(|ctx| self.evaluate(&ref_expr, index, allow_unknown, ctx)).await
                             } else {
                                 arg
@@ -1151,7 +1168,14 @@ impl CodeGen {
                                             arg_pos.start, arg_pos.end, arg_pos.line
                                         );
                                         
-                                        let ref_expr = Expression::Unary(custom_tok, Box::new(arguments[i - arguments_mod].clone()), true);
+                                        let ref_expr = Expression::Unary(
+                                            custom_tok, 
+                                            Box::new(Expression::Grouping(
+                                                Box::new(arguments[i - arguments_mod].clone())
+                                            )), 
+                                            true
+                                        );
+
                                         ctx.run(|ctx| self.evaluate(&ref_expr, index, allow_unknown, ctx)).await
                                     } else {
                                         call_evaluated
@@ -1632,7 +1656,10 @@ impl CodeGen {
                                         }  
                                     }
                                     MacroParams::Variable(var_name) => {
-                                        *statement = statement.replace_variable(&var_name.lexeme, &Expression::Slice(var_name.clone(), arguments.clone()));
+                                        *statement = statement.replace_variable(
+                                            &var_name.lexeme, 
+                                            &Expression::Slice(var_name.clone(), arguments.clone())
+                                        );
                                     }
                                     MacroParams::None => unreachable!()
                                 }          
@@ -7135,8 +7162,20 @@ impl CodeGen {
 
                         let _ = ctx.run(|ctx| self.execute(&enum_def, index, ctx)).await;
 
+                        let old_errors = self.errors;
+
                         custom_tok.set_lexeme(&full_name);
                         let impl_def = Statement::Impl(Expression::Variable(custom_tok), functions);
+
+                        if old_errors != self.errors {
+                            token_note!(
+                                name, 
+                                concat!(
+                                    "This error is a result of code generation for this interface. ",
+                                    "Perhaps one or more of the methods implementing the interface are incompatible with it"
+                                )
+                            );
+                        }
 
                         let _ = ctx.run(|ctx| self.execute(&impl_def, index, ctx)).await;
                     } else {
