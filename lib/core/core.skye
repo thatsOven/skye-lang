@@ -144,12 +144,12 @@ namespace core {
     }
 
     struct SliceIterator[T] {
-        const slice: *const core::Slice[T],
+        const slice: &const core::Slice[T],
         idx: usz
     }
 
     impl[T] core::SliceIterator[T] {
-        fn new(const slice: *const core::Slice[T]) Self[T] {
+        fn new(const slice: &const core::Slice[T]) Self[T] {
             return core::SliceIterator.{ slice, idx: 0 };
         } 
 

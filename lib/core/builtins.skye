@@ -35,16 +35,16 @@ namespace core {
         ptr: *T,
         min: *T,
         max: *T,
-        const alloc: *U
+        const alloc: &U
     }
 
     // TODO implement pointer arithmetics
     impl[T, U = core::mem::HeapAllocator] core::Ptr[T, U] {
-        fn new(ptr: *T, min: *T, max: *T, alloc: *U) Self[T, U] {
+        fn new(ptr: *T, min: *T, max: *T, alloc: &U) Self[T, U] {
             return Self.{ ptr, min, max, alloc };
         }
 
-        fn from(ptr: *T, alloc: *U) Self[T, U] {
+        fn from(ptr: *T, alloc: &U) Self[T, U] {
             return Self.{ ptr, min: ptr, max: ptr, alloc };
         }
 
@@ -82,7 +82,7 @@ namespace core {
     struct Rc[T, U = core::mem::HeapAllocator] {
         const data: &T,
         count: u64,
-        const allocator: *U
+        const allocator: &U
     }
 
     impl[T, U = core::mem::HeapAllocator] core::Rc[T, U] {
@@ -94,7 +94,7 @@ namespace core {
             };
         }
 
-        fn init(data: T, allocator: *U) Self[T, U] {
+        fn init(data: T, allocator: &U) Self[T, U] {
             return Self.{
                 data: allocator.put(data).ptr,
                 count: 2,
@@ -128,12 +128,12 @@ namespace core {
     }
 
     struct ArrayIterator[T] {
-        const array: *const core::Array[T],
+        const array: &const core::Array[T],
         idx: usz
     }
 
     impl[T] core::ArrayIterator[T] {
-        fn new(const array: *const Array[T]) Self[T] {
+        fn new(const array: &const Array[T]) Self[T] {
             return core::ArrayIterator.{ array, idx: 0 };
         } 
 
@@ -148,7 +148,7 @@ namespace core {
         array: Ptr[T, U],
         length: usz,
         capacity: usz,
-        const allocator: *U
+        const allocator: &U
     }
 
     impl[T, U = core::mem::HeapAllocator] core::Array[T, U] {
@@ -161,7 +161,7 @@ namespace core {
             };
         }
 
-        fn init(const allocator: *U) Self[T, U] {
+        fn init(const allocator: &U) Self[T, U] {
             return Self.{
                 array: allocator.alloc[T](core::@MIN_ARRAY_CAPACITY),
                 length: 0,
@@ -182,7 +182,7 @@ namespace core {
             };
         }
 
-        fn initFrom(const slice: core::Slice[T], const allocator: *U) Self[T, U] {
+        fn initFrom(const slice: core::Slice[T], const allocator: &U) Self[T, U] {
             const mem = allocator.alloc[T](slice.length);
             core::mem::typedBlockCopy(slice.ptr, mem.ptr, slice.length);
 
@@ -203,7 +203,7 @@ namespace core {
             };
         }
 
-        fn initWithLength(const length: usz, const allocator: *U) Self[T, U] {
+        fn initWithLength(const length: usz, const allocator: &U) Self[T, U] {
             return Self.{
                 array: allocator.alloc[T](length),
                 length,
@@ -221,7 +221,7 @@ namespace core {
             };
         }
 
-        fn initWithCapacity(const capacity: usz, const allocator: *U) Self[T, U] {
+        fn initWithCapacity(const capacity: usz, const allocator: &U) Self[T, U] {
             return Self.{
                 array: allocator.alloc[T](capacity),
                 length: 0,
@@ -434,7 +434,7 @@ namespace core {
             return Self::initFrom(self.slice(a, b + 1), self.allocator);
         }
 
-        fn split[A = core::mem::HeapAllocator](self, const buf: *core::Array[Self[char, U], A], const ch: char) {
+        fn split[A = core::mem::HeapAllocator](self, const buf: &core::Array[Self[char, U], A], const ch: char) {
             buf.push(Self::init(self.allocator));
 
             for let i = 0usz; i < self.length; i++ {
@@ -446,7 +446,7 @@ namespace core {
             }
         }
 
-        fn allocSplit[A = core::mem::HeapAllocator](self, const alloc: *A, const ch: char) core::Array[Self[char, U], A] {
+        fn allocSplit[A = core::mem::HeapAllocator](self, const alloc: &A, const ch: char) core::Array[Self[char, U], A] {
             let buf = core::Array::init[Self[U], A](alloc);
             self.split(&buf, ch);
             return buf;
@@ -539,7 +539,7 @@ namespace core {
     }
 
     namespace fmt {
-        fn __reversedIntToString[T: AnyInt, U](const buf: *core::Array[char, U], value: T) {
+        fn __reversedIntToString[T: AnyInt, U](const buf: &core::Array[char, U], value: T) {
             const neg = value < 0;
             if (neg) value = -value;
 
@@ -551,18 +551,18 @@ namespace core {
             if (neg) buf.push('-');
         }
 
-        fn intToString[T: AnyInt, U](const buf: *core::Array[char, U], const value: T) {
+        fn intToString[T: AnyInt, U](const buf: &core::Array[char, U], const value: T) {
             core::fmt::__reversedIntToString(buf, value);
             buf.reverse();
         }
 
-        fn allocIntToString[T: AnyInt, U](const allocator: *U, const value: T) core::Array[char, U] {
+        fn allocIntToString[T: AnyInt, U](const allocator: &U, const value: T) core::Array[char, U] {
             let buf = core::Array::init[char, U](allocator);
             core::fmt::intToString(&buf, value);
             return buf;
         }
 
-        fn floatToString[T: AnyFloat, U](const buf: *core::Array[char, U], const value: T, const decPrecision: usz) {
+        fn floatToString[T: AnyFloat, U](const buf: &core::Array[char, U], const value: T, const decPrecision: usz) {
             if @COMPILE_MODE == 0 && decPrecision < 0 {
                 @panic("core::fmt::floatToString: Negative precision");
             }
@@ -590,32 +590,32 @@ namespace core {
             }
         }
 
-        fn allocFloatToString[T: AnyFloat, U](const allocator: *U, const value: T, const decPrecision: usz) core::Array[char, U] {
+        fn allocFloatToString[T: AnyFloat, U](const allocator: &U, const value: T, const decPrecision: usz) core::Array[char, U] {
             let buf = core::Array::init[char, U](allocator);
             core::fmt::floatToString(&buf, value, decPrecision);
             return buf;
         }
 
-        fn intToBuf[T: AnyInt, U](const buf: *U, const value: T) {
+        fn intToBuf[T: AnyInt, U](const buf: &U, const value: T) {
             const string = core::fmt::allocIntToString(&core::mem::heapAllocator, value);
             defer string.free();
             buf.pushString(string.asString());
         }
 
-        fn floatToBuf[T: AnyFloat, U](const buf: *U, const value: T) {
+        fn floatToBuf[T: AnyFloat, U](const buf: &U, const value: T) {
             const string = core::fmt::allocFloatToString(&core::mem::heapAllocator, value);
             defer string.free();
             buf.pushString(string.asString());
         }
 
-        fn __intToFile[T: AnyInt, U](const file: *U, const value: T) {
+        fn __intToFile[T: AnyInt, U](const file: &U, const value: T) {
             let string = core::fmt::allocIntToString(&core::mem::heapAllocator, value);
             const r = file.write(string.asString());
             string.free();
             r.expect("String interpolation failed writing to file");
         }
 
-        fn __floatToFile[T: AnyFloat, U](const file: *U, const value: T) {
+        fn __floatToFile[T: AnyFloat, U](const file: &U, const value: T) {
             let string = core::fmt::allocFloatToString(&core::mem::heapAllocator, value);
             const r = file.write(string.asString());
             string.free();
@@ -628,7 +628,7 @@ use core::Rc;
 use core::Array;
 
 impl core::io::File {
-    fn read[T, U = core::mem::HeapAllocator](self, const buf: *core::Array[T, U], const amt: usz) usz {
+    fn read[T, U = core::mem::HeapAllocator](self, const buf: &core::Array[T, U], const amt: usz) usz {
         buf.growExact(amt);
 
         const r = self.readRaw(
@@ -640,13 +640,13 @@ impl core::io::File {
         return r;
     }
 
-    fn allocRead[T, U = core::mem::HeapAllocator](self, const alloc: *U, const amt: usz) core::Array[T, U] {
+    fn allocRead[T, U = core::mem::HeapAllocator](self, const alloc: &U, const amt: usz) core::Array[T, U] {
         let buf = core::Array::init[T, U](alloc);
         self.read(&buf, amt);
         return buf;
     }
 
-    fn readLine[U = core::mem::HeapAllocator](self, const buf: *core::Array[char, U]) usz {
+    fn readLine[U = core::mem::HeapAllocator](self, const buf: &core::Array[char, U]) usz {
         let r = 0usz;
 
         while true {
@@ -668,7 +668,7 @@ impl core::io::File {
         return r;
     }
 
-    fn allocReadLine[U = core::mem::HeapAllocator](self, const alloc: *U) core::Array[char, U] {
+    fn allocReadLine[U = core::mem::HeapAllocator](self, const alloc: &U) core::Array[char, U] {
         let buf = core::Array::init[char, U](alloc);
         self.readLine(&buf);
         return buf;
