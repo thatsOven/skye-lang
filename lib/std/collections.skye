@@ -54,7 +54,7 @@ namespace std {
             else           std::collections::moveLeft( array, from, to);
         }
 
-        fn blockSwap[T](const array: T, a: usz, : usz, len: usz) {
+        fn blockSwap[T](const array: T, a: usz, b: usz, len: usz) {
             while (len--) std::collections::swap(array, a++, b++);
         }
 

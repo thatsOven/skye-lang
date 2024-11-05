@@ -1,7 +1,7 @@
 #bind fn system(const command: *const char) i32;
 #bind fn remove(const file: *const char) i32;
 
-import <"dirent.h">
+import <"dirent.h">;
 
 struct CDir: DIR;
 struct CDirent: dirent {
