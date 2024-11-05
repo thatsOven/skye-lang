@@ -4275,7 +4275,7 @@ impl CodeGen {
                     }
                     _ => {
                         match new_subscripted.type_.implements_op(Operator::Subscript) {
-                            ImplementsHow::Native(_) => unreachable!(),
+                            ImplementsHow::Native(_) => SkyeValue::get_unknown(), // covers type any, for errors
                             ImplementsHow::ThirdParty => {
                                 let search_tok = {
                                     if new_subscripted.is_const {
@@ -4351,7 +4351,6 @@ impl CodeGen {
                                 );
 
                                 SkyeValue::get_unknown()
-
                             }
                         }
                     }

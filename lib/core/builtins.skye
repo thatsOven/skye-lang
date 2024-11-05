@@ -447,7 +447,7 @@ namespace core {
         }
 
         fn allocSplit[A = core::mem::HeapAllocator](self, const alloc: &A, const ch: char) core::Array[Self[char, U], A] {
-            let buf = core::Array::init[Self[U], A](alloc);
+            let buf = core::Array::init[Self[char, U], A](alloc);
             self.split(&buf, ch);
             return buf;
         }
