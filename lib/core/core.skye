@@ -182,7 +182,7 @@ impl[T] core::Slice[T] {
         }
     }
 
-    fn __eq__(const self, const other: &const Self) bool {
+    fn __eq__(const self, const other: &const Self[T]) bool {
         if (self.length != other.length) return false;
         
         for let i = 0usz; i < self.length; i++ {
@@ -194,12 +194,12 @@ impl[T] core::Slice[T] {
         return true;
     }
 
-    fn __ne__(const self, const other: &const Self) bool {
+    fn __ne__(const self, const other: &const Self[T]) bool {
         return !self.__eq__(other);
     }
 
     // TODO does this work?
-    fn __lt__(const self, const other: &const Self) bool {
+    fn __lt__(const self, const other: &const Self[T]) bool {
         const lenLt = self.length < other.length;
         const len   = lenLt ? self.length : other.length;
 
@@ -216,7 +216,7 @@ impl[T] core::Slice[T] {
         return lenLt;
     }
 
-    fn __le__(const self, const other: &const Self) bool {
+    fn __le__(const self, const other: &const Self[T]) bool {
         const lenLt = self.length < other.length;
         const len   = lenLt ? self.length : other.length;
 
@@ -229,11 +229,11 @@ impl[T] core::Slice[T] {
         return self.length == other.length;
     }
 
-    fn __gt__(const self, const other: &const Self) bool {
+    fn __gt__(const self, const other: &const Self[T]) bool {
         return other.__lt__(self);
     }
 
-    fn __ge__(const self, const other: &const Self) bool {
+    fn __ge__(const self, const other: &const Self[T]) bool {
         return other.__le__(self);
     }
 }

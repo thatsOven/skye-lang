@@ -1198,14 +1198,16 @@ impl CodeGen {
                             if inner_type.equals(&new_call_evaluated.type_, EqualsLevel::Permissive) {
                                 if let Some(inferred) = inner_type.infer_type_from_similar(&new_call_evaluated.type_) {
                                     for (generic_name, generic_type) in inferred {
-                                        if generics_to_find.get(&generic_name).unwrap().is_none() {
-                                            if matches!(generic_type, SkyeType::Void) {
-                                                generics_to_find.insert(Rc::clone(&generic_name), Some(generic_type));
-                                            } else {
-                                                generics_to_find.insert(Rc::clone(&generic_name), Some(SkyeType::Type(Box::new(generic_type))));
+                                        if let Some(generic_to_find) = generics_to_find.get(&generic_name) {
+                                            if generic_to_find.is_none() {
+                                                if matches!(generic_type, SkyeType::Void) {
+                                                    generics_to_find.insert(Rc::clone(&generic_name), Some(generic_type));
+                                                } else {
+                                                    generics_to_find.insert(Rc::clone(&generic_name), Some(SkyeType::Type(Box::new(generic_type))));
+                                                }
+                                                
+                                                generics_found_at.insert(generic_name, i);
                                             }
-                                            
-                                            generics_found_at.insert(generic_name, i);
                                         }
                                     }
                                 } else {
@@ -3809,14 +3811,16 @@ impl CodeGen {
                                         if inner_type.equals(&literal_evaluated.type_, EqualsLevel::Permissive) {
                                             if let Some(inferred) = inner_type.infer_type_from_similar(&literal_evaluated.type_) {
                                                 for (generic_name, generic_type) in inferred {
-                                                    if generics_to_find.get(&generic_name).unwrap().is_none() {
-                                                        if matches!(generic_type, SkyeType::Void) {
-                                                            generics_to_find.insert(Rc::clone(&generic_name), Some(generic_type));
-                                                        } else {
-                                                            generics_to_find.insert(Rc::clone(&generic_name), Some(SkyeType::Type(Box::new(generic_type))));
+                                                    if let Some(generic_to_find) = generics_to_find.get(&generic_name) {
+                                                        if generic_to_find.is_none() {
+                                                            if matches!(generic_type, SkyeType::Void) {
+                                                                generics_to_find.insert(Rc::clone(&generic_name), Some(generic_type));
+                                                            } else {
+                                                                generics_to_find.insert(Rc::clone(&generic_name), Some(SkyeType::Type(Box::new(generic_type))));
+                                                            }
+                                                            
+                                                            generics_found_at.insert(generic_name, i);
                                                         }
-
-                                                        generics_found_at.insert(generic_name, i);
                                                     }
                                                 }
                                             } else {
@@ -5977,7 +5981,7 @@ impl CodeGen {
                                 env.define(
                                     Rc::clone(&variant.name.lexeme),
                                     SkyeVariable::new(
-                                        type_.clone(), true,
+                                        simple_enum_type.clone(), true,
                                         Some(Box::new(variant.name.clone()))
                                     )
                                 );
@@ -5985,7 +5989,7 @@ impl CodeGen {
                                 env.define(
                                     Rc::from(format!("{}_DOT_{}", simple_enum_full_name, variant.name.lexeme)),
                                     SkyeVariable::new(
-                                        type_.clone(), true,
+                                        simple_enum_type.clone(), true,
                                         Some(Box::new(variant.name.clone()))
                                     )
                                 );
@@ -6323,11 +6327,22 @@ impl CodeGen {
                                     SkyeType::U32 | SkyeType::I32 | SkyeType::U64 | SkyeType::I64 |
                                     SkyeType::Usz | SkyeType::F32 | SkyeType::F64 | SkyeType::AnyInt |
                                     SkyeType::AnyFloat | SkyeType::Char => (),
+                                    SkyeType::Enum(_, variants, _) => {
+                                        if variants.is_some() {
+                                            ast_error!(
+                                                self, switch_expr,
+                                                format!(
+                                                    "Expecting expression of primitive arithmetic type or simple enum for case expression (got {})",
+                                                    switch.type_.stringify_native()
+                                                ).as_ref()
+                                            );
+                                        }
+                                    }
                                     _ => {
                                         ast_error!(
                                             self, real_case,
                                             format!(
-                                                "Expecting expression of primitive arithmetic type for case expression (got {})",
+                                                "Expecting expression of primitive arithmetic type or simple enum for case expression (got {})",
                                                 real_case_evaluated.type_.stringify_native()
                                             ).as_ref()
                                         );

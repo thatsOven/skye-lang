@@ -52,6 +52,15 @@ namespace core {
             self.alloc.free(self);
         }
 
+        fn get(const self, const offs: usz) ?T {
+            const r = self.ptr + offs;
+            if self.min <= r && r <= self.max {
+                return (?T)::Some(*r);
+            } else {
+                return (?T)::None;
+            }
+        }
+
         fn __subscript__(self, const offs: usz) *T {
             const r = self.ptr + offs;
             if @COMPILE_MODE == 2 || self.min <= r && r <= self.max {

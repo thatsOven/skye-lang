@@ -1,6 +1,6 @@
 namespace std {
     namespace collections {
-        fn linearSearch[T](const array: T, const len: usz, const item: &const T) ?usz {
+        fn linearSearch[T, U](const array: T, const len: usz, const item: &const U) ?usz {
             for let i = 0usz; i < len; i++ {
                 if array[i] == item {
                     return (?usz)::Some(i);
@@ -10,7 +10,7 @@ namespace std {
             return (?usz)::None;
         }
 
-        fn contains[T](const array: T, const len: usz, const item: &const T) bool {
+        fn contains[T, U](const array: T, const len: usz, const item: &const U) bool {
             return std::collections::linearSearch(array, len, item).isSome();
         }
 
@@ -32,7 +32,7 @@ namespace std {
 
             const tmp = array[from];
             while from-- > to {
-                array[i + 1] = array[i];
+                array[from + 1] = array[from];
             }
             array[to] = tmp;
         }
@@ -44,7 +44,7 @@ namespace std {
 
             const tmp = array[from];
             for ; from < to; from++ {
-                array[i] = array[i + 1];
+                array[from] = array[from + 1];
             }
             array[to] = tmp;
         }

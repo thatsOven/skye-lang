@@ -66,7 +66,7 @@ namespace std {
             const dir = opendir(buf.array.ptr);
 
             if (dir == @nullptr) return ListDirResult::Error;
-            return ListDirResult::Ok(DirectoryIterator.{ dir });
+            return ListDirResult::Ok(std::os::DirectoryIterator.{ dir });
         }
     }
 }
