@@ -57,7 +57,7 @@ const RESULT_I32_MAIN: &str = concat!(
     "    _SKYE_INIT();\n",
     "    core_DOT_Result_GENOF_void_GENAND_i32_GENEND_ result = _SKYE_MAIN();\n",
     "    if (result.kind == core_DOT_Result_DOT_Kind_DOT_Ok) return 0;\n",
-    "    return result.error;\n",
+    "    return result.Error;\n",
     "}\n\n"
 );
 const RESULT_I32_MAIN_PLUS_STD_ARGS: &str = concat!(
@@ -65,7 +65,7 @@ const RESULT_I32_MAIN_PLUS_STD_ARGS: &str = concat!(
     "    _SKYE_INIT();\n",
     "    core_DOT_Result_GENOF_void_GENAND_i32_GENEND_ result = _SKYE_MAIN(argc, argv);\n",
     "    if (result.kind == core_DOT_Result_DOT_Kind_DOT_Ok) return 0;\n",
-    "    return result.error;\n",
+    "    return result.Error;\n",
     "}\n\n"
 );
 const RESULT_I32_MAIN_PLUS_ARGS: &str = concat!(
@@ -75,7 +75,7 @@ const RESULT_I32_MAIN_PLUS_ARGS: &str = concat!(
     "    core_DOT_Result_GENOF_void_GENAND_i32_GENEND_ result = _SKYE_MAIN(args);\n",
     "    core_DOT_Array_DOT_free_GENOF_core_DOT_Slice_GENOF_char_GENEND__GENAND_core_DOT_mem_DOT_HeapAllocator_GENEND_(&args);\n",
     "    if (result.kind == core_DOT_Result_DOT_Kind_DOT_Ok) return 0;\n",
-    "    return result.error;\n",
+    "    return result.Error;\n",
     "}\n\n"
 );
 const I32_MAIN: &str = concat!(
@@ -2703,9 +2703,9 @@ impl CodeGen {
                                         self.definitions[index].push_indent();
                                         self.definitions[index].push("}\n");
 
-                                        if let Some(variant) = variants.as_ref().unwrap().get("some") {
+                                        if let Some(variant) = variants.as_ref().unwrap().get("Some") {
                                             SkyeValue::new(
-                                                Rc::from(format!("{}.some", tmp_var_name)),
+                                                Rc::from(format!("{}.Some", tmp_var_name)),
                                                 variant.clone(),
                                                 true
                                             )
@@ -2727,13 +2727,13 @@ impl CodeGen {
                                             self.definitions[index].push(&tmp_var_name);
                                             self.definitions[index].push(";\n");
                                         } else if let SkyeType::Enum(full_name, return_variants, _) = &return_type {
-                                            if let Some(return_variant) = return_variants.as_ref().unwrap().get("error") {
-                                                if let Some(variant) = variants.as_ref().unwrap().get("error") {
+                                            if let Some(return_variant) = return_variants.as_ref().unwrap().get("Error") {
+                                                if let Some(variant) = variants.as_ref().unwrap().get("Error") {
                                                     if variant.equals(return_variant, EqualsLevel::Typewise) {
                                                         self.definitions[index].push(&full_name);
                                                         self.definitions[index].push("_DOT_Error(");
                                                         self.definitions[index].push(&tmp_var_name);
-                                                        self.definitions[index].push(".error);\n");
+                                                        self.definitions[index].push(".Error);\n");
                                                     } else {
                                                         ast_error!(
                                                             self, expr,
@@ -2756,7 +2756,7 @@ impl CodeGen {
 
                                                     ast_note!(return_expr, "Return type defined here");
                                                 }
-                                            } else if let Some(variant) = variants.as_ref().unwrap().get("error") {
+                                            } else if let Some(variant) = variants.as_ref().unwrap().get("Error") {
                                                 ast_error!(
                                                     self, expr,
                                                     format!(
@@ -2778,9 +2778,9 @@ impl CodeGen {
                                         self.definitions[index].push_indent();
                                         self.definitions[index].push("}\n");
 
-                                        if let Some(variant) = variants.as_ref().unwrap().get("ok") {
+                                        if let Some(variant) = variants.as_ref().unwrap().get("Ok") {
                                             SkyeValue::new(
-                                                Rc::from(format!("{}.ok", tmp_var_name)),
+                                                Rc::from(format!("{}.Ok", tmp_var_name)),
                                                 variant.clone(),
                                                 true
                                             )
@@ -6957,7 +6957,7 @@ impl CodeGen {
                             return Ok(None);
                         }
 
-                        variants.as_ref().unwrap().get("some").unwrap().clone()
+                        variants.as_ref().unwrap().get("Some").unwrap().clone()
                     } else {
                         ast_error!(
                             self, iterator_expr,
@@ -7006,7 +7006,7 @@ impl CodeGen {
                 self.definitions[index].push(&var_name.lexeme);
                 self.definitions[index].push(" = ");
                 self.definitions[index].push(&next_call.value);
-                self.definitions[index].push(".some;\n");
+                self.definitions[index].push(".Some;\n");
 
                 let continue_label = Rc::from(self.get_temporary_var());
                 let break_label = Rc::from(self.get_temporary_var());
