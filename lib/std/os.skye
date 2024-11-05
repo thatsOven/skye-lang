@@ -1,6 +1,18 @@
 #bind fn system(const command: *const char) i32;
 #bind fn remove(const file: *const char) i32;
 
+import <"dirent.h">
+
+struct CDir: DIR;
+struct CDirent: dirent {
+    // other fields currently aren't relevant for us
+    const d_name: *const char
+}
+
+#bind fn opendir(const path: *const char) *CDir;
+#bind fn readdir(const dir: *const CDir) *CDirent;
+#bind fn closedir(const dir: *const CDir);
+
 namespace std {
     namespace os {
         macro SEPARATOR @WINDOWS ? '\\' : '/';
@@ -25,6 +37,36 @@ namespace std {
 
             if (result) return (!void)::Error;    
             return (!void)::Ok;
+        }
+
+        struct DirectoryIterator {
+            const dir: &const CDir
+        }
+
+        impl std::os::DirectoryIterator {
+            fn next(const self) ?String {
+                const de = readdir(self.dir);
+
+                if de == @nullptr {
+                    closedir(self.dir);
+                    return (?String)::None;
+                }
+
+                return (?String)::Some(core::utils::cStringToString(de.d_name));
+            }
+        }
+
+        fn listDir(const path: String) std::os::DirectoryIterator!void {
+            use std::os::DirectoryIterator!void as ListDirResult;
+
+            let buf = core::Array::new[char]();
+            defer buf.free();
+
+            @format(&buf, "{path}\0");
+            const dir = opendir(buf.array.ptr);
+
+            if (dir == @nullptr) return ListDirResult::Error;
+            return ListDirResult::Ok(DirectoryIterator.{ dir });
         }
     }
 }
