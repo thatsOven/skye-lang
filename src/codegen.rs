@@ -634,6 +634,10 @@ impl CodeGen {
                                 }
                             }
 
+                            if matches!(evaluated.type_, SkyeType::Char) {
+                                break 'interpolated_expr_blk Expression::Slice(tok.clone(), vec![portion_expr]);
+                            }
+
                             let mut search_tok = Token::dummy(Rc::from("asString"));
                             if self.get_method(&evaluated, &search_tok, false, index).is_some() {
                                 Expression::Call(
