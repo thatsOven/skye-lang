@@ -1,6 +1,6 @@
 namespace std {
     namespace collections {
-        fn linearSearch[T, U](const array: T, const len: usz, const item: &const U) ?usz {
+        fn linearSearch[T, U](const array: &const T, const len: usz, const item: &const U) ?usz {
             for let i = 0usz; i < len; i++ {
                 if array[i] == item {
                     return (?usz)::Some(i);
@@ -10,22 +10,22 @@ namespace std {
             return (?usz)::None;
         }
 
-        fn contains[T, U](const array: T, const len: usz, const item: &const U) bool {
+        fn contains[T, U](const array: &const T, const len: usz, const item: &const U) bool {
             return std::collections::linearSearch(array, len, item).isSome();
         }
 
-        fn swap[T](const array: T, const a: usz, const b: usz) {
+        fn swap[T](const array: &T, const a: usz, const b: usz) {
             const tmp = array[a];
             array[a]  = array[b];
             array[b]  = tmp;
         }
 
-        fn reverse[T](const array: T, a: usz, b: usz) {
+        fn reverse[T](const array: &T, a: usz, b: usz) {
             b--;
             while (a < b) std::collections::swap(array, a++, b--);
         }
 
-        fn moveLeft[T](const array: T, from: usz, const to: usz) {
+        fn moveLeft[T](const array: &T, from: usz, const to: usz) {
             if @COMPILE_MODE != 2 && from < to {
                 @panic("std::collections::moveLeft: cannot move to right");
             }
@@ -37,7 +37,7 @@ namespace std {
             array[to] = tmp;
         }
 
-        fn moveRight[T](const array: T, from: usz, const to: usz) {
+        fn moveRight[T](const array: &T, from: usz, const to: usz) {
             if @COMPILE_MODE != 2 && to < from {
                 @panic("std::collections::moveRight: cannot move to left");
             }
@@ -49,20 +49,20 @@ namespace std {
             array[to] = tmp;
         }
 
-        fn move[T](const array: T, const from: usz, const to: usz) {
+        fn move[T](const array: &T, const from: usz, const to: usz) {
             if (from < to) std::collections::moveRight(array, from, to);
             else           std::collections::moveLeft( array, from, to);
         }
 
-        fn blockSwap[T](const array: T, a: usz, b: usz, len: usz) {
+        fn blockSwap[T](const array: &T, a: usz, b: usz, len: usz) {
             while (len--) std::collections::swap(array, a++, b++);
         }
 
-        fn blockSwapBW[T](const array: T, a: usz, b: usz, len: usz) {
+        fn blockSwapBW[T](const array: &T, a: usz, b: usz, len: usz) {
             while (len--) std::collections::swap(array, a + len, b + len);
         }
 
-        fn rotate[T](const array: T, a: usz, const m: usz, b: usz) {
+        fn rotate[T](const array: &T, a: usz, const m: usz, b: usz) {
             let rl = b - m;
             let ll = m - a;
 

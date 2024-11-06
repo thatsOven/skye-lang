@@ -3,7 +3,7 @@
 
 import <"dirent.h">;
 
-struct CDir: DIR;
+#typedef struct CDir: DIR;
 struct CDirent: dirent {
     // other fields currently aren't relevant for us
     const d_name: *const char

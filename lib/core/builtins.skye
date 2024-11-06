@@ -444,11 +444,11 @@ namespace core {
         }
 
         fn split[A = core::mem::HeapAllocator](self, const buf: &core::Array[Self[char, U], A], const ch: char) {
-            buf.push(Self::init(self.allocator));
+            buf.push(Self::init[char, U](self.allocator));
 
             for let i = 0usz; i < self.length; i++ {
                 if self.array[i] == ch {
-                    buf.push(Self::init(self.allocator));
+                    buf.push(Self::init[char, U](self.allocator));
                 } else {
                     buf.last().unwrap().push(self.array[i]);
                 }
