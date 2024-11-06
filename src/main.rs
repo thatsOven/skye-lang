@@ -7,6 +7,7 @@ use skye::{compile_file_to_c, compile_file_to_exec, copy_dir_recursive, get_pack
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
 
 // TODO
+// - cd to project directory when calling build.skye
 // - automatically escape strings when concatenating
 // - panic when trying to access unset variant of sum type enum
 // - support % operator for floats (reimplement or bind fmod and call it implictly)
