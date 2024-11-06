@@ -1,7 +1,7 @@
 namespace std {
     namespace random {
         struct PseudoRandom {
-            seed: u32;
+            seed: u32
         }
 
         impl std::random::PseudoRandom {
