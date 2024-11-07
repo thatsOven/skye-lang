@@ -47,7 +47,7 @@ namespace build {
         defer buf.free();
 
         if @UNIX_LIKE {
-            buf.pushString("c99 -Wall -Wextra -lm ");
+            buf.pushString("c99 -w -lm ");
         } else {
             @todo("This platform is not supported yet, sorry!");
         }

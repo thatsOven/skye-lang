@@ -144,8 +144,7 @@ pub fn basic_compile_c(input: &OsStr, output: &OsStr) -> Result<(), Error> {
             .arg(input)
             .arg("-o")
             .arg(output)
-            .arg("-Wall")
-            .arg("-Wextra")
+            .arg("-w")
             .arg("-lm")
             .status()?;
     } else if cfg!(windows) {
