@@ -11,7 +11,7 @@ struct CDirent: dirent {
 
 #bind fn opendir(const path: *const char) *CDir;
 #bind fn readdir(const dir: *const CDir) *CDirent;
-#bind fn closedir(const dir: *const CDir);
+#bind fn closedir(const dir: *const CDir) i32;
 
 namespace std {
     namespace os {
@@ -28,15 +28,17 @@ namespace std {
             return (!i32)::Ok;
         }
 
-        fn removeFile(const file: String) !void {
+        fn removeFile(const file: String) !String {
             let buf = core::Array::new[char]();
             defer buf.free();
 
             @format(&buf, "{file}\0");
-            const result = remove(buf.array.ptr);
 
-            if (result) return (!void)::Error;    
-            return (!void)::Ok;
+            if remove(buf.array.ptr) {
+                return (!String)::Error(core::utils::cStringToString(strerror(errno))); 
+            }   
+
+            return (!String)::Ok;
         }
 
         struct DirectoryIterator {
@@ -44,20 +46,27 @@ namespace std {
         }
 
         impl std::os::DirectoryIterator {
-            fn next(const self) ?String {
+            fn next(const self) ?(String!String) {
+                use String!String as NextResult;
+                use ?NextResult   as NextOption;
+
+                errno = 0;
                 const de = readdir(self.dir);
 
                 if de == @nullptr {
-                    closedir(self.dir);
-                    return (?String)::None;
+                    if errno || closedir(self.dir) {
+                        return NextOption::Some(NextResult::Error(core::utils::cStringToString(strerror(errno))));
+                    } else {
+                        return NextOption::None;
+                    }
                 }
 
-                return (?String)::Some(core::utils::cStringToString(de.d_name));
+                return NextOption::Some(NextResult::Ok(core::utils::cStringToString(de.d_name)));
             }
         }
 
-        fn listDir(const path: String) std::os::DirectoryIterator!void {
-            use std::os::DirectoryIterator!void as ListDirResult;
+        fn listDir(const path: String) std::os::DirectoryIterator!String {
+            use std::os::DirectoryIterator!String as ListDirResult;
 
             let buf = core::Array::new[char]();
             defer buf.free();
@@ -65,7 +74,7 @@ namespace std {
             @format(&buf, "{path}\0");
             const dir = opendir(buf.array.ptr);
 
-            if (dir == @nullptr) return ListDirResult::Error;
+            if (dir == @nullptr) return ListDirResult::Error(core::utils::cStringToString(strerror(errno)));
             return ListDirResult::Ok(std::os::DirectoryIterator.{ dir });
         }
     }

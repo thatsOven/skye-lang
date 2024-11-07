@@ -7,12 +7,23 @@ namespace build {
         ReleaseUnsafe
     }
 
-    fn system(const command: String) !void {
-        if std::os::system(command).isError() {
+    fn wrap[T](const source: String, const result: T) !void {
+        if result.isError() {
+            @println("{source}: {result.Error}");
             return (!void)::Error;
         }
-
+    
         return (!void)::Ok;
+    }
+
+    fn system(const command: String) !void {
+        @println("build::system: \"{command}\"");
+        return build::wrap("build::system: non-zero return code", std::os::system(command));
+    }
+
+    fn removeFile(const file: String) !void {
+        @println("build::removeFile: \"{file}\"");
+        return build::wrap("build::removeFile", std::os::removeFile(file));
     }
 
     fn compileSkye(const input: String, const output: String, const compileMode: build::Mode) !void {

@@ -2,6 +2,7 @@ import <"stdlib.h">;
 import <"stdio.h">;
 import <"string.h">;
 import <"math.h">;
+import <"errno.h">;
 
 #bind fn pow(base: f64, exp: f64) f64;
 
@@ -18,12 +19,22 @@ import <"math.h">;
 #bind fn fflush(file: *CFile) i32;
 #bind fn fread(buf: voidptr, size: usz, count: usz, file: *CFile) usz;
 
+#bind fn strerror(errnum: i32) *const char;
+
 // actually not macros but this "hides" the C handles a little bit
 macro stdout -> *CFile;
 macro stderr -> *CFile;
 macro stdin  -> *CFile;
 
+let errno: i32;
+
 namespace core {
+    namespace utils {
+        fn cStringLength(const str: *const char) usz {
+            return strlen(str);
+        }
+    }
+
     namespace mem {
         struct HeapAllocator {}
 
@@ -93,7 +104,7 @@ namespace core {
                 return Self.{ cFile };
             }
 
-            fn open(const filename: String, const mode: core::io::FileOpenMode) Self!void {
+            fn open(const filename: String, const mode: core::io::FileOpenMode) Self!String {
                 let buf = @cast(*char, core::mem::heapAllocator.allocRaw(filename.length + 1));
                 defer core::mem::heapAllocator.freeRaw(@cast(voidptr, buf));
 
@@ -103,34 +114,38 @@ namespace core {
                 const cFile = fopen(buf, core::io::fileOpenModeToCMode(mode));
                 
                 if cFile == @nullptr {
-                    return (Self!void)::Error;
+                    const ptr = strerror(errno);
+                    return (Self!String)::Error(String.{ ptr, length: core::utils::cStringLength(ptr) });
                 }
                 
-                return (Self!void)::Ok(Self.{ cFile });
+                return (Self!String)::Ok(Self.{ cFile });
             }
 
-            fn close(self) !void {
+            fn close(self) !String {
                 if fclose(self.cFile) {
-                    return (!void)::Error;
+                    const ptr = strerror(errno);
+                    return (!String)::Error(String.{ ptr, length: core::utils::cStringLength(ptr) });
                 }
 
-                return (!void)::Ok;
+                return (!String)::Ok;
             }
 
-            fn write[T](self, const items: core::Slice[T]) !void {
+            fn write[T](self, const items: core::Slice[T]) !String {
                 if fwrite(@cast(voidptr, @constCast(items.ptr)), @sizeOf(T), items.length, self.cFile) != items.length {
-                    return (!void)::Error;
+                    const ptr = strerror(errno);
+                    return (!String)::Error(String.{ ptr, length: core::utils::cStringLength(ptr) });
                 }
 
-                return (!void)::Ok;
+                return (!String)::Ok;
             }
 
-            fn flush(self) !void {
+            fn flush(self) !String {
                 if fflush(self.cFile) {
-                    return (!void)::Error;
+                    const ptr = strerror(errno);
+                    return (!String)::Error(String.{ ptr, length: core::utils::cStringLength(ptr) });
                 }
 
-                return (!void)::Ok;
+                return (!String)::Ok;
             }
 
             // buf has to point to at least amt * size bytes
@@ -142,12 +157,6 @@ namespace core {
         let stdOut: core::io::File;
         let stdErr: core::io::File;
         let stdIn:  core::io::File;
-    }
-
-    namespace utils {
-        fn cStringLength(const str: *const char) usz {
-            return strlen(str);
-        }
     }
 }
 

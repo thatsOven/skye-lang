@@ -25,7 +25,7 @@ const BUILD_FILE_INIT: &[u8] = concat!(
     "fn main() !void {\n",
     "    try build::compileSkye(\"src/main.skye\", \"tmp.c\", build::Mode::Debug);\n",
     "    try build::compileCDefault(\"tmp.c\", \"helloworld\");\n",
-    "    try std::os::removeFile(\"tmp.c\");\n\n",
+    "    try build::removeFile(\"tmp.c\");\n\n",
     "    return (!void)::Ok;\n",
     "}"
 ).as_bytes();
