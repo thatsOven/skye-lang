@@ -1,7 +1,7 @@
 import <<"core/internals.h">>;
 
 // compiler built-ins
-macro typeOf(item) void; 
+macro typeOf(item) void;
 macro cast(type, item) void;
 macro constCast(ptr) void;
 macro concat(strings*) void;
@@ -54,8 +54,8 @@ macro sizeOf(E) -> usz;
 macro nullptr 0;
 
 use (
-    u8  | i8  | u16 | i16 | 
-    u32 | i32 | u64 | i64 | 
+    u8  | i8  | u16 | i16 |
+    u32 | i32 | u64 | i64 |
     usz
 ) as AnyInt;
 
@@ -151,7 +151,7 @@ namespace core {
     impl[T] core::SliceIterator[T] {
         fn new(const slice: &const core::Slice[T]) Self[T] {
             return core::SliceIterator.{ slice, idx: 0 };
-        } 
+        }
 
         fn next(self) ?T {
             return self.slice.get(self.idx++);
@@ -161,14 +161,14 @@ namespace core {
     namespace mem {
         fn blockCopy(from: voidptr, to: voidptr, amt: usz) {
             while amt-- {
-                *@cast(*u8, to++) = *@cast(*u8, from++); 
+                *@cast(*u8, to++) = *@cast(*u8, from++);
             }
         }
 
         fn typedBlockCopy[T](from: T, to: T, amt: usz) {
             while amt-- {
-                *(to++) = *(from++); 
-            } 
+                *(to++) = *(from++);
+            }
         }
     }
 }
@@ -184,7 +184,7 @@ impl[T] core::Slice[T] {
 
     fn __eq__(const self, const other: &const Self[T]) bool {
         if (self.length != other.length) return false;
-        
+
         for let i = 0usz; i < self.length; i++ {
             if self[i] != other[i] {
                 return false;
@@ -257,7 +257,7 @@ impl[T] core::Option[T] {
 
 impl[T, U] core::Result[T, U] {
     fn expect(const self, msg: String) T {
-        if self.kind == core::Result::Kind::Ok {            
+        if self.kind == core::Result::Kind::Ok {
             switch T {
                 void    -> return;
                 default -> return self.Ok;
