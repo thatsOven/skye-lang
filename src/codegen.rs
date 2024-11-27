@@ -2434,7 +2434,7 @@ impl CodeGen {
                                                 }
                                             };
 
-                                            SkyeValue::new(Rc::from(format!("&{}", value)), SkyeType::Pointer(Box::new(new_inner.type_), new_inner.is_const, false), true)
+                                            SkyeValue::new(Rc::from(format!("&{}", value)), SkyeType::Pointer(Box::new(new_inner.type_), new_inner.is_const, true), true)
                                         }
                                         ImplementsHow::No => {
                                             token_error!(

@@ -26,11 +26,11 @@ fn main() {
 ```
 
 # Projects
-Creating a new project in Skye is simple! 
+Creating a new project in Skye is simple!
 
 If your project is a simple one that doesn't need any specific compiler flag, you can just create a new file containing your Skye code, and then compile it or run it directly by using `skye compile <file>` or `skye run <file>` respectively.
 
-If you're working with a bigger project (this is the most common case, since you'll be working with C compilers) you can create a Skye project by using the `skye new` command. At this stage, you should choose if you want to create a standalone program (`skye new standalone <project_name>`), or a Skye package (`skye new package <project_name>`). 
+If you're working with a bigger project (this is the most common case, since you'll be working with C compilers) you can create a Skye project by using the `skye new` command. At this stage, you should choose if you want to create a standalone program (`skye new standalone <project_name>`), or a Skye package (`skye new package <project_name>`).
 
 Standalone projects can be built by using the `skye build` command, and Skye packages can be exported using `skye export`. The result of `skye export` is a `zip` file that can be installed using `skye install <package_file>`. To remove an installed package, use `skye remove <package_name>`.
 
@@ -40,7 +40,7 @@ The Skye package manager has no notion of versions, so feature-wise versioning s
 ```
 // This is a comment
 
-/* 
+/*
     This is a multiline comment
     It can't be nested
 */
@@ -65,7 +65,7 @@ Floats:
 f32 f64
 
 Other:
-char 
+char
 voidptr (void*, mostly for C interop)
 ```
 No implicit casting is performed, every cast must be performed explictly using the `@cast` macro.
@@ -126,7 +126,7 @@ Conditionals in Skye accept any numeric type as their condition, just like in C.
 ## If statements
 ```
 if 2 + 2 == 4 {
-	const a = true;	
+	const a = true;
 	if (a) @println("True!");
 }
 ```
@@ -168,7 +168,7 @@ switch a {
         @println("Nope!");
     }
     // you can use an arrow instead of a block if you want to use a single statement for a case
-    0 -> @println("Still nope"); 
+    0 -> @println("Still nope");
     2 -> @println("Here!");
     default {
         @println("Something else");
@@ -226,7 +226,7 @@ let aFunctionPointer: fn (i32) void = a;
 aFunctionPointer(3);
 ```
 # Pointers
-There are two types of pointers in Skye: the raw pointer, and the reference. 
+There are two types of pointers in Skye: the raw pointer, and the reference.
 
 Pointers are their own type. They point to a location in memory, support pointer arithmetics, and behave as an indipendent type.
 On the other hand, references internally work like pointers, but they just operate as the underlying data type. For example, if you have two references to `i32`s, you can add them directly without dereferencing them, because the compiler does it automatically.
@@ -240,7 +240,7 @@ let a = 2;
 // the address pointed by these pointers can be mutated
 let aPtr: *i32 = &a; // a can be mutated through this pointer
 let aConstPtr: *const i32 = &a; // a cannot be mutated through this pointer
-let anotherConstPtr = &const a; // you can also use the `&const` operator to create a const pointer
+let anotherConstPtr: *const i32 = &const a; // you can also use the `&const` operator to create a const reference, which can be casted to a pointer
 
 // the address pointed by these pointers cannot be mutated
 const constAPtr: *i32 = &a; // a can be mutated through this pointer
@@ -326,9 +326,9 @@ enum ClassicEnum {
     Variant2
 }
 
-// by default, enum variants are typed `i32`, 
+// by default, enum variants are typed `i32`,
 // but you can specify a custom time using the `as` keyword
-enum U64Enum as u64 { 
+enum U64Enum as u64 {
     Variant1,
     Variant2
 }
@@ -386,7 +386,7 @@ Structs, bitfields, and unions can be initialized through a compound literal:
 let myStructInstance = MyStructBinding.{ x: 1.0, y: 2.0 };
 let a = 2;
 // field name can be omitted when it collides with the expression name
-let myBitfieldInstance = MyBitfieldBinding.{ a, b: 1 }; 
+let myBitfieldInstance = MyBitfieldBinding.{ a, b: 1 };
 let myUnionInstance = MyUnionBinding.{ a }; // only one field of a union can be initialized
 ```
 # Impl
@@ -400,8 +400,8 @@ struct MyStruct {
 impl MyStruct {
     fn new(myField: i32, anotherField: u64) Self {
         return MyStruct.{ myField, anotherField };
-    } 
-   
+    }
+
     // self doesn't need type specifiers!
     fn add(const self) i32 {
         return self.myField + @cast(i32, self.anotherField);
@@ -471,7 +471,7 @@ struct MyStruct[T] {
 
 impl[T] MyStruct[T] {
     fn new(a: T, b: T) Self[T] {
-        return Self.{ a, b }; 
+        return Self.{ a, b };
     }
 }
 
@@ -525,7 +525,7 @@ fn errorIfNegative(x: i32) u32!i32 { // u32!i32 corresponds to core::Result[u32,
 fn main() !i32 { // omitting the left value makes the compiler assume it's `void`
    let result = try errorIfNegative(-2); // the try operator propagates the error if there is one
    // when using the try operator, error types need to match
-   
+
    return (!i32)::Ok;
 }
 ```
@@ -591,7 +591,7 @@ interface Animal {
 fn main() {
     let animal = @cast(Animal, Dog.{}); // you can convert an instance of a type to a compatible interface using a cast
     const dog = @cast(Dog, animal).unwrap(); // casting the interface back to its type can fail, so it may return none
-    
+
     animal.speak(); // Woof!
 
     animal = @cast(Animal, Cat.{});
@@ -630,8 +630,8 @@ This approach to type dispatching has been experimented with in Rust, and has sh
 | Negation | `-x` | ... |
 | Boolean not | `!x` | Can also define a `Result` type with `Ok = void` |
 | Bitwise not | `~x` | ... |
-| Reference | `&x` | Returns a pointer to `x`. Can also define a reference type if applied to a type |
-| Const reference | `&const x` | Returns a const pointer to `x` (`x` cannot be modified through that pointer). Can also define a const reference type if applied to a type |
+| Reference | `&x` | Returns a reference to `x`. Can also define a reference type if applied to a type |
+| Const reference | `&const x` | Returns a const reference to `x` (`x` cannot be modified through that reference). Can also define a const reference type if applied to a type |
 | Dereference | `*x` | Dereferences a pointer. Can also define a pointer type if applied to a type [*4](#additional-information) |
 | Const dereference | `*const x` | Dereferences a pointer and returns a `const` value. Can also define a const pointer type if applied to a type [*4](#additional-information) |
 | Option | `?x` | Defines an `Option[x]` type where `x` is a type |

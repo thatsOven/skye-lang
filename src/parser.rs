@@ -1,8 +1,8 @@
 use std::{collections::HashMap, rc::Rc};
 
 use crate::{
-    ast::{BitfieldField, EnumVariant, Expression, FunctionParam, Generic, ImportType, LiteralKind, MacroBody, MacroParams, Statement, StructField, SwitchCase, Ast}, 
-    ast_error, ast_note, token_error, token_note, 
+    ast::{BitfieldField, EnumVariant, Expression, FunctionParam, Generic, ImportType, LiteralKind, MacroBody, MacroParams, Statement, StructField, SwitchCase, Ast},
+    ast_error, ast_note, token_error, token_note,
     tokens::{Token, TokenType}
 };
 
@@ -41,7 +41,7 @@ macro_rules! prefix_unary {
                 let right = self.$name()?;
                 return Some(Expression::Unary(op, Box::new(right), true));
             }
-    
+
             self.$next()
         }
     };
@@ -51,12 +51,12 @@ macro_rules! suffix_unary {
     ($name: tt, $next: tt, $types: expr) => {
         fn $name(&mut self) -> Option<Expression> {
             let expr = self.$next()?;
-    
+
             if self.match_($types) {
                 let op = self.previous().clone();
                 return Some(Expression::Unary(op, Box::new(expr), false));
             }
-    
+
             Some(expr)
         }
     };
@@ -100,7 +100,7 @@ impl Parser {
         }
 
         self.peek().type_ == type_
-    } 
+    }
 
     fn match_(&mut self, types: &[TokenType]) -> bool {
         for type_ in types {
@@ -124,9 +124,9 @@ impl Parser {
             match self.peek().type_ {
                 TokenType::Struct | TokenType::Fn | TokenType::If |
                 TokenType::Return | TokenType::Let | TokenType::While |
-                TokenType::Enum | TokenType::Import | TokenType::Defer | 
-                TokenType::Impl | TokenType::Namespace | TokenType::Switch | 
-                TokenType::Continue | TokenType::Break | TokenType::Do | 
+                TokenType::Enum | TokenType::Import | TokenType::Defer |
+                TokenType::Impl | TokenType::Namespace | TokenType::Switch |
+                TokenType::Continue | TokenType::Break | TokenType::Do |
                 TokenType::Macro | TokenType::Use => return,
                 _ => ()
             }
@@ -218,8 +218,8 @@ impl Parser {
             method_tok.set_lexeme("core_DOT_Array_DOT_from");
 
             return Some(Expression::Call(
-                Box::new(Expression::Variable(method_tok)), 
-                opening_brace.clone(), 
+                Box::new(Expression::Variable(method_tok)),
+                opening_brace.clone(),
                 vec![Expression::Slice(opening_brace, items)]
             ));
         }
@@ -231,7 +231,7 @@ impl Parser {
         match_literal!(self, Usz);
         match_literal!(self, AnyInt);    match_literal!(self, AnyFloat);
         match_literal!(self, RawString); match_literal!(self, String); match_literal!(self, Char);
-        
+
         let last = self.peek();
         token_error!(self, last, "Expecting expression");
 
@@ -337,8 +337,8 @@ impl Parser {
 
     fn prefix_unary(&mut self) -> Option<Expression> {
         if self.match_(&[
-            TokenType::PlusPlus, TokenType::MinusMinus, TokenType::Plus, 
-            TokenType::Minus, TokenType::Tilde, TokenType::Star, 
+            TokenType::PlusPlus, TokenType::MinusMinus, TokenType::Plus,
+            TokenType::Minus, TokenType::Tilde, TokenType::Star,
             TokenType::Bang, TokenType::BitwiseAnd
         ]) {
             let mut op = self.previous().clone();
@@ -453,7 +453,7 @@ impl Parser {
         let kw = self.previous().clone();
 
         let cond = self.expression()?;
-        
+
         let then_branch = {
             if let Expression::Grouping(_) = cond {
                 self.statement()?
@@ -535,12 +535,12 @@ impl Parser {
                 if has_paren {
                     let r = {
                         if self.check(TokenType::RightParen) {
-                            Vec::new() 
+                            Vec::new()
                         } else {
                             self.get_expressions()?
                         }
                     };
-    
+
                     self.consume(TokenType::RightParen, "Expecting ')' after for increment")?;
                     r
                 } else if self.check(TokenType::LeftBrace) {
@@ -549,7 +549,7 @@ impl Parser {
                     self.get_expressions()?
                 }
             };
-    
+
             let body = {
                 if has_paren {
                     if self.match_(&[TokenType::Semicolon]) {
@@ -562,7 +562,7 @@ impl Parser {
                     self.get_block()?
                 }
             };
-    
+
             Some(Statement::For(kw, initializer, cond, increment, Box::new(body)))
         } else { // foreach
             let body = {
@@ -618,7 +618,7 @@ impl Parser {
             if tok.lexeme.as_ref() != "_" {
                 token_error!(self, self.previous(), "Expecting '_' after defer let");
                 token_note!(
-                    self.previous(), 
+                    self.previous(),
                     concat!(
                         "Variable declaration is not allowed in defer statements. ",
                         "The \"let\" keyword in this context is used for discarding errors"
@@ -633,7 +633,7 @@ impl Parser {
             Some(Statement::Defer(kw, Box::new(Statement::VarDecl(tok, Some(expr), None, false, Vec::new()))))
         } else {
             Some(Statement::Defer(kw, Box::new(self.statement()?)))
-        }        
+        }
     }
 
     fn switch_statement(&mut self) -> Option<Statement> {
@@ -762,7 +762,7 @@ impl Parser {
 
         let type_ = {
             if self.match_(&[TokenType::Colon]) {
-                Some(self.type_expression()?) 
+                Some(self.type_expression()?)
             } else {
                 None
             }
@@ -854,7 +854,7 @@ impl Parser {
             loop {
                 let is_const = self.match_(&[TokenType::Const]);
                 let p_name = self.consume(TokenType::Identifier, "Expecting parameter name")?.clone();
-                
+
                 if method && p_name.lexeme.as_ref() == "self" {
                     if self.match_(&[TokenType::Colon]) {
                         let type_expr = self.expression()?;
@@ -882,7 +882,7 @@ impl Parser {
                 } else {
                     self.consume(TokenType::Colon, "Expecting ':' after parameter name")?;
                     let type_ = self.expression()?;
-                    
+
                     params.push(FunctionParam::new(Some(p_name), type_, is_const));
                 }
 
@@ -924,7 +924,7 @@ impl Parser {
             }
 
             Some(Statement::Template(
-                name.clone(), 
+                name.clone(),
                 Box::new(Statement::Function(name, params, return_type, body, qualifiers, generic_names.clone(), false)),
                 generics, generic_names
             ))
@@ -985,7 +985,7 @@ impl Parser {
                         }
                     }
                 }
-        
+
                 self.consume(TokenType::RightBrace, "Expecting '}' after struct body")?;
                 true
             } else {
@@ -993,7 +993,7 @@ impl Parser {
                 false
             }
         };
-        
+
         if generics.len() == 0 {
             Some(Statement::Struct(name, fields, has_body, binding, Vec::new(), typedefed))
         } else {
@@ -1003,11 +1003,11 @@ impl Parser {
             }
 
             Some(Statement::Template(
-                name.clone(), 
+                name.clone(),
                 Box::new(Statement::Struct(name, fields, has_body, binding, generic_names.clone(), typedefed)),
                 generics, generic_names
             ))
-        } 
+        }
     }
 
     fn impl_decl(&mut self) -> Option<Statement> {
@@ -1078,7 +1078,7 @@ impl Parser {
         self.curr_qualifiers.clear();
 
         let use_expr = self.expression()?;
-        
+
         let as_ = {
             if let Expression::StaticGet(_, name, _) = &use_expr {
                 if self.match_(&[TokenType::As]) {
@@ -1091,7 +1091,7 @@ impl Parser {
                 self.consume(TokenType::Identifier, "Expecting identifier after \"as\"")?.clone()
             }
         };
-        
+
         self.consume(TokenType::Semicolon, "Expecting ';' after use statement")?;
         Some(Statement::Use(use_expr, as_, typedef, bind))
     }
@@ -1150,7 +1150,7 @@ impl Parser {
                 if !self.check(TokenType::RightBrace) {
                     loop {
                         let variant_name = self.consume(TokenType::Identifier, "Expecting field name")?.clone();
-                        
+
                         let type_ = {
                             if self.match_(&[TokenType::LeftParen]) {
                                 let res = self.expression()?;
@@ -1169,9 +1169,9 @@ impl Parser {
                                 Expression::Literal(Rc::from(""), variant_name.clone(), LiteralKind::Void)
                             }
                         };
-        
+
                         variants.push(EnumVariant::new(variant_name, type_));
-        
+
                         if !self.match_(&[TokenType::Comma]) {
                             break;
                         }
@@ -1201,11 +1201,11 @@ impl Parser {
             }
 
             Some(Statement::Template(
-                name.clone(), 
+                name.clone(),
                 Box::new(Statement::Enum(name, type_, variants, is_simple, has_body, binding, generic_names.clone(), typedefed)),
                 generics, generic_names
             ))
-        }        
+        }
     }
 
     fn import_statement(&mut self) -> Option<Statement> {
@@ -1292,7 +1292,7 @@ impl Parser {
                         }
                     }
                 }
-        
+
                 self.consume(TokenType::RightBrace, "Expecting '}' after union body")?;
                 true
             } else {
@@ -1300,7 +1300,7 @@ impl Parser {
                 false
             }
         };
-        
+
         Some(Statement::Union(name, fields, has_body, binding, typedefed))
     }
 
@@ -1364,7 +1364,7 @@ impl Parser {
                         }
                     }
                 }
-        
+
                 self.consume(TokenType::RightBrace, "Expecting '}' after bitfield body")?;
                 true
             } else {
@@ -1372,7 +1372,7 @@ impl Parser {
                 false
             }
         };
-        
+
         Some(Statement::Bitfield(name, fields, has_body, binding, typedefed))
     }
 
@@ -1468,7 +1468,7 @@ impl Parser {
             if self.match_(&[TokenType::For]) {
                 let has_paren = self.match_(&[TokenType::LeftParen]);
                 let exprs = self.get_nonzero_expressions()?;
-                
+
                 if has_paren {
                     self.consume(TokenType::RightParen, "Expecting ')' after list of types enclosed in parentheses")?;
                 }
@@ -1550,7 +1550,7 @@ impl Parser {
             } else {
                 self.curr_qualifiers.insert(Rc::clone(&name.lexeme), name);
             }
-            
+
             return self.declaration(method, incoming_generics, self_generics);
         }
 

@@ -11,7 +11,7 @@ pub enum TokenType {
     ShiftLeft, ShiftRight, Mod, Tilde,
     Arrow, Hash,
 
-    PlusPlus, MinusMinus, 
+    PlusPlus, MinusMinus,
     PlusEquals, MinusEquals,
     StarEquals, SlashEquals,
     OrEquals, AndEquals,
@@ -23,7 +23,7 @@ pub enum TokenType {
     Greater, GreaterEqual,
     Less, LessEqual,
 
-    LogicAnd, LogicOr, 
+    LogicAnd, LogicOr,
     BitwiseAnd, BitwiseOr, BitwiseXor,
 
     Identifier, RawString, String, Char,
@@ -31,10 +31,10 @@ pub enum TokenType {
     I8, I16, I32, I64, AnyInt,
     F32, F64, AnyFloat,
 
-    Struct, Else, Fn, For, If, Return, 
-    Let, While, Enum, Import, Defer, 
-    Impl, Void, Namespace, Switch, Continue, 
-    Break, Do, Macro, Const, Use, Try, As, 
+    Struct, Else, Fn, For, If, Return,
+    Let, While, Enum, Import, Defer,
+    Impl, Void, Namespace, Switch, Continue,
+    Break, Do, Macro, Const, Use, Try, As,
     Default, Union, Bitfield, Interface,
 
     StarConst, RefConst, Reserved,
