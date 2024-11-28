@@ -48,7 +48,7 @@ pub enum CompileMode {
 pub fn compile(source: &String, path: Option<&Path>, filename: Rc<str>, compile_mode: CompileMode, primitives: &String, no_panic: bool, skye_path: PathBuf) -> Option<String> {
     let mut statements = parse(source, Rc::clone(&filename))?;
     statements.insert(
-        0, 
+        0,
         Statement::Import(
             Token::new(
                 Rc::from(source.as_ref()),
@@ -62,7 +62,7 @@ pub fn compile(source: &String, path: Option<&Path>, filename: Rc<str>, compile_
     );
 
     statements.insert(
-        1, 
+        1,
         Statement::Import(
             Token::new(
                 Rc::from(source.as_ref()),
@@ -76,7 +76,7 @@ pub fn compile(source: &String, path: Option<&Path>, filename: Rc<str>, compile_
     );
 
     statements.insert(
-        2, 
+        2,
         Statement::Import(
             Token::new(
                 Rc::from(source.as_ref()),
@@ -91,7 +91,7 @@ pub fn compile(source: &String, path: Option<&Path>, filename: Rc<str>, compile_
 
     if !no_panic {
         statements.insert(
-            3, 
+            3,
             Statement::Import(
                 Token::new(
                     Rc::from(source.as_ref()),
@@ -140,13 +140,18 @@ pub fn compile_file_to_c(input: &OsStr, output: &OsStr, compile_mode: CompileMod
 
 pub fn basic_compile_c(input: &OsStr, output: &OsStr) -> Result<(), Error> {
     if cfg!(unix) {
-        Command::new("c99")
-            .arg(input)
-            .arg("-o")
-            .arg(output)
-            .arg("-w")
-            .arg("-lm")
-            .status()?;
+        if !(
+            Command::new("c99")
+                .arg(input)
+                .arg("-o")
+                .arg(output)
+                .arg("-w")
+                .arg("-lm")
+                .status()?
+                .success()
+        ) {
+            return Err(Error::other("Build failed"));
+        }
     } else if cfg!(windows) {
         todo!("Windows is not yet supported, sorry!")
     } else {
@@ -159,7 +164,7 @@ pub fn basic_compile_c(input: &OsStr, output: &OsStr) -> Result<(), Error> {
 pub fn compile_file_to_exec(input: &OsStr, output: &OsStr, compile_mode: CompileMode, primitives: &String, no_panic: bool, skye_path: PathBuf) -> Result<(), Error> {
     let buf = skye_path.join("tmp.c");
     let tmp_c = OsStr::new(buf.to_str().expect("Couldn't convert PathBuf to &str"));
-    
+
     compile_file_to_c(input, tmp_c, compile_mode, primitives, no_panic, skye_path)?;
     println!("Skye compilation was successful. Calling C compiler...\n");
     basic_compile_c(tmp_c, output)?;
@@ -173,7 +178,7 @@ pub fn run_skye(file: OsString, primitives: &String, program_args: &Option<Vec<S
 
     compile_file_to_exec(&file, &OsString::from(tmp), CompileMode::Debug, primitives, no_panic, skye_path)?;
     let mut com = Command::new(tmp);
-    
+
     if let Some(args) = program_args {
         com.args(args);
     }
@@ -189,7 +194,7 @@ pub fn get_package_data(orig_path: &str) -> Result<(Vec<PathBuf>, Vec<PathBuf>, 
     let mut project_name = PathBuf::new();
     let mut files_absolute = Vec::new();
     let mut files_relative = Vec::new();
-    
+
     let orig_path_buf = PathBuf::from(orig_path);
 
     for dir_entry in read_dir(orig_path)? {
@@ -212,7 +217,7 @@ pub fn get_package_data(orig_path: &str) -> Result<(Vec<PathBuf>, Vec<PathBuf>, 
                 } else if project_name != name {
                     return Ok((Vec::new(), Vec::new(), PathBuf::new()));
                 }
-                
+
                 files_absolute.push(orig_path_buf.join(&path));
                 files_relative.push(path);
                 file_count += 1;
@@ -275,7 +280,7 @@ pub fn write_package(data_absolute: &Vec<PathBuf>, data_relative: &Vec<PathBuf>,
 pub fn copy_dir_recursive(src: &PathBuf, dst: &PathBuf) -> Result<(), Error> {
     for entry in read_dir(src)? {
         let path = src.join(&entry?.file_name());
-        
+
         if path.is_file() {
             fs::copy(&path, &dst.join(path.file_name().unwrap()))?;
         } else {
