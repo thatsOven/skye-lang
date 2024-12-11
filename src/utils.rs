@@ -258,3 +258,7 @@ pub fn fix_raw_string(str: &str) -> String {
 
     buf
 }
+
+pub fn escape_string(str: &str) -> String {
+    str.replace('\\', "\\\\")
+}

@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, ffi::OsString, path::{Path, PathBuf}, rc::Rc};
 
 use crate::{
-    ast::{Ast, EnumVariant, Expression, FunctionParam, ImportType, LiteralKind, MacroBody, MacroParams, Statement, SwitchCase}, ast_error, ast_info, ast_note, ast_warning, environment::{Environment, SkyeVariable}, parse_file, parser::Parser, scanner::Scanner, skye_type::{CastableHow, EqualsLevel, GetResult, ImplementsHow, Operator, SkyeEnumVariant, SkyeFunctionParam, SkyeType, SkyeValue}, token_error, token_note, token_warning, tokens::{Token, TokenType}, utils::{fix_raw_string, get_real_string_length, note}, CompileMode
+    ast::{Ast, EnumVariant, Expression, FunctionParam, ImportType, LiteralKind, MacroBody, MacroParams, Statement, SwitchCase}, ast_error, ast_info, ast_note, ast_warning, environment::{Environment, SkyeVariable}, parse_file, parser::Parser, scanner::Scanner, skye_type::{CastableHow, EqualsLevel, GetResult, ImplementsHow, Operator, SkyeEnumVariant, SkyeFunctionParam, SkyeType, SkyeValue}, token_error, token_note, token_warning, tokens::{Token, TokenType}, utils::{escape_string, fix_raw_string, get_real_string_length, note}, CompileMode
 };
 
 const OUTPUT_INDENT_SPACES: usize = 4;
@@ -1614,7 +1614,7 @@ impl CodeGen {
                                                 &Expression::Literal(
                                                     Rc::from(format!(
                                                         "{}: line {}, pos {}",
-                                                        panic_pos.filename, panic_pos.line + 1, panic_pos.start
+                                                        escape_string(&panic_pos.filename), panic_pos.line + 1, panic_pos.start
                                                     )),
                                                     Token::dummy(Rc::from("")),
                                                     LiteralKind::String
@@ -6469,7 +6469,7 @@ impl CodeGen {
                 }
             }
             Statement::Import(path_tok, import_type) => {
-                let mut path = PathBuf::from(path_tok.lexeme.as_ref());
+                let mut path: PathBuf = path_tok.lexeme.split('/').collect();
 
                 let skye_import = {
                     let fetched_extension = {
@@ -6517,7 +6517,7 @@ impl CodeGen {
                         buf.push('"');
                     }
 
-                    buf.push_str(&path.to_str().expect("Error converting to string"));
+                    buf.push_str(&escape_string(&path.to_str().expect("Error converting to string")));
 
                     if is_ang {
                         buf.push('>');
