@@ -135,10 +135,6 @@ impl CodeOutput {
         self.indent -= 1;
     }
 
-    pub fn get_indent(&self) -> usize {
-        self.indent
-    }
-
     pub fn set_indent(&mut self, indent: usize) {
         self.indent = indent;
     }

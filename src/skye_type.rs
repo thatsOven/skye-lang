@@ -976,8 +976,4 @@ impl SkyeType {
     pub fn get_unknown() -> SkyeType {
         SkyeType::Unknown(Rc::from(""))
     }
-
-    pub fn get_unknown_type() -> SkyeType {
-        SkyeType::Type(Box::new(SkyeType::Unknown(Rc::from(""))))
-    }
 }
