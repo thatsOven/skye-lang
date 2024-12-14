@@ -66,24 +66,6 @@ namespace core {
         const ptr: *const T,
         const length: usz
     }
-
-    impl[T] core::Slice[T] {
-        fn new(const ptr: *const T, const length: usz) Self[T] {
-            return Self.{ ptr, length };
-        }
-
-        fn get(const self, const idx: usz) ?T {
-            if idx < self.length {
-                return (?T)::Some(self.ptr[idx]);
-            } else {
-                return (?T)::None;
-            }
-        }
-
-        fn iter(const self) core::SliceIterator[T] {
-            return core::SliceIterator::new(self);
-        }
-    }
 }
 
 use core::Slice[char] as String;
@@ -148,16 +130,6 @@ namespace core {
         idx: usz
     }
 
-    impl[T] core::SliceIterator[T] {
-        fn new(const slice: &const core::Slice[T]) Self[T] {
-            return core::SliceIterator.{ slice, idx: 0 };
-        }
-
-        fn next(self) ?T {
-            return self.slice.get(self.idx++);
-        }
-    }
-
     namespace mem {
         fn blockCopy(from: voidptr, to: voidptr, amt: usz) {
             while amt-- {
@@ -174,6 +146,22 @@ namespace core {
 }
 
 impl[T] core::Slice[T] {
+    fn new(const ptr: *const T, const length: usz) Self[T] {
+        return Self.{ ptr, length };
+    }
+
+    fn get(const self, const idx: usz) ?T {
+        if idx < self.length {
+            return (?T)::Some(self.ptr[idx]);
+        } else {
+            return (?T)::None;
+        }
+    }
+
+    fn iter(const self) core::SliceIterator[T] {
+        return core::SliceIterator::new(self);
+    }
+
     fn __constsubscript__(const self, idx: usz) *const T {
         if @COMPILE_MODE != 0 || idx < self.length {
             return self.ptr + idx;
@@ -235,6 +223,16 @@ impl[T] core::Slice[T] {
 
     fn __ge__(const self, const other: &const Self[T]) bool {
         return other.__le__(self);
+    }
+}
+
+impl[T] core::SliceIterator[T] {
+    fn new(const slice: &const core::Slice[T]) Self[T] {
+        return core::SliceIterator.{ slice, idx: 0 };
+    }
+
+    fn next(self) ?T {
+        return self.slice.get(self.idx++);
     }
 }
 
